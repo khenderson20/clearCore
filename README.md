@@ -2,7 +2,8 @@
 
 A snappy terminal UI for converting numbers between **binary**, **hexadecimal**, and **decimal** — live, as you type. Built in modern C++20 with [FTXUI](https://github.com/ArthurSonzogni/FTXUI).
 
-![demo.png](./demo.png)
+![demo.png](assets/demo.png)
+![demo-2.png](assets/demo-2.png)
 
 
 ---
