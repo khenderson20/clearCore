@@ -1,0 +1,36 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build directories
+cmake-build-debug/
+cmake-build-release/
+cmake-build-*/
+build/
+dist/
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# Executables
+converter
+converter.exe
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Misc
+.git/
+.gitignore
+*.log
