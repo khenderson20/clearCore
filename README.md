@@ -1,3 +1,4 @@
+
 # 🔢 Number System Converter
 
 A snappy terminal UI for converting numbers between **binary**, **hexadecimal**, and **decimal** — live, as you type. Built in modern C++20 with [FTXUI](https://github.com/ArthurSonzogni/FTXUI).
@@ -6,14 +7,12 @@ A snappy terminal UI for converting numbers between **binary**, **hexadecimal**,
 ![demo-2.png](assets/demo-2.png)
 
 
----
-
 ## ✨ Features
 
 - **Live two-way conversion** — edit any field and the others update instantly.
-- **Input validation** — each field only accepts characters valid for its base (`0/1`, `0-9`, `0-9a-fA-F`).
+- **Input validation** — each field only accepts characters valid for its base (`0`/`1`, `0`-`9`, `0`-`9a`‑`fA`‑`F`).
 - **Nibble-grouped bit view** — see the binary layout grouped into 4-bit chunks for readability.
-- **Keyboard-driven** — `Tab` to move between fields, `Esc` / `Ctrl-C` to quit.
+- **Keyboard-driven** — `Tab` to move between fields, `Esc`/`Ctrl`-`C` to quit.
 - **64-bit range** — backed by a single `uint64_t` source of truth.
 
 ## 🚀 Quick start
@@ -44,40 +43,35 @@ Type `255` in the DEC field and watch HEX become `FF` and BIN become `11111111`.
 
 A single `uint64_t value` is the **source of truth**; each base is just a *view* of it.
 
-```
-        ┌─────────────┐   on_change    ┌──────────────┐
-  edit ─►│  Input(BIN) │ ─── parse ───► │              │
-        └─────────────┘                │  value (u64) │ ─── format ──► other fields
-        ┌─────────────┐   on_change    │              │
-  edit ─►│  Input(HEX) │ ─── parse ───► │              │
-        └─────────────┘                └──────────────┘
-```
+![how-it-works.png](assets/how-it-works.png)
 
 Editing a field parses it into `value`, then re-renders the *other* fields. A
 `syncing` re-entrancy guard prevents the programmatic rewrites from cascading into
 an infinite `on_change` loop.
 
-### Project layout
+### Project layout — Three Pillars of nsc_core
 
-| File          | Responsibility                                                        |
-| ------------- | --------------------------------------------------------------------- |
-| `convert.hpp` | Pure, UI-free conversion logic — `parseBase`, `toBinary`, `toHex`, `toDecimal`, `groupBits`. Trivially unit-testable. |
-| `main.cpp`    | FTXUI component wiring: inputs, validation filters, layout, run loop. |
-| `CMakeLists.txt` | Build config; fetches and links FTXUI (`screen` / `dom` / `component`). |
+The core logic is split for testability: `nsc_core` contains no UI code and can be verified independently with `convert_test`. The frontend (`nsc_ui`) depends on the core but knows nothing about FTXUI's internal rendering.
+
+| Module       | Responsibility                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| **converter**  | Orchestrator: manages conversion between bases, provides `as()` views and bit grouping. |
+| **parse**      | String-to-uint64 parser with base support; validates inputs before committing to state.       |
+| **format**    | Serializer for binary (expand on zero), hex (`%X`), decimal, and nibble groups.            |
 
 ## 🛠️ Built with
 
-- **C++20** (`std::format`, `std::optional`)
-- **[FTXUI](https://arthursonzogni.github.io/FTXUI/) v7.0.0** — Functional Terminal (X) User Interface
-- **CMake** with `FetchContent`
+- **C++20**: Leveraging `std::format`, `std::optional`, and C++17/20 string views
+- **FTXUI v7.0.0**: For the reactive UI layer (screen, dom, component)
+- **CMake FetchContent**: Declarative dependency fetching
 
 ## 🗺️ Roadmap
 
-- [ ] Octal base
-- [ ] Bit-width + signedness selector (8/16/32/64, signed/unsigned)
-- [ ] Interactive clickable bit toggling
-- [ ] On-screen error feedback for overflow / invalid input
-- [ ] Unit tests for `convert.hpp` + CI
+- [ ] Octal base support
+- [ ] Bit-width and signedness selection (8/16/32/64 bits)
+- [ ] Interactive bit toggling in the grid view
+- [ ] On-screen error feedback for overflow or malformed strings
+- [ ] CI pipeline with automatic conversion tests
 
 ## 📄 License
 
