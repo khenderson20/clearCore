@@ -2,10 +2,7 @@
 
 A snappy terminal UI for converting numbers between **binary**, **hexadecimal**, and **decimal** — live, as you type. Built in modern C++20 with [FTXUI](https://github.com/ArthurSonzogni/FTXUI).
 
-<video width="640" height="480" loop autoplay muted>
-  <source src="./video/demo.webm" type="video/webm">
-  Your browser does not support the video tag.
-</video>
+![demo.png](./demo.png)
 
 
 ---
