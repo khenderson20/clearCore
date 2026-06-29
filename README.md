@@ -73,6 +73,15 @@ The `IProcessor` interface serves as the contract between the UI frontend and an
 *   **Languages/Tools:** C++20 (`std::format`, `std::optional`), FTXUI v7.0.0, CMake FetchContent.
 *   **Design Focus:** Modular design where `mips_core` and `nsc_core` contain pure logic; the UI layer never includes core libraries. Polymorphism via `IProcessor` ensures backend flexibility.
 
+## 📄 Documentation
+
+To understand this project in depth, consult our documentation guides:
+
+*   **🚀 For Beginners:** Start with [USER_GUIDE.md](docs/USER_GUIDE.md) to learn MIPS concepts through the TUI visualization.
+*   **🧠 For Developers:** Review [ARCHITECTURE_DESIGN.md](docs/ARCHITECTURE_DESIGN.md) for a detailed breakdown of design patterns and hardware abstractions.
+*   **⚙️ For Contributors:** Follow the rules in [CONTRIBUTING.md](docs/CONTRIBUTING.md) before submitting code.
+
+
 ## 📄 License
 
 See [LICENSE](LICENSE) file
