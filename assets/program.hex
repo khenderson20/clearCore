@@ -1,0 +1,9 @@
+# ClearCore Test Program
+# Initial setup
+20080000  # addi $t0, $zero, 0   (Initialize $t0 to 0)
+20090005  # addi $t1, $zero, 5   (Initialize $t1 to 5)
+# Loop Start (Address 0x00000008)
+01095020  # add $t2, $t0, $t1    ($t2 = $t0 + $t1)
+21080001  # addi $t0, $t0, 1     (Increment $t0 by 1)
+1509FFFD  # bne $t0, $t1, -3     (If $t0 != $t1, branch back 3 instructions to loop start)
+08000005  # j 0x00000014         (Halt by jumping to self)

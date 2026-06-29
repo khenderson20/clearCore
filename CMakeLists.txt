@@ -16,6 +16,9 @@ FetchContent_MakeAvailable(ftxui)
 add_library(mips_core
         src/mips/decoder.cpp
         src/mips/alu.cpp
+        src/mips/registers.cpp
+        src/mips/memory.cpp
+        src/mips/cpu.cpp
 )
 target_include_directories(mips_core PUBLIC include)
 target_compile_features(mips_core PUBLIC cxx_std_20)
@@ -47,8 +50,11 @@ target_link_libraries(number_system_converter PRIVATE nsc_ui)
 # ---- Tests ------------------------------------------------------------------
 enable_testing()
 add_executable(decoder_test tests/mips/decoder_test.cpp)
-add_executable(nsc_tests tests/nsc/convert_test.cpp)
-target_link_libraries(nsc_tests PRIVATE nsc_core)
+add_executable(cpu_test     tests/mips/cpu_test.cpp)
+add_executable(nsc_tests    tests/nsc/convert_test.cpp)
+target_link_libraries(nsc_tests   PRIVATE nsc_core)
 target_link_libraries(decoder_test PRIVATE mips_core)
-add_test(NAME nsc_tests COMMAND nsc_tests)
+target_link_libraries(cpu_test     PRIVATE mips_core)
+add_test(NAME nsc_tests    COMMAND nsc_tests)
 add_test(NAME decoder_test COMMAND decoder_test)
+add_test(NAME cpu_test     COMMAND cpu_test)
