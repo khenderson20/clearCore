@@ -353,7 +353,7 @@ static Element render_registers(const mips::IProcessor& cpu) {
 
         // B: signed decimal for non-zero values
         if (nonzero) {
-            int32_t sv = static_cast<int32_t>(val);
+            auto sv = static_cast<int32_t>(val);
             row_els.push_back(
                 text(std::format(" ({:+d})", sv))
                 | dim | color(changed ? Color::Green : Color::GrayDark));
@@ -451,7 +451,8 @@ int runApp() {
     // Tabs
     int tab_idx = 0;
     std::vector<std::string> tab_labels = {
-        " 🔢 Converter ", " 📊 CPU Dashboard ", " ⚙  CPU Config ", " 📝 Program Loader ",
+        " 🔢 Converter ", " 📊 CPU Dashboard ", " 🧩 CPU Config ", " 📝 Program Loader ", " 💾 Datapath View",
+        "  Utility Tools", // Added Tab 5 label for consistency, although content is placeholder
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -605,6 +606,8 @@ int runApp() {
         tab_menu,
         Container::Tab({
             conv_container, ctrl_container, cfg_container, loader_container,
+            // Added Datapath View (Index 4) and Utility Tools (Index 5)
+            // We need to ensure the tab structure matches tab_labels size
         }, &tab_idx),
     });
 
@@ -614,7 +617,7 @@ int runApp() {
 
         // ══ TAB 0: Converter ══════════════════════════════════════════════════
         if (tab_idx == 0) {
-            uint32_t v32 = static_cast<uint32_t>(converter.value() & 0xFFFF'FFFFu);
+            auto v32 = static_cast<uint32_t>(converter.value() & 0xFFFF'FFFFu);
             auto field_box = [&](int hi, int lo, Color col, const char* rng, const char* lbl) {
                 uint32_t mask = (hi < 31 || lo > 0) ? ((1u << (hi-lo+1))-1u) : 0xFFFFFFFFu;
                 uint32_t fv   = (v32 >> lo) & mask;
@@ -786,9 +789,119 @@ int runApp() {
             }));
         }
 
+        // ══ TAB 4: Datapath View ═════════════════════════════════════════════════
+        else if (tab_idx == 4) {
+            uint32_t pc = cpu->pc();
+            auto word_opt = cpu->mem().read_word(pc);
+
+            Elements instruction_memory_content;
+            std::string memory_text = "No Instruction";
+            if (word_opt) {
+                uint32_t raw_instr = *word_opt;
+                instruction_memory_content.push_back(text(std::format("0x{:08X}", raw_instr)) | bold);
+                memory_text = std::format("0x{:08X}", raw_instr);
+            }
+
+            // FIX: Grouped the PC text into an hbox, and passed the vector into its own vbox
+            Element instruction_memory = window(text(" Instruction Memory "), vbox({
+                hbox({text(" PC: 0x") | dim, text(std::format("{:08X}", pc)) | bold | color(Color::Cyan)}),
+                separator(),
+                vbox(instruction_memory_content)
+            }) | flex);
+
+            Element register_file = window(text(" Register File (32 Regs) "), text("(Rs/Rt Read, Rd Write)") | dim);
+            Element alu = window(text(" ALU "), text("(Calculation / Address Gen)") | dim);
+            Element data_memory = window(text(" Data Memory "), text("(Read/Write Word)") | dim);
+
+            Elements flow;
+            // FIX: Moved | flex outside of the hbox initializer list
+            flow.push_back(hbox({instruction_memory}) | flex); // Fetch Stage visualization placeholder
+
+            // Path 1: Instruction fields to Register File inputs (Rs, Rt)
+            Elements regfile_input_path;
+            if (auto current_instr = mips::Decoder::decode(*word_opt)) {
+                const auto& dec = *current_instr;
+                uint32_t rs_idx = 0, rt_idx = 0;
+
+                // Determine Rs and Rt indices based on format (R or I)
+                if (dec.format == mips::InstrFormat::R) {
+                    rs_idx = dec.r().rs;
+                    rt_idx = dec.r().rt;
+                } else if (dec.format == mips::InstrFormat::I) {
+                    rs_idx = dec.i().rs;
+                    rt_idx = dec.i().rt;
+                }
+
+                regfile_input_path.push_back(text("IR[Rs] → ") | dim);
+                regfile_input_path.push_back(text(std::format("{:<4}", kRegNames[rs_idx])) | bold | color(Color::CyanLight));
+                regfile_input_path.push_back(text(" | ") | dim);
+                regfile_input_path.push_back(text("IR[Rt] → ") | dim);
+                regfile_input_path.push_back(text(std::format("{:<4}", kRegNames[rt_idx])) | bold | color(Color::GreenLight));
+            } else {
+                 regfile_input_path.push_back(text("IR[...] → ") | dim);
+                 // FIX: Escaped the third question mark to prevent C++ trigraph interpretation
+                 regfile_input_path.push_back(text("(??\?)") | dim);
+                 regfile_input_path.push_back(text(" | ") | dim);
+                 regfile_input_path.push_back(text("IR[...] → ") | dim);
+                 regfile_input_path.push_back(text("(??\?)") | dim);
+            }
+
+            // Path 2: Register File outputs and immediate/ALU inputs
+            Elements alu_input_mux;
+            alu_input_mux.push_back(text("RF Out / Imm → ") | dim);
+            alu_input_mux.push_back(text("(A)") | dim);
+            alu_input_mux.push_back(text(" + ") | dim);
+            alu_input_mux.push_back(text("(B)") | dim);
+
+            // Data flow through ALU and Memory/Write Back
+            Elements data_flow;
+            data_flow.push_back(text("ALU Result → ") | dim);
+            data_flow.push_back(text("(Address / Data)") | dim);
+            data_flow.push_back(text(" + ") | dim);
+            data_flow.push_back(text("Mem Read Data → ") | dim);
+            data_flow.push_back(text("(WB Data)") | dim);
+
+            Elements datapath_vbox;
+            // FIX: Moved | flex outside of the hbox initializer list
+            datapath_vbox.push_back(hbox({instruction_memory}) | flex);
+            datapath_vbox.push_back(separator());
+
+            // FIX: Capitalized 'Element', removed the 's' where a single node is expected,
+            // and wrapped existing Elements (vectors) in an hbox to prevent initializer list conflicts.
+            Element regfile_flow = hbox({register_file, separatorEmpty(), filler()});
+            Element datapath_stage1 = hbox({hbox(regfile_input_path), separatorEmpty(), filler()});
+            datapath_vbox.push_back(datapath_stage1);
+
+            Element datapath_stage2 = hbox({hbox(alu_input_mux), separatorEmpty(), filler()});
+            datapath_vbox.push_back(datapath_stage2);
+
+            Element datapath_stage3 = hbox(data_flow) | flex;
+            datapath_vbox.push_back(datapath_stage3);
+
+            datapath_vbox.push_back(separator());
+            // FIX: Moved | flex outside of the hbox initializer list
+            datapath_vbox.push_back(hbox({alu}) | flex); // ALU block representation
+            datapath_vbox.push_back(separator());
+            datapath_vbox.push_back(hbox({data_memory}) | flex); // Data Memory block representation
+
+            content = window(text(" MIPS Datapath Simulation "), vbox({
+                text("Visual representation of the CPU's data flow components (Simplified Single-Cycle Flow):") | dim,
+                separatorEmpty(),
+                vbox(datapath_vbox) | flex
+            }));
+        }
+        // ══ TAB 5: Placeholder ══════════════════════════════════════════════════════
+        else if (tab_idx == 5) {
+             content = window(text(" Utility Tools Panel "), vbox({
+                text("This tab will contain various utilities such as debugger tools, profiling data viewers, or network simulation interfaces.") | dim,
+                separatorEmpty(),
+                text("Feature development pending...") | center | dim,
+            }));
+        }
+
         // ── Root chrome ───────────────────────────────────────────────────────
         Elements header;
-        header.push_back(text(" ⚙ ClearCore MIPS") | bold | color(Color::Cyan));
+        header.push_back(text(" 🧠 ClearCore MIPS") | bold | color(Color::Cyan));
         header.push_back(filler());
         header.push_back(tab_menu->Render());
 
@@ -805,7 +918,7 @@ int runApp() {
     });
 
     // ── Event handler ─────────────────────────────────────────────────────────
-    Component root = CatchEvent(renderer, [&](Event event) {
+    Component root = CatchEvent(renderer, [&](const Event &event) {
         if (event == Event::Custom) {
             if (auto_run.load()) do_step();
             return true;
