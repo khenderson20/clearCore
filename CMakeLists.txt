@@ -18,7 +18,8 @@ add_library(mips_core
         src/mips/alu.cpp
         src/mips/registers.cpp
         src/mips/memory.cpp
-        src/mips/cpu.cpp
+        src/mips/single_cycle_cpu.cpp
+        src/mips/pipelined_cpu.cpp
 )
 target_include_directories(mips_core PUBLIC include)
 target_compile_features(mips_core PUBLIC cxx_std_20)
