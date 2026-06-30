@@ -288,7 +288,7 @@ void MainWindow::onSaveTrace()
     const QString path = QFileDialog::getSaveFileName(
         this, "Save Pipeline Trace", "trace.csv", "CSV Files (*.csv)");
     if (path.isEmpty()) return;
-    // TODO: export pipeline trace data from trace_widget_
+
     QMessageBox::information(this, "Save Trace",
                              "Trace export not yet implemented for this build.");
 }
