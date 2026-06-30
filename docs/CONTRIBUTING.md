@@ -1,7 +1,7 @@
 
 # 🤝 Contributing Guide
 
-Thank you for considering contributing to `number_system_converter`! This project is a complex blend of low-level hardware simulation and modern C++ UI development, which requires strong adherence to design patterns and conventions.
+Thank you for considering contributing to `clearCore`! This project is a complex blend of low-level hardware simulation and modern C++ UI development, which requires strong adherence to design patterns and conventions.
 
 If you'd like to contribute, please follow these guidelines:
 
