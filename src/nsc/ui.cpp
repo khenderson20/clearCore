@@ -12,7 +12,9 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/canvas.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/terminal.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -580,11 +582,172 @@ static Element render_flow_strip(std::size_t frame, bool active) {
         ticker.join();
     }
 
+    // ─── Reactive flow-field background for "Core Pulse" ─────────────────────────
+    // A layered wireframe surface that fills the whole panel viewport, animates
+    // continuously on its own (independent of CPU cycle stepping), and is gently
+    // attracted toward the mouse — but only while the cursor is inside this
+    // panel. `mouse_active` is computed once in the event handler against an
+    // approximate panel bounding box (see runApp()'s CatchEvent).
+    static Component create_datapath_3d_background(
+        int& mouse_x,
+        int& mouse_y,
+        bool& mouse_active,
+        uint64_t cycle_counter) {
+
+      return Renderer([&, cycle_counter] {
+        // Persistent across frames: this lambda's compiled body is shared by
+        // every Renderer instance create_datapath_3d_background() produces,
+        // so these statics behave like continuous animation state rather
+        // than resetting each time the tab redraws.
+        static float anim_time   = 0.0f;
+        static float idle_phase  = 0.0f;
+        static float smoothed_mx = 0.0f;
+        static float smoothed_my = 0.0f;
+
+        anim_time  += 0.035f;  // smooth motion, independent of CPU stepping
+        idle_phase += 0.012f;
+
+        // ── Canvas fills the actual terminal viewport ───────────────────────
+        // Braille sub-cells: ÷2 per column, ÷4 per row.
+        const auto term       = Terminal::Size();
+        const int  avail_cols = std::max(60, term.dimx - 6);
+        const int  panel_rows = std::clamp(term.dimy / 3, 14, 26);
+        const int  kCanvasW   = avail_cols * 2;
+        const int  kCanvasH   = panel_rows  * 4;
+
+        Canvas c(kCanvasW, kCanvasH);
+
+        // ── Attractor target ─────────────────────────────────────────────────
+        // Mouse position when inside the panel; otherwise a slow, independent
+        // Lissajous wander so the field keeps moving instead of freezing.
+        float target_x, target_y;
+        if (mouse_active) {
+          target_x = (static_cast<float>(mouse_x) /
+                      static_cast<float>(std::max(1, term.dimx))) * kCanvasW;
+          target_y = (static_cast<float>(mouse_y) /
+                      static_cast<float>(panel_rows)) * kCanvasH;
+        } else {
+          target_x = kCanvasW * 0.5f + std::sin(idle_phase * 0.7f) * (kCanvasW * 0.30f);
+          target_y = kCanvasH * 0.5f + std::cos(idle_phase * 0.9f) * (kCanvasH * 0.30f);
+        }
+
+        // Exponential smoothing — the attractor glides, it never snaps.
+        constexpr float kSmooth = 0.08f;
+        smoothed_mx += (target_x - smoothed_mx) * kSmooth;
+        smoothed_my += (target_y - smoothed_my) * kSmooth;
+
+        // ── Field height ──────────────────────────────────────────────────────
+        // Three traveling waves at golden-ratio-spaced frequencies (no visible
+        // repeat period) plus a breathing gaussian at the attractor and an
+        // outward ripple. Driven by anim_time so motion stays smooth even when
+        // the CPU is paused; cycle_counter only nudges phase so stepping still
+        // visibly perturbs the field without owning the animation clock.
+        constexpr float kPhi = 1.61803398875f;
+        auto surface_height = [&](float x, float y) -> float {
+          const float dx = x - smoothed_mx;
+          const float dy = y - smoothed_my;
+          const float dist_sq = dx * dx + dy * dy;
+          const float dist    = std::sqrt(dist_sq);
+
+          const float breathe  = 0.85f + 0.15f * std::sin(anim_time * 0.6f);
+          const float gaussian = std::exp(-0.0018f * dist_sq) * breathe;
+
+          const float w1 = std::sin(x * 0.020f + anim_time * 1.00f);
+          const float w2 = std::sin(y * 0.020f * kPhi - anim_time * 0.62f);
+          const float w3 = std::sin((x + y) * 0.012f + anim_time * 0.38f +
+                                     static_cast<float>(cycle_counter) * 0.05f);
+          const float field = (w1 + w2 + w3) * 4.0f;
+
+          const float ripple = 5.0f * std::sin(dist * 0.05f - anim_time * 1.4f) *
+                                std::exp(-dist * 0.004f);
+
+          return field + ripple + gaussian * 55.0f;
+        };
+
+        // ── Mesh ──────────────────────────────────────────────────────────────
+        constexpr int GRID_SIZE = 18;
+        std::vector<std::vector<float>> heights(
+            GRID_SIZE, std::vector<float>(GRID_SIZE));
+
+        for (int gy = 0; gy < GRID_SIZE; ++gy) {
+          for (int gx = 0; gx < GRID_SIZE; ++gx) {
+            const float fx = (static_cast<float>(gx) / (GRID_SIZE - 1)) * kCanvasW;
+            const float fy = (static_cast<float>(gy) / (GRID_SIZE - 1)) * kCanvasH;
+            heights[gy][gx] = surface_height(fx, fy);
+          }
+        }
+
+        auto project = [&](int gx, int gy, float h) -> std::pair<int, int> {
+          const float base_x = (static_cast<float>(gx) / (GRID_SIZE - 1)) * kCanvasW;
+          const float base_y = (static_cast<float>(gy) / (GRID_SIZE - 1)) * kCanvasH;
+          const int px = static_cast<int>(base_x + 0.55f * h);
+          const int py = static_cast<int>(kCanvasH - base_y - 0.85f * h);
+          return {px, py};
+        };
+
+        // Smooth teal → gold → crimson gradient (continuous RGB, not bands).
+        auto height_color = [](float h) -> Color {
+          const float t = std::clamp((h + 10.0f) / 70.0f, 0.0f, 1.0f);
+          if (t < 0.5f) {
+            const float u = t / 0.5f;
+            return Color::RGB(
+                static_cast<uint8_t>(48  + u * (212 - 48)),
+                static_cast<uint8_t>(214 - u * (214 - 175)),
+                static_cast<uint8_t>(186 - u * (186 - 55)));
+          }
+          const float u = (t - 0.5f) / 0.5f;
+          return Color::RGB(
+              static_cast<uint8_t>(212 + u * (220 - 212)),
+              static_cast<uint8_t>(175 - u * (175 - 45)),
+              static_cast<uint8_t>(55  - u * (55  - 60)));
+        };
+
+        for (int gy = 0; gy < GRID_SIZE; ++gy) {
+          for (int gx = 1; gx < GRID_SIZE; ++gx) {
+            const float h1 = heights[gy][gx - 1];
+            const float h2 = heights[gy][gx];
+            const auto [x1, y1] = project(gx - 1, gy, h1);
+            const auto [x2, y2] = project(gx,     gy, h2);
+            c.DrawPointLine(x1, y1, x2, y2, height_color(h2));
+          }
+        }
+        for (int gx = 0; gx < GRID_SIZE; ++gx) {
+          for (int gy = 1; gy < GRID_SIZE; ++gy) {
+            const float h1 = heights[gy - 1][gx];
+            const float h2 = heights[gy][gx];
+            const auto [x1, y1] = project(gx, gy - 1, h1);
+            const auto [x2, y2] = project(gx, gy,     h2);
+            c.DrawPointLine(x1, y1, x2, y2, height_color(h2));
+          }
+        }
+
+        c.DrawText(4, 0, "Core Pulse", [](Cell& p) {
+          p.foreground_color = Color::Green;
+          p.bold = true;
+        });
+
+        c.DrawText(kCanvasW - 70, kCanvasH - 8,
+                   "cycle " + std::to_string(cycle_counter), [](Cell& p) {
+          p.foreground_color = Color::White;
+          p.underlined = true;
+        });
+
+        return canvas(std::move(c));
+      });
+    }
+
     // ─── runApp ───────────────────────────────────────────────────────────────────
     int runApp() {
 
         // run the splash screen()
         runSplash();
+        // ── Mouse tracking for the Core Pulse panel ─────────────────────────────────
+        // global_mouse_active is only true while the cursor is inside the panel's
+        // approximate bounding box (computed in the event handler below) AND that
+        // tab is active — see kCorePulseTopRow / panel_rows there.
+        int  global_mouse_x      = 0;
+        int  global_mouse_y      = 0;
+        bool global_mouse_active = false;
         // ── Core state ────────────────────────────────────────────────────────────
         Converter converter;
         CpuMode cpu_mode = CpuMode::SingleCycle;
@@ -630,7 +793,7 @@ static Element render_flow_strip(std::size_t frame, bool active) {
         int tab_idx = 0;
         std::vector<std::string> tab_labels = {
             " Converter ", " CPU Dashboard ", " CPU Config ", " Program Loader ",
-            " Datapath View ", " Utility Tools ",
+            " Core Pulse ", " Utility Tools ",
         };
 
         // ── Helpers ───────────────────────────────────────────────────────────────
@@ -797,7 +960,7 @@ static Element render_flow_strip(std::size_t frame, bool active) {
         };
         Component tab_menu = Menu(&tab_labels, &tab_idx, tab_opt);
 
-        // D: tabs 4 (Datapath View) and 5 (Utility Tools) render purely from cpu
+        // D: tabs 4 (Core Pulse) and 5 (Utility Tools) render purely from cpu
         // state with no Input/Button/Slider of their own — these empty containers
         // exist only to keep Container::Tab's child count equal to tab_labels.size()
         // so index 4/5 don't alias onto an earlier tab's live components.
@@ -1250,7 +1413,7 @@ static Element render_flow_strip(std::size_t frame, bool active) {
                 });
             }
 
-            // ══ TAB 4: Datapath View ═════════════════════════════════════════════
+            // ══ TAB 4: Core Pulse ════════════════════════════════════════════════
             // Shows the live datapath trace for the instruction at PC:
             //   IF — what was fetched
             //   ID — register file reads (A/B inputs)
@@ -1265,11 +1428,13 @@ static Element render_flow_strip(std::size_t frame, bool active) {
                 const auto     fetch_dec = fetch_raw ? mips::Decoder::decode(*fetch_raw)
                                                      : std::nullopt;
 
-                // ── Ambient oscilloscope panel ─────────────────────────────────────
+                // ── Core Pulse: reactive flow-field background ──────────────────────
+                auto bg_3d = create_datapath_3d_background(
+                    global_mouse_x, global_mouse_y, global_mouse_active,
+                    cpu->cycle_count());
                 Element scope_panel = window(
                     text(" ClearCore "),
-                    render_oscilloscope_panel(anim_frame, auto_run.load(),
-                                               cpu->cycle_count())
+                    bg_3d->Render()
                 );
 
                 // ── IF: instruction at current PC ────────────────────────────────
@@ -1518,7 +1683,33 @@ static Element render_flow_strip(std::size_t frame, bool active) {
         });
 
         // ── Event handler ─────────────────────────────────────────────────────────
+        // Approximate top row of the Core Pulse panel's interior (title bar +
+        // tab strip + separator above it). Used only to decide whether the
+        // mouse is "inside" the panel — not for pixel-perfect hit testing.
+        constexpr int kCorePulseTopRow = 3;
+
         Component root = CatchEvent(renderer, [&](const Event &event) {
+            // ── Mouse tracking — only active while inside the Core Pulse panel ──────
+            if (event.is_mouse()) {
+                auto& evt  = const_cast<Event&>(event);
+                const int mx = evt.mouse().x;
+                const int my = evt.mouse().y;
+
+                const auto term       = Terminal::Size();
+                const int  panel_rows = std::clamp(term.dimy / 3, 14, 26);
+                const int  panel_top  = kCorePulseTopRow;
+                const int  panel_bot  = panel_top + panel_rows + 2;  // +2 ≈ borders
+
+                global_mouse_active = (tab_idx == 4) &&
+                                       my >= panel_top && my <= panel_bot &&
+                                       mx >= 0 && mx <= term.dimx;
+
+                if (global_mouse_active) {
+                    global_mouse_x = std::clamp(mx, 0, term.dimx);
+                    global_mouse_y = std::clamp(my - panel_top, 0, panel_rows);
+                }
+            }
+            // ── Custom event handler logic ────────────────────────────────────────
             if (event == Event::Custom) {
                 if (auto_run.load()) do_step();
                 return true;
