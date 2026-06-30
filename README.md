@@ -28,6 +28,7 @@
 
 ![ClearCore TUI demo](assets/demo_small.gif)
 </div>
+
 ---
 
 This project started as a live terminal number system converter (binary, hex, decimal) and evolved through deliberate stages into a **pluggable MIPS CPU emulator**. It features interchangeable processor models — single-cycle and 5-stage pipelined — driven by a single `IProcessor` interface, with a cycle-accurate pipeline visualizer, hazard/forwarding badges, and a live datapath view.
