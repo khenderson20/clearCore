@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(number_system_converter CXX)
+project(clearCore CXX)
 
 find_package(Threads REQUIRED)
 
