@@ -2,7 +2,7 @@
 
 #include <array>
 #include <cstdint>
-#include <gsl/gsl>
+#include <string_view>
 
 namespace mips {
 
@@ -29,14 +29,20 @@ namespace mips {
         // Restore all registers to 0 and clear the last-written marker.
         void reset() noexcept;
 
-        // Read-only span view of the register file
-        [[nodiscard]] gsl::span<const uint32_t> raw() const noexcept {
-            return gsl::span(regs_);
+        // Const view for the TUI register panel / test inspection.
+        [[nodiscard]] const std::array<uint32_t, kCount>& raw() const noexcept {
+            return regs_;
         }
 
     private:
         std::array<uint32_t, kCount> regs_{};
         int last_written_ = -1;
     };
+
+    // ─── ABI register names ───────────────────────────────────────────────────────
+    // MIPS O32 ABI mnemonic for register `idx` (0–31), e.g. 8 → "t0", 31 → "ra".
+    // Returns "??" for an out-of-range index. Lives here so the disassembler and
+    // the TUI share one source of truth.
+    [[nodiscard]] std::string_view register_abi_name(uint8_t idx) noexcept;
 
 } // namespace mips
