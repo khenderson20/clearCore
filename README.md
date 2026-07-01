@@ -247,7 +247,6 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full breakdown.
 - **🚀 For Beginners:** [USER_GUIDE.md](docs/USER_GUIDE.md) — learn MIPS concepts through the TUI visualization.
 - **🧠 For Developers:** [ARCHITECTURE_DESIGN.md](docs/ARCHITECTURE_DESIGN.md) — design patterns, hardware abstractions, and academic grounding.
 - **🖼️ Qt6 GUI Architecture:** [QT6_ARCHITECTURE.md](docs/QT6_ARCHITECTURE.md) — how `nsc_qt` and `SimulatorController` are structured.
-- **✅ Qt6 GUI Checklist:** [QT6_CHECKLIST.md](docs/QT6_CHECKLIST.md) — implementation tracking for the desktop GUI.
 - **⚙️ For Contributors:** [CONTRIBUTING.md](docs/CONTRIBUTING.md) — branching model, code style, and testing guidelines.
 - **🗺️ Roadmap:** [ROADMAP.md](docs/ROADMAP.md) — staged feature plan and reference patterns.
 
