@@ -87,22 +87,27 @@ if(BUILD_QT6_UI)
     )
 
     add_executable(clearCore-gui
-        src/nsc_qt/main.cpp
-        src/nsc_qt/assembler.cpp
-        src/nsc_qt/simulator_controller.cpp
-        src/nsc_qt/main_window.cpp
-        src/nsc_qt/preferences_dialog.cpp
-        src/nsc_qt/widgets/datapath_widget.cpp
-        src/nsc_qt/widgets/register_widget.cpp
-        src/nsc_qt/widgets/memory_widget.cpp
-        src/nsc_qt/widgets/pipeline_trace_widget.cpp
-        include/nsc_qt/simulator_controller.h
-        include/nsc_qt/main_window.h
-        include/nsc_qt/preferences_dialog.h
-        include/nsc_qt/widgets/datapath_widget.h
-        include/nsc_qt/widgets/register_widget.h
-        include/nsc_qt/widgets/memory_widget.h
-        include/nsc_qt/widgets/pipeline_trace_widget.h
+            src/nsc_qt/main.cpp
+            src/nsc_qt/assembler.cpp
+            src/nsc_qt/examples.cpp
+            src/nsc_qt/simulator_controller.cpp
+            src/nsc_qt/main_window.cpp
+            src/nsc_qt/preferences_dialog.cpp
+            src/nsc_qt/widgets/code_editor.cpp
+            src/nsc_qt/widgets/datapath_widget.cpp
+            src/nsc_qt/widgets/register_widget.cpp
+            src/nsc_qt/widgets/memory_widget.cpp
+            src/nsc_qt/widgets/pipeline_trace_widget.cpp
+            include/nsc_qt/simulator_controller.h
+            include/nsc_qt/main_window.h
+            include/nsc_qt/preferences_dialog.h
+            include/nsc_qt/ui_scale.h
+            include/nsc_qt/examples.h
+            include/nsc_qt/widgets/code_editor.h
+            include/nsc_qt/widgets/datapath_widget.h
+            include/nsc_qt/widgets/register_widget.h
+            include/nsc_qt/widgets/memory_widget.h
+            include/nsc_qt/widgets/pipeline_trace_widget.h
     )
     set_target_properties(clearCore-gui PROPERTIES
         AUTOMOC ON

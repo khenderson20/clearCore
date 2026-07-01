@@ -7,7 +7,7 @@
 
 class QTabWidget;
 class QLabel;
-class QPlainTextEdit;
+class QComboBox;
 class QAction;
 class QToolBar;
 
@@ -17,6 +17,7 @@ class DatapathWidget;
 class RegisterWidget;
 class MemoryWidget;
 class PipelineTraceWidget;
+class CodeEditor;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -51,6 +52,18 @@ private:
     QWidget* createCodeEditorTab();
     QWidget* createStatisticsTab();
 
+    // Loads example[idx-1] from the catalog into code_editor_, confirming
+    // first if the editor already has non-empty content to lose. idx is
+    // 1-based because index 0 in the combo box is the "Load example…"
+    // placeholder, not a real entry.
+    void onExampleSelected(int idx);
+
+    // Shows a temporary colored status-bar banner (green for success, red for
+    // failure) so halt and fault are visually distinct instead of two
+    // near-identical status-bar strings -- the "peak" moment of finishing a
+    // program should feel different from crashing (audit Opportunity #7).
+    void flashStatusBanner(bool success, const QString& text);
+
     // Controller
     std::unique_ptr<SimulatorController> controller_;
 
@@ -60,7 +73,8 @@ private:
     RegisterWidget*      register_widget_  = nullptr;
     MemoryWidget*        memory_widget_    = nullptr;
     PipelineTraceWidget* trace_widget_     = nullptr;
-    QPlainTextEdit*      code_editor_      = nullptr;
+    CodeEditor*          code_editor_      = nullptr;
+    QComboBox*           examples_combo_   = nullptr;
     QLabel*              asm_status_lbl_   = nullptr;
 
     // Statistics labels

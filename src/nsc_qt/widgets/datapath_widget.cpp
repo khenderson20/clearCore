@@ -1,11 +1,14 @@
 #include "nsc_qt/widgets/datapath_widget.h"
+#include "nsc_qt/ui_scale.h"
 #include "mips/decoder.h"
 #include "mips/registers.h"
 
 #include <QContextMenuEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFocusEvent>
 #include <QFormLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -37,7 +40,9 @@ static const QColor STAGE_COLORS_DARK[5] = {
 
 static const char* STAGE_NAMES[5] = {"IF", "ID", "EX", "MEM", "WB"};
 
-// Format a decoded instruction as a human-readable string.
+// Format a decoded instruction as a human-readable string. This is assembly
+// notation (mnemonics, register names), not natural-language UI copy, so it
+// intentionally is not routed through tr().
 static std::string format_instr(uint32_t raw) {
     using namespace mips;
     auto decoded = Decoder::decode(raw);
@@ -104,6 +109,11 @@ DatapathWidget::DatapathWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
     setMinimumSize(5 * BOX_W_MIN + 4 * GAP_MIN + 40, BOX_H_MIN + 120);
+
+    // Keyboard access: Left/Right select a stage, Enter opens stage detail,
+    // Space/B toggles a breakpoint. Without StrongFocus this widget never
+    // enters the tab order and those actions are mouse-only (audit Critical #1).
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 void DatapathWidget::setPipelineState(const mips::PipelineState& state)
@@ -147,12 +157,12 @@ void DatapathWidget::paintGL()
     const QColor title_bg = dark_mode_ ? QColor(0x25, 0x25, 0x26) : QColor(0xEB, 0xEB, 0xEB);
     p.fillRect(QRect(0, 0, width(), 28), title_bg);
     p.setPen(dark_mode_ ? QColor(0xCC, 0xCC, 0xCC) : QColor(0x33, 0x33, 0x33));
-    p.setFont(QFont("monospace", 9, QFont::Bold));
+    p.setFont(scale::monoFont(scale::kFontSizeBody, true));
     p.drawText(QRect(0, 0, width() - 8, 28), Qt::AlignVCenter | Qt::AlignRight,
-               QString("Cycle  %1").arg(static_cast<qulonglong>(state_.cycle)));
+               tr("Cycle  %1").arg(static_cast<qulonglong>(state_.cycle)));
     p.setPen(dark_mode_ ? QColor(0x9C, 0xDC, 0xFE) : QColor(0x00, 0x78, 0xD4));
-    p.setFont(QFont("monospace", 9, QFont::Bold));
-    p.drawText(QRect(8, 0, width(), 28), Qt::AlignVCenter | Qt::AlignLeft, "Pipeline Datapath");
+    p.setFont(scale::monoFont(scale::kFontSizeBody, true));
+    p.drawText(QRect(8, 0, width(), 28), Qt::AlignVCenter | Qt::AlignLeft, tr("Pipeline Datapath"));
 
     // Separator below title
     const QColor sep_color = dark_mode_ ? QColor(0x44, 0x44, 0x44) : QColor(0xDD, 0xDD, 0xDD);
@@ -169,16 +179,20 @@ void DatapathWidget::paintGL()
     for (int i = 0; i < 5; ++i)
         drawStageBox(p, i, state_.stages[static_cast<std::size_t>(i)]);
 
+    // Keyboard focus ring, drawn last so it sits above everything else.
+    if (hasFocus())
+        drawFocusRing(p, selected_stage_);
+
     // Forwarding legend at bottom-left when active
     const bool has_fwd = state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b
                       || state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b;
     if (has_fwd) {
-        const int lx = 8, ly = height() - 36;
-        p.setFont(QFont("monospace", 7, QFont::Bold));
+        const int lx = 8, ly = height() - 40;
+        p.setFont(scale::monoFont(scale::kFontSizeDense, true));
         p.setPen(QColor("#FF6F00"));
-        p.drawText(lx, ly,      "── EX/MEM→EX forwarding");
+        p.drawText(lx, ly,      tr("── EX/MEM→EX forwarding"));
         p.setPen(QColor("#7B1FA2"));
-        p.drawText(lx, ly + 14, "── MEM/WB→EX forwarding");
+        p.drawText(lx, ly + 18, tr("── MEM/WB→EX forwarding"));
     }
 }
 
@@ -186,7 +200,7 @@ QRect DatapathWidget::stageRect(int idx) const
 {
     constexpr int MARGIN_X = 24;
     constexpr int TITLE_H  = 32;   // title bar + separator
-    constexpr int BOTTOM_H = 44;   // legend + padding
+    constexpr int BOTTOM_H = 48;   // legend + padding
 
     const int avail_w = width() - 2 * MARGIN_X;
     const int avail_h = height() - TITLE_H - BOTTOM_H;
@@ -259,7 +273,7 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
     p.drawRoundedRect(r, 6, 6);
 
     // ── Header band ────────────────────────────────────────────────────────────
-    const int header_h = std::max(22, r.height() / 4);
+    const int header_h = std::max(24, r.height() / 4);
     const QRect header_r(r.x(), r.y(), r.width(), header_h);
 
     // Clip to box so rounded corners at top are preserved
@@ -273,60 +287,67 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
     p.fillRect(header_r, header_bg);
     p.setClipping(false);
 
-    // Stage name
-    const int name_font_size = std::max(8, r.width() / 14);
+    // Stage name -- clamped to the shared scale rather than an ad hoc
+    // width-derived size (audit Warning: no modular scale / too-small text).
+    const int name_font_size = std::max(scale::kFontSizeBody, r.width() / 14);
     p.setPen(dark_mode_ ? Qt::white : Qt::black);
-    p.setFont(QFont("monospace", name_font_size, QFont::Bold));
-    p.drawText(header_r, Qt::AlignCenter, STAGE_NAMES[idx]);
+    p.setFont(scale::monoFont(name_font_size, true));
+    p.drawText(header_r, Qt::AlignCenter, QString(STAGE_NAMES[idx]));
 
     // ── Inactive state ─────────────────────────────────────────────────────────
     if (!snap.valid) {
         p.setPen(dark_mode_ ? QColor(0x66,0x66,0x66) : QColor(0xAA,0xAA,0xAA));
-        p.setFont(QFont("monospace", std::max(7, r.width() / 18)));
+        p.setFont(scale::monoFont(std::max(scale::kFontSizeDense, r.width() / 18)));
         p.drawText(r.adjusted(0, header_h, 0, 0), Qt::AlignCenter,
-                   snap.stalled ? "STALL" : snap.flushed ? "FLUSH" : "---");
+                   snap.stalled ? tr("STALL") : snap.flushed ? tr("FLUSH") : tr("---"));
         return;
     }
 
     // ── Content area ───────────────────────────────────────────────────────────
     const int content_top  = r.y() + header_h + 4;
     const int content_pad  = std::max(4, r.width() / 30);
-    const int body_font_sz = std::max(7, r.width() / 18);
+    const int body_font_sz = std::max(scale::kFontSizeDense, r.width() / 18);
 
     // PC label
     p.setPen(dark_mode_ ? QColor(0x9C,0xDC,0xFE) : QColor(0x00,0x52,0x9B));
-    p.setFont(QFont("monospace", body_font_sz));
-    p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 16),
+    p.setFont(scale::monoFont(body_font_sz));
+    p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 18),
                Qt::AlignLeft | Qt::AlignVCenter,
-               QString("PC: 0x%1").arg(snap.pc, 8, 16, QChar('0')));
+               tr("PC: 0x%1").arg(snap.pc, 8, 16, QChar('0')));
 
     // Stall/Flush badge (top-right corner of content)
     if (snap.stalled || snap.flushed) {
         p.setPen(snap.stalled ? QColor("#E65100") : QColor("#880E4F"));
-        p.setFont(QFont("monospace", std::max(6, body_font_sz - 1), QFont::Bold));
-        p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 16),
+        p.setFont(scale::monoFont(body_font_sz, true));
+        p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 18),
                    Qt::AlignRight | Qt::AlignVCenter,
-                   snap.stalled ? "STALL" : "FLUSH");
+                   snap.stalled ? tr("STALL") : tr("FLUSH"));
     }
 
-    // Decoded instruction text
+    // Decoded instruction text (assembly notation -- not translated, see format_instr)
     if (snap.raw != 0) {
         const std::string decoded = format_instr(snap.raw);
         p.setPen(dark_mode_ ? QColor(0xE0,0xE0,0xE0) : QColor(0x1A,0x1A,0x1A));
-        p.setFont(QFont("monospace", body_font_sz));
+        p.setFont(scale::monoFont(body_font_sz));
         p.drawText(
-            QRect(r.x() + content_pad, content_top + 18,
-                  r.width() - content_pad * 2, r.bottom() - content_top - 22),
+            QRect(r.x() + content_pad, content_top + 20,
+                  r.width() - content_pad * 2, r.bottom() - content_top - 24),
             Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
             QString::fromStdString(decoded));
     }
 
-    // Breakpoint indicator (red circle, top-right of box)
+    // Breakpoint indicator: a red ring with a punched-out center ("bullseye"),
+    // not a plain filled dot -- gives the marker a shape distinct from any
+    // other color-coded element in this widget (audit Warning: color-only cue).
     if (breakpoints_.count(snap.pc)) {
-        const int dot = 10;
+        const int outer = 14, inner = 6;
+        const QPoint c(r.right() - outer / 2 - 5, r.y() + 5 + outer / 2);
         p.setBrush(QColor("#E53935"));
         p.setPen(QPen(dark_mode_ ? QColor(0xAA,0x00,0x00) : Qt::darkRed, 1));
-        p.drawEllipse(r.right() - dot - 4, r.y() + 4, dot, dot);
+        p.drawEllipse(c, outer / 2, outer / 2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(box_bg);
+        p.drawEllipse(c, inner / 2, inner / 2);
     }
 }
 
@@ -369,8 +390,22 @@ void DatapathWidget::drawForwardingArrows(QPainter& p) const
         drawArc(4, 2, QColor("#7B1FA2")); // MEM/WB → EX
 }
 
+void DatapathWidget::drawFocusRing(QPainter& p, int idx) const
+{
+    const QRect r = stageRect(idx).adjusted(-4, -4, 4, 4);
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(dark_mode_ ? QColor("#4FC3F7") : QColor("#0078D4"), 2, Qt::DashLine));
+    p.drawRoundedRect(r, 9, 9);
+}
+
 void DatapathWidget::mousePressEvent(QMouseEvent* ev)
 {
+    setFocus(Qt::MouseFocusReason);
+    const int idx = stageAtPos(ev->pos());
+    if (idx >= 0) {
+        selected_stage_ = idx;
+        update();
+    }
     QOpenGLWidget::mousePressEvent(ev);
 }
 
@@ -392,9 +427,53 @@ void DatapathWidget::contextMenuEvent(QContextMenuEvent* ev)
 
     QMenu menu(this);
     const bool has_bp = breakpoints_.count(snap.pc) > 0;
-    QAction* act = menu.addAction(has_bp ? "Clear Breakpoint" : "Set Breakpoint");
+    QAction* act = menu.addAction(has_bp ? tr("Clear Breakpoint") : tr("Set Breakpoint"));
     if (menu.exec(ev->globalPos()) == act)
         emit breakpointToggleRequested(snap.pc);
+}
+
+void DatapathWidget::keyPressEvent(QKeyEvent* ev)
+{
+    switch (ev->key()) {
+    case Qt::Key_Left:
+        selected_stage_ = (selected_stage_ + 4) % 5; // wrap backwards
+        update();
+        ev->accept();
+        return;
+    case Qt::Key_Right:
+        selected_stage_ = (selected_stage_ + 1) % 5;
+        update();
+        ev->accept();
+        return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter: {
+        const auto& snap = state_.stages[static_cast<std::size_t>(selected_stage_)];
+        if (snap.valid) emit stageDetailRequested(selected_stage_, snap.pc, snap.raw);
+        ev->accept();
+        return;
+    }
+    case Qt::Key_Space:
+    case Qt::Key_B: {
+        const auto& snap = state_.stages[static_cast<std::size_t>(selected_stage_)];
+        if (snap.valid) emit breakpointToggleRequested(snap.pc);
+        ev->accept();
+        return;
+    }
+    default:
+        QOpenGLWidget::keyPressEvent(ev);
+    }
+}
+
+void DatapathWidget::focusInEvent(QFocusEvent* ev)
+{
+    QOpenGLWidget::focusInEvent(ev);
+    update(); // draw the focus ring
+}
+
+void DatapathWidget::focusOutEvent(QFocusEvent* ev)
+{
+    QOpenGLWidget::focusOutEvent(ev);
+    update(); // hide the focus ring
 }
 
 } // namespace nsc::qt

@@ -1,13 +1,14 @@
 #include "nsc_qt/main_window.h"
 #include <QApplication>
 #include <QSettings>
+#include <QStringLiteral>
 
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("clearCore-gui");
-    app.setOrganizationName("nsc-qt");
-    app.setApplicationVersion("1.1.0");
+    app.setApplicationName(QStringLiteral("clearCore-gui"));
+    app.setOrganizationName(QStringLiteral("nsc-qt"));
+    app.setApplicationVersion(QStringLiteral("1.1.0"));
 
     QSettings::setDefaultFormat(QSettings::IniFormat);
 

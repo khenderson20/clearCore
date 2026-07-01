@@ -188,7 +188,8 @@ AssemblerResult assemble(const std::string& source) {
         const auto& mn  = ln.mnemonic;
         const auto& ops = ln.operands;
         const int   ln_no = ln.lineno;
-        const uint32_t word_addr = static_cast<uint32_t>(idx * 4);
+
+        // REMOVED: const uint32_t word_addr = static_cast<uint32_t>(idx * 4);
 
         auto err = [&](const std::string& msg) -> AssemblerResult {
             AssemblerResult e;

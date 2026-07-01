@@ -1,8 +1,10 @@
 #include "nsc_qt/widgets/memory_widget.h"
+#include "nsc_qt/ui_scale.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -17,9 +19,27 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent)
 
     // ── Navigation bar ──────────────────────────────────────────────────────
     auto* nav = new QHBoxLayout;
-    nav->addWidget(new QLabel("Base address:", this));
+
+    // "Jump to 0x0" chip -- reuses the existing addr_spin_ -> onAddressChanged
+    // plumbing, so no new refresh logic is needed here. This is the simplest
+    // of the three quick-jump chips from the redesign mockup; PC and SP need
+    // a value fed in from SimulatorController first (separate change).
+    auto* jump_start_btn = new QPushButton(tr("Jump to 0x0"), this);
+    jump_start_btn->setToolTip(tr("Jump to the start of memory"));
+    jump_start_btn->setFont(scale::monoFont(scale::kFontSizeBody));
+    connect(jump_start_btn, &QPushButton::clicked, this, [this] {
+        addr_spin_->setValue(0);
+    });
+    nav->addWidget(jump_start_btn);
+
+    nav->addStretch();
+
+    auto* nav_lbl = new QLabel(tr("Base address:"), this);
+    nav_lbl->setFont(scale::monoFont(scale::kFontSizeBody));
+    nav->addWidget(nav_lbl);
 
     addr_spin_ = new QSpinBox(this);
+    addr_spin_->setFont(scale::monoFont(scale::kFontSizeBody));
     addr_spin_->setRange(0, 0x7FFFFFFF);
     addr_spin_->setValue(static_cast<int>(DEF_BASE));
     addr_spin_->setDisplayIntegerBase(16);
@@ -28,8 +48,8 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent)
     nav->addWidget(addr_spin_);
 
     status_lbl_ = new QLabel(this);
+    status_lbl_->setFont(scale::monoFont(scale::kFontSizeBody));
     nav->addWidget(status_lbl_);
-    nav->addStretch();
     vl->addLayout(nav);
 
     buildTable();
@@ -46,18 +66,18 @@ void MemoryWidget::buildTable()
     table_ = new QTableWidget(ROWS, total_cols, this);
 
     QStringList headers;
-    headers << "Address";
+    headers << tr("Address");
     for (int i = 0; i < COLS_HEX; ++i)
         headers << QString("+%1").arg(i, 2, 16, QChar('0')).toUpper();
-    headers << "ASCII";
+    headers << tr("ASCII");
     table_->setHorizontalHeaderLabels(headers);
 
     table_->verticalHeader()->hide();
-    table_->horizontalHeader()->setDefaultSectionSize(30);
+    table_->horizontalHeader()->setDefaultSectionSize(32);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(total_cols - 1, QHeaderView::ResizeToContents);
-    table_->verticalHeader()->setDefaultSectionSize(22);
-    table_->setFont(QFont("monospace", 9));
+    table_->verticalHeader()->setDefaultSectionSize(24);
+    table_->setFont(scale::monoFont(scale::kFontSizeDense));
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setAlternatingRowColors(true);

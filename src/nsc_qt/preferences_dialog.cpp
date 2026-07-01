@@ -1,4 +1,5 @@
 #include "nsc_qt/preferences_dialog.h"
+#include "nsc_qt/ui_scale.h"
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -16,42 +17,42 @@ namespace nsc::qt {
 
 PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent)
 {
-    setWindowTitle("Preferences");
+    setWindowTitle(tr("Preferences"));
     setMinimumWidth(360);
 
     auto* vl = new QVBoxLayout(this);
 
     // ── Color scheme ──────────────────────────────────────────────────────────
-    auto* scheme_box = new QGroupBox("Color Scheme", this);
+    auto* scheme_box = new QGroupBox(tr("Color Scheme"), this);
     auto* scheme_hl  = new QHBoxLayout(scheme_box);
-    light_radio_ = new QRadioButton("Light", scheme_box);
-    dark_radio_  = new QRadioButton("Dark",  scheme_box);
+    light_radio_ = new QRadioButton(tr("Light"), scheme_box);
+    dark_radio_  = new QRadioButton(tr("Dark"),  scheme_box);
     scheme_hl->addWidget(light_radio_);
     scheme_hl->addWidget(dark_radio_);
     vl->addWidget(scheme_box);
 
     // ── Execution speed ───────────────────────────────────────────────────────
-    auto* speed_box = new QGroupBox("Execution Speed", this);
+    auto* speed_box = new QGroupBox(tr("Execution Speed"), this);
     auto* speed_hl  = new QHBoxLayout(speed_box);
-    speed_hl->addWidget(new QLabel("Slow", speed_box));
+    speed_hl->addWidget(new QLabel(tr("Slow"), speed_box));
     speed_slider_ = new QSlider(Qt::Horizontal, speed_box);
     speed_slider_->setRange(0, 100);
     speed_slider_->setValue(100);
     speed_slider_->setTickInterval(10);
     speed_slider_->setTickPosition(QSlider::TicksBelow);
     speed_hl->addWidget(speed_slider_);
-    speed_hl->addWidget(new QLabel("Fast", speed_box));
+    speed_hl->addWidget(new QLabel(tr("Fast"), speed_box));
     vl->addWidget(speed_box);
 
     // ── Font & display ────────────────────────────────────────────────────────
-    auto* disp_box = new QGroupBox("Display", this);
+    auto* disp_box = new QGroupBox(tr("Display"), this);
     auto* fl       = new QFormLayout(disp_box);
     font_spin_ = new QSpinBox(disp_box);
     font_spin_->setRange(8, 24);
-    font_spin_->setValue(10);
-    fl->addRow("Font size:", font_spin_);
+    font_spin_->setValue(scale::kFontSizeBody);
+    fl->addRow(tr("Font size:"), font_spin_);
 
-    alias_check_ = new QCheckBox("Show register aliases ($t0, $sp, …)", disp_box);
+    alias_check_ = new QCheckBox(tr("Show register aliases ($t0, $sp, …)"), disp_box);
     alias_check_->setChecked(true);
     fl->addRow(alias_check_);
     vl->addWidget(disp_box);
@@ -72,7 +73,7 @@ void PreferencesDialog::loadSettings()
     dark_radio_->setChecked(s.value("colorScheme", "light").toString() == "dark");
     light_radio_->setChecked(!dark_radio_->isChecked());
     speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
-    font_spin_->setValue(s.value("fontSize", 10).toInt());
+    font_spin_->setValue(s.value("fontSize", scale::kFontSizeBody).toInt());
     alias_check_->setChecked(s.value("showRegisterAliases", true).toBool());
 }
 

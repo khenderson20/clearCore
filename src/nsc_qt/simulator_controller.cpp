@@ -75,9 +75,16 @@ void SimulatorController::doStep()
         }
     }
 
-    emit cycleExecuted(cycle);
-    emit pipelineStateChanged(ps);
-    emit statisticsUpdated(stats_copy);
+    // High Performance Throttling:
+    // Prevent UI event flood if running continuously at Max Speed (Interval == 0)
+    bool throttle = (run_timer_->interval() == 0) && (cycle % 5000 != 0);
+
+    // Only emit standard update signals if we aren't throttling, OR if we halted/breaked
+    if (!throttle || result != mips::StepResult::Ok || bp_hit) {
+        emit cycleExecuted(cycle);
+        emit pipelineStateChanged(ps);
+        emit statisticsUpdated(stats_copy);
+    }
 
     if (result == mips::StepResult::Halt)       emit halted();
     else if (result == mips::StepResult::Fault) emit faulted();
@@ -174,7 +181,6 @@ const std::unordered_set<uint32_t>& SimulatorController::breakpoints() const noe
 
 void SimulatorController::setExecutionSpeed(int speed)
 {
-    // speed 100 → interval 0ms; speed 0 → interval 500ms
     const int interval = (100 - std::clamp(speed, 0, 100)) * 5;
     run_timer_->setInterval(interval);
 }
