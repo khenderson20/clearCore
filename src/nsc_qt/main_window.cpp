@@ -19,6 +19,8 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
@@ -154,6 +156,8 @@ QWidget* MainWindow::createCodeEditorTab()
 {
     auto* w  = new QWidget;
     auto* vl = new QVBoxLayout(w);
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
 
     code_editor_ = new QPlainTextEdit(w);
     code_editor_->setFont(QFont("monospace", 10));
@@ -165,12 +169,27 @@ QWidget* MainWindow::createCodeEditorTab()
         "#   add  $t2, $t0, $t1\n");
     vl->addWidget(code_editor_);
 
+    // Separator line above button row
+    auto* sep = new QFrame(w);
+    sep->setFrameShape(QFrame::HLine);
+    sep->setFrameShadow(QFrame::Sunken);
+    vl->addWidget(sep);
+
     auto* btn_row  = new QHBoxLayout;
+    btn_row->setContentsMargins(8, 6, 8, 6);
+    btn_row->setSpacing(8);
+
     auto* asm_btn  = new QPushButton("Assemble", w);
-    auto* load_btn = new QPushButton("Load",     w);
+    asm_btn->setObjectName("primaryButton");
+    asm_btn->setToolTip("Assemble source and prepare machine code (does not load)");
+
+    auto* load_btn = new QPushButton("Load", w);
+    load_btn->setToolTip("Load assembled program into simulator and reset");
+
     asm_status_lbl_ = new QLabel(w);
     btn_row->addWidget(asm_btn);
     btn_row->addWidget(load_btn);
+    btn_row->addSpacing(12);
     btn_row->addWidget(asm_status_lbl_);
     btn_row->addStretch();
     vl->addLayout(btn_row);
@@ -183,25 +202,41 @@ QWidget* MainWindow::createCodeEditorTab()
 QWidget* MainWindow::createStatisticsTab()
 {
     auto* w  = new QWidget;
-    auto* fl = new QFormLayout(w);
-    fl->setContentsMargins(16, 16, 16, 16);
-    fl->setSpacing(8);
+    auto* vl = new QVBoxLayout(w);
+    vl->setContentsMargins(16, 16, 16, 16);
+    vl->setSpacing(12);
 
-    auto mkLabel = [&](const char* name, QLabel*& ptr) {
-        ptr = new QLabel("0", w);
-        ptr->setFont(QFont("monospace", 10));
+    auto mkLabel = [&](QFormLayout* fl, const char* name, QLabel*& ptr) {
+        ptr = new QLabel("—", w);
+        ptr->setFont(QFont("monospace", 11));
         fl->addRow(name, ptr);
     };
 
-    mkLabel("Cycles executed:",        stat_cycles_lbl_);
-    mkLabel("Instructions retired:",   stat_instrs_lbl_);
-    mkLabel("CPI:",                    stat_cpi_lbl_);
-    mkLabel("Data hazards:",           stat_data_haz_lbl_);
-    mkLabel("Control hazards:",        stat_ctrl_haz_lbl_);
-    mkLabel("Forwarding events:",      stat_fwd_lbl_);
-    mkLabel("Stalls:",                 stat_stalls_lbl_);
-    mkLabel("Flushes:",                stat_flushes_lbl_);
+    // ── Performance group ──────────────────────────────────────────────────────
+    auto* perf_box = new QGroupBox("Performance", w);
+    auto* perf_fl  = new QFormLayout(perf_box);
+    perf_fl->setContentsMargins(12, 8, 12, 8);
+    perf_fl->setSpacing(8);
+    perf_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    mkLabel(perf_fl, "Cycles executed:",      stat_cycles_lbl_);
+    mkLabel(perf_fl, "Instructions retired:", stat_instrs_lbl_);
+    mkLabel(perf_fl, "CPI:",                  stat_cpi_lbl_);
+    vl->addWidget(perf_box);
 
+    // ── Pipeline events group ──────────────────────────────────────────────────
+    auto* pipe_box = new QGroupBox("Pipeline Events", w);
+    auto* pipe_fl  = new QFormLayout(pipe_box);
+    pipe_fl->setContentsMargins(12, 8, 12, 8);
+    pipe_fl->setSpacing(8);
+    pipe_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    mkLabel(pipe_fl, "Data hazards:",      stat_data_haz_lbl_);
+    mkLabel(pipe_fl, "Control hazards:",   stat_ctrl_haz_lbl_);
+    mkLabel(pipe_fl, "Forwarding events:", stat_fwd_lbl_);
+    mkLabel(pipe_fl, "Stalls:",            stat_stalls_lbl_);
+    mkLabel(pipe_fl, "Flushes:",           stat_flushes_lbl_);
+    vl->addWidget(pipe_box);
+
+    vl->addStretch();
     return w;
 }
 
@@ -376,7 +411,19 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats)
 
     stat_cycles_lbl_->setText(   QString::number(stats.cycles_executed));
     stat_instrs_lbl_->setText(   QString::number(stats.instructions_retired));
-    stat_cpi_lbl_->setText(      cpi > 0 ? QString::number(cpi, 'f', 2) : "—");
+
+    if (cpi > 0) {
+        stat_cpi_lbl_->setText(QString::number(cpi, 'f', 2));
+        const QColor cpi_color = cpi >= 2.0 ? QColor("#F44336")
+                               : cpi >= 1.5 ? QColor("#FF9800")
+                                            : QColor("#4CAF50");
+        stat_cpi_lbl_->setStyleSheet(
+            QString("color: %1; font-weight: bold;").arg(cpi_color.name()));
+    } else {
+        stat_cpi_lbl_->setText("—");
+        stat_cpi_lbl_->setStyleSheet("");
+    }
+
     stat_data_haz_lbl_->setText( QString::number(stats.data_hazards));
     stat_ctrl_haz_lbl_->setText( QString::number(stats.control_hazards));
     stat_fwd_lbl_->setText(      QString::number(stats.forwarding_events));
@@ -474,35 +521,285 @@ void MainWindow::onStageDetailRequested(int stage_index, uint32_t pc, uint32_t r
 void MainWindow::applyColorScheme(bool dark)
 {
     dark_mode_ = dark;
+
+    // ── Palette (non-styled widgets, tooltips, system colours) ────────────────
+    QPalette pal;
     if (dark) {
-        QPalette pal;
         pal.setColor(QPalette::Window,          QColor(0x1E,0x1E,0x1E));
         pal.setColor(QPalette::WindowText,      Qt::white);
         pal.setColor(QPalette::Base,            QColor(0x2A,0x2A,0x2A));
         pal.setColor(QPalette::AlternateBase,   QColor(0x35,0x35,0x35));
-        pal.setColor(QPalette::ToolTipBase,     Qt::white);
+        pal.setColor(QPalette::ToolTipBase,     QColor(0x25,0x25,0x25));
         pal.setColor(QPalette::ToolTipText,     Qt::white);
         pal.setColor(QPalette::Text,            Qt::white);
-        pal.setColor(QPalette::Button,          QColor(0x35,0x35,0x35));
+        pal.setColor(QPalette::Button,          QColor(0x3C,0x3C,0x3C));
         pal.setColor(QPalette::ButtonText,      Qt::white);
         pal.setColor(QPalette::BrightText,      Qt::red);
         pal.setColor(QPalette::Highlight,       QColor(0x26,0x4F,0x78));
         pal.setColor(QPalette::HighlightedText, Qt::white);
-        qApp->setPalette(pal);
     } else {
-        // Reset to light (system default)
-        QPalette pal;
-        pal.setColor(QPalette::Window,          Qt::white);
+        pal.setColor(QPalette::Window,          QColor(0xF5,0xF5,0xF5));
         pal.setColor(QPalette::WindowText,      Qt::black);
         pal.setColor(QPalette::Base,            Qt::white);
         pal.setColor(QPalette::AlternateBase,   QColor(0xF5,0xF5,0xF5));
+        pal.setColor(QPalette::ToolTipBase,     Qt::white);
+        pal.setColor(QPalette::ToolTipText,     Qt::black);
         pal.setColor(QPalette::Text,            Qt::black);
         pal.setColor(QPalette::Button,          QColor(0xEE,0xEE,0xEE));
         pal.setColor(QPalette::ButtonText,      Qt::black);
-        pal.setColor(QPalette::Highlight,       QColor(0x00,0x78,0xD7));
+        pal.setColor(QPalette::Highlight,       QColor(0x00,0x78,0xD4));
         pal.setColor(QPalette::HighlightedText, Qt::white);
-        qApp->setPalette(pal);
     }
+    qApp->setPalette(pal);
+
+    // ── Global stylesheet ─────────────────────────────────────────────────────
+    const QString qss = dark ? R"(
+QMainWindow, QDialog { background: #1E1E1E; }
+
+QMenuBar { background: #2D2D2D; color: #CCCCCC; border-bottom: 1px solid #444444; }
+QMenuBar::item:selected { background: #094771; color: white; }
+QMenu { background: #252526; color: #CCCCCC; border: 1px solid #454545; }
+QMenu::item:selected { background: #094771; }
+QMenu::separator { height: 1px; background: #454545; margin: 2px 0; }
+
+QToolBar {
+    background: #2D2D2D;
+    border-bottom: 1px solid #444444;
+    padding: 3px 4px;
+    spacing: 2px;
+}
+QToolBar::separator { width: 1px; background: #555555; margin: 4px 3px; }
+QToolButton {
+    color: #CCCCCC;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 3px 10px;
+    min-width: 32px;
+}
+QToolButton:hover  { background: #3C3C3C; border-color: #555555; }
+QToolButton:pressed { background: #094771; border-color: #007ACC; }
+
+QTabWidget::pane { border: none; border-top: 1px solid #333333; }
+QTabBar { background: #252526; }
+QTabBar::tab {
+    background: #2D2D2D;
+    color: #888888;
+    padding: 6px 20px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    min-width: 72px;
+}
+QTabBar::tab:selected   { background: #1E1E1E; color: #FFFFFF; border-bottom-color: #007ACC; }
+QTabBar::tab:hover:!selected { background: #383838; color: #CCCCCC; }
+
+QStatusBar { background: #252526; color: #CCCCCC; border-top: 1px solid #444444; }
+QStatusBar QLabel { color: #CCCCCC; padding: 0px 5px; }
+
+QGroupBox {
+    color: #9CDCFE;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    margin-top: 12px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0px 5px;
+}
+
+QPushButton {
+    background: #3C3C3C;
+    color: #CCCCCC;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 5px 14px;
+    min-width: 64px;
+}
+QPushButton:hover  { background: #4C4C4C; border-color: #777777; }
+QPushButton:pressed { background: #094771; border-color: #007ACC; }
+QPushButton#primaryButton {
+    background: #0E639C;
+    color: white;
+    border-color: #1177BB;
+}
+QPushButton#primaryButton:hover  { background: #1177BB; }
+QPushButton#primaryButton:pressed { background: #094771; }
+
+QTableWidget {
+    gridline-color: #3A3A3A;
+    background: #1E1E1E;
+    alternate-background-color: #252526;
+    color: #CCCCCC;
+    border: none;
+}
+QHeaderView::section {
+    background: #2D2D2D;
+    color: #9CDCFE;
+    border: none;
+    border-right: 1px solid #444444;
+    border-bottom: 1px solid #444444;
+    padding: 3px 8px;
+    font-weight: bold;
+}
+QTableWidget::item:selected { background: #264F78; color: white; }
+
+QPlainTextEdit {
+    background: #1E1E1E;
+    color: #D4D4D4;
+    border: none;
+    selection-background-color: #264F78;
+}
+
+QSpinBox {
+    background: #3C3C3C;
+    color: #CCCCCC;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+QSpinBox::up-button, QSpinBox::down-button { background: #3C3C3C; border: none; width: 16px; }
+QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #888; }
+QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #888; }
+
+QScrollBar:vertical   { background: #1E1E1E; width: 10px; border: none; }
+QScrollBar:horizontal { background: #1E1E1E; height: 10px; border: none; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #4A4A4A; border-radius: 5px; min-height: 20px; min-width: 20px;
+}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: #6A6A6A; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+
+QFrame[frameShape="4"] { color: #444444; }
+QFrame[frameShape="5"] { color: #444444; }
+QWidget#regHeader { background: #252526; border-bottom: 1px solid #3C3C3C; }
+QWidget#regHeader QLabel { color: #9CDCFE; background: transparent; border: none; }
+)"
+    : R"(
+QMainWindow, QDialog { background: #F5F5F5; }
+
+QMenuBar { background: #F0F0F0; color: #333333; border-bottom: 1px solid #DDDDDD; }
+QMenuBar::item:selected { background: #0078D4; color: white; }
+QMenu { background: white; color: #333333; border: 1px solid #CCCCCC; }
+QMenu::item:selected { background: #0078D4; color: white; }
+QMenu::separator { height: 1px; background: #DDDDDD; margin: 2px 0; }
+
+QToolBar {
+    background: #F3F3F3;
+    border-bottom: 1px solid #E0E0E0;
+    padding: 3px 4px;
+    spacing: 2px;
+}
+QToolBar::separator { width: 1px; background: #CCCCCC; margin: 4px 3px; }
+QToolButton {
+    color: #333333;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 3px 10px;
+    min-width: 32px;
+}
+QToolButton:hover   { background: #E8E8E8; border-color: #CCCCCC; }
+QToolButton:pressed { background: #0078D4; color: white; border-color: #0065B4; }
+
+QTabWidget::pane { border: none; border-top: 1px solid #E0E0E0; background: white; }
+QTabBar { background: #EBEBEB; }
+QTabBar::tab {
+    background: #EBEBEB;
+    color: #666666;
+    padding: 6px 20px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    min-width: 72px;
+}
+QTabBar::tab:selected   { background: white; color: #1A1A1A; border-bottom-color: #0078D4; }
+QTabBar::tab:hover:!selected { background: #E0E0E0; color: #333333; }
+
+QStatusBar { background: #F3F3F3; color: #555555; border-top: 1px solid #E0E0E0; }
+QStatusBar QLabel { color: #555555; padding: 0px 5px; }
+
+QGroupBox {
+    color: #0078D4;
+    border: 1px solid #DDDDDD;
+    border-radius: 5px;
+    margin-top: 12px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0px 5px;
+}
+
+QPushButton {
+    background: #EEEEEE;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    padding: 5px 14px;
+    min-width: 64px;
+}
+QPushButton:hover   { background: #E0E0E0; border-color: #AAAAAA; }
+QPushButton:pressed { background: #CCE4FF; border-color: #0078D4; }
+QPushButton#primaryButton {
+    background: #0078D4;
+    color: white;
+    border-color: #006CC1;
+}
+QPushButton#primaryButton:hover   { background: #106EBE; }
+QPushButton#primaryButton:pressed { background: #005499; }
+
+QTableWidget {
+    gridline-color: #E0E0E0;
+    background: white;
+    alternate-background-color: #F7F7F7;
+    color: #333333;
+    border: none;
+}
+QHeaderView::section {
+    background: #F3F3F3;
+    color: #0078D4;
+    border: none;
+    border-right: 1px solid #E0E0E0;
+    border-bottom: 1px solid #E0E0E0;
+    padding: 3px 8px;
+    font-weight: bold;
+}
+QTableWidget::item:selected { background: #CCE4FF; color: #003366; }
+
+QPlainTextEdit {
+    background: white;
+    color: #1A1A1A;
+    border: none;
+    selection-background-color: #CCE4FF;
+}
+
+QSpinBox {
+    background: white;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+QSpinBox::up-button, QSpinBox::down-button { background: #EEEEEE; border: none; width: 16px; }
+QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #666; }
+QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #666; }
+
+QScrollBar:vertical   { background: #F5F5F5; width: 10px; border: none; }
+QScrollBar:horizontal { background: #F5F5F5; height: 10px; border: none; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #BBBBBB; border-radius: 5px; min-height: 20px; min-width: 20px;
+}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: #999999; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+
+QFrame[frameShape="4"] { color: #DDDDDD; }
+QFrame[frameShape="5"] { color: #DDDDDD; }
+QWidget#regHeader { background: #EBEBEB; border-bottom: 1px solid #DDDDDD; }
+QWidget#regHeader QLabel { color: #0078D4; background: transparent; border: none; }
+)";
+    qApp->setStyleSheet(qss);
 
     datapath_widget_->setDarkMode(dark);
     register_widget_->setDarkMode(dark);

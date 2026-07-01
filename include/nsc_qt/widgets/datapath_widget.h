@@ -36,16 +36,18 @@ private:
     QRect stageRect(int idx) const;
 
     void drawStageBox(QPainter& p, int idx, const mips::StageSnapshot& snap) const;
+    void drawFlowArrows(QPainter& p) const;
     void drawForwardingArrows(QPainter& p) const;
 
     mips::PipelineState          state_{};
     std::unordered_set<uint32_t> breakpoints_{};
     bool                         dark_mode_ = false;
 
-    static constexpr int BOX_W   = 140;
-    static constexpr int BOX_H   = 110;
-    static constexpr int GAP     = 24;
-    static constexpr int MARGIN_Y = 40;
+    // Minimum box dimensions used for setMinimumSize() only.
+    // Actual paint dimensions are computed dynamically in stageRect().
+    static constexpr int BOX_W_MIN = 120;
+    static constexpr int BOX_H_MIN = 100;
+    static constexpr int GAP_MIN   = 16;
 };
 
 } // namespace nsc::qt

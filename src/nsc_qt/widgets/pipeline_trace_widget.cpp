@@ -52,11 +52,13 @@ PipelineTraceWidget::PipelineTraceWidget(QWidget* parent) : QWidget(parent)
     vl->setContentsMargins(4, 4, 4, 4);
 
     table_ = new QTableWidget(this);
-    table_->setFont(QFont("monospace", 8));
+    table_->setFont(QFont("monospace", 9));
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::NoSelection);
-    table_->verticalHeader()->setDefaultSectionSize(20);
-    table_->horizontalHeader()->setDefaultSectionSize(40);
+    table_->setAlternatingRowColors(true);
+    table_->setShowGrid(true);
+    table_->verticalHeader()->setDefaultSectionSize(24);
+    table_->horizontalHeader()->setDefaultSectionSize(44);
     vl->addWidget(table_);
 }
 
@@ -135,9 +137,10 @@ void PipelineTraceWidget::rebuildTable()
         // Instruction label column
         const std::string mn = short_mnemonic(r.raw);
         auto* lbl_item = new QTableWidgetItem(
-            QString("0x%1 %2").arg(r.pc, 4, 16, QChar('0'))
-                              .arg(QString::fromStdString(mn)));
+            QString("0x%1  %2").arg(r.pc, 4, 16, QChar('0'))
+                               .arg(QString::fromStdString(mn)));
         lbl_item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        lbl_item->setFont(QFont("monospace", 9));
         table_->setItem(ri, 0, lbl_item);
 
         // Stage columns
@@ -154,6 +157,9 @@ void PipelineTraceWidget::rebuildTable()
                 if (sidx >= 0) {
                     item->setBackground(dark_mode_ ? STAGE_CELL_COLORS_DARK[sidx]
                                                    : STAGE_CELL_COLORS[sidx]);
+                    item->setForeground(dark_mode_ ? Qt::white : Qt::black);
+                    QFont cell_f("monospace", 8, QFont::Bold);
+                    item->setFont(cell_f);
                 }
             }
             table_->setItem(ri, 1 + ci, item);

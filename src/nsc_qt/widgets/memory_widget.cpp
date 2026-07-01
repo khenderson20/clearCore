@@ -53,12 +53,15 @@ void MemoryWidget::buildTable()
     table_->setHorizontalHeaderLabels(headers);
 
     table_->verticalHeader()->hide();
-    table_->horizontalHeader()->setDefaultSectionSize(28);
+    table_->horizontalHeader()->setDefaultSectionSize(30);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(total_cols - 1, QHeaderView::ResizeToContents);
-    table_->setFont(QFont("monospace", 8));
+    table_->verticalHeader()->setDefaultSectionSize(22);
+    table_->setFont(QFont("monospace", 9));
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    table_->setAlternatingRowColors(true);
+    table_->setShowGrid(true);
 
     // Pre-populate with empty items
     for (int row = 0; row < ROWS; ++row) {

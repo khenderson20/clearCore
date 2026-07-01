@@ -29,36 +29,49 @@ RegisterWidget::RegisterWidget(QWidget* parent) : QWidget(parent)
 void RegisterWidget::buildGrid()
 {
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(4, 4, 4, 4);
-    outer->setSpacing(2);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
 
-    auto* title = new QLabel("Registers", this);
-    title->setAlignment(Qt::AlignCenter);
-    QFont tf = title->font();
-    tf.setBold(true);
+    // Header bar
+    auto* header = new QWidget(this);
+    header->setFixedHeight(28);
+    header->setObjectName("regHeader");
+    auto* hl = new QHBoxLayout(header);
+    hl->setContentsMargins(10, 0, 10, 0);
+    auto* title = new QLabel("Registers", header);
+    title->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    QFont tf("monospace", 9, QFont::Bold);
     title->setFont(tf);
-    outer->addWidget(title);
+    hl->addWidget(title);
+    hl->addStretch();
+    outer->addWidget(header, 0);
+
+    // Grid fills the remaining space
+    auto* grid_container = new QWidget(this);
+    auto* cl = new QVBoxLayout(grid_container);
+    cl->setContentsMargins(4, 4, 4, 4);
+    cl->setSpacing(0);
 
     grid_ = new QGridLayout;
-    grid_->setSpacing(2);
-    outer->addLayout(grid_);
+    grid_->setSpacing(3);
+    cl->addLayout(grid_);
 
     // 4 columns × 8 rows = 32 registers
     for (int i = 0; i < 32; ++i) {
         const int col = i / 8;
         const int row = i % 8;
 
-        auto* frame = new QWidget(this);
-        frame->setAutoFillBackground(true);
+        auto* frame = new QWidget(grid_container);
+        frame->setMinimumHeight(34);
         auto* fl = new QVBoxLayout(frame);
-        fl->setContentsMargins(3, 1, 3, 1);
-        fl->setSpacing(0);
+        fl->setContentsMargins(5, 2, 5, 2);
+        fl->setSpacing(1);
 
         cells_[i].name  = new QLabel(frame);
         cells_[i].value = new QLabel(frame);
 
         cells_[i].name->setFont(QFont("monospace", 8));
-        cells_[i].value->setFont(QFont("monospace", 8));
+        cells_[i].value->setFont(QFont("monospace", 9));
         cells_[i].value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
         fl->addWidget(cells_[i].name);
@@ -67,6 +80,12 @@ void RegisterWidget::buildGrid()
         grid_->addWidget(frame, row, col);
         updateCell(i);
     }
+
+    // Uniform column and row stretch so the grid fills available space
+    for (int c = 0; c < 4; ++c) grid_->setColumnStretch(c, 1);
+    for (int r = 0; r < 8; ++r) grid_->setRowStretch(r, 1);
+
+    outer->addWidget(grid_container, 1);
 }
 
 void RegisterWidget::updateCell(int idx)
@@ -84,24 +103,42 @@ void RegisterWidget::updateCell(int idx)
     // Value label
     c.value->setText(QString("0x%1").arg(values_[idx], 8, 16, QChar('0')));
 
-    // Background colour
-    QColor bg;
+    // Background and text colours
+    QColor bg, name_color, val_color;
+    const QColor text_dim  = dark_mode_ ? QColor(0x88,0x88,0x88) : QColor(0x77,0x77,0x77);
+    const QColor text_norm = dark_mode_ ? QColor(0xCC,0xCC,0xCC) : QColor(0x22,0x22,0x22);
+
     if (idx == 0) {
-        bg = dark_mode_ ? QColor(0x30,0x30,0x30) : QColor(0xDD,0xDD,0xDD);
+        bg         = dark_mode_ ? QColor(0x28,0x28,0x28) : QColor(0xE8,0xE8,0xE8);
+        name_color = text_dim;
+        val_color  = text_dim;
     } else if (cells_[idx].fade > 0) {
         const float t = 1.0f - static_cast<float>(cells_[idx].fade) / 5.0f;
-        const QColor green(0x80, 0xFF, 0x80);
+        const QColor green(0x66, 0xBB, 0x66);
         const QColor normal = dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white;
-        bg = lerp_color(green, normal, t);
+        bg         = lerp_color(green, normal, t);
+        name_color = dark_mode_ ? QColor(0xAA,0xFF,0xAA) : QColor(0x00,0x55,0x00);
+        val_color  = dark_mode_ ? Qt::white : QColor(0x00,0x44,0x00);
     } else if (static_cast<uint8_t>(idx) == read_rs_ || static_cast<uint8_t>(idx) == read_rt_) {
-        bg = dark_mode_ ? QColor(0x00,0x60,0x60) : QColor(0xB2,0xEB,0xF2);
+        bg         = dark_mode_ ? QColor(0x00,0x4D,0x6B) : QColor(0xCC,0xEA,0xF5);
+        name_color = dark_mode_ ? QColor(0x9C,0xDC,0xFE) : QColor(0x00,0x52,0x9B);
+        val_color  = text_norm;
     } else {
-        bg = dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white;
+        bg         = dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white;
+        name_color = text_dim;
+        val_color  = text_norm;
     }
 
-    QPalette pal = c.name->parentWidget()->palette();
-    pal.setColor(QPalette::Window, bg);
-    c.name->parentWidget()->setPalette(pal);
+    // Apply via stylesheet so it coexists correctly with the global QSS
+    QWidget* frame = c.name->parentWidget();
+    frame->setStyleSheet(QString(
+        "QWidget { background-color: %1; border: 1px solid %2; border-radius: 3px; }"
+        "QLabel  { background: transparent; border: none; }"
+    ).arg(bg.name(),
+          (dark_mode_ ? QColor(0x3C,0x3C,0x3C) : QColor(0xDD,0xDD,0xDD)).name()));
+
+    c.name->setStyleSheet(QString("color: %1;").arg(name_color.name()));
+    c.value->setStyleSheet(QString("color: %1;").arg(val_color.name()));
 }
 
 void RegisterWidget::setPipelineState(const mips::PipelineState& state)
