@@ -87,14 +87,14 @@ The GUI is the fuller-featured way to work with clearCore: a resizable window wi
 
 **What each tab does:**
 
-| Tab                 | Purpose                                                                                   |
-|----------------------|--------------------------------------------------------------------------------------------|
-| **Datapath**         | The 5-stage pipeline (IF/ID/EX/MEM/WB) rendered live. Double-click a stage for a full decode of the instruction sitting in it; right-click to set or clear a breakpoint on that instruction's address. |
-| **Registers**        | All 32 registers with ABI aliases (`$t0`, `$sp`, …), updated every cycle.                  |
-| **Memory**           | A scrollable hex dump (16 bytes/row with an ASCII column) from any base address you enter. |
-| **Pipeline Trace**   | An instruction × cycle grid — the classic pipeline diagram from Patterson & Hennessy, generated automatically from your program's actual execution instead of drawn by hand. |
-| **Code Editor**      | Write MIPS assembly directly, or load one of the built-in example programs, then Assemble and Load it into the running simulator. |
-| **Statistics**       | Cycles, instructions retired, CPI, and per-category hazard/forwarding/stall/flush counts.  |
+| Tab                | Purpose                                                                                                                                                                                                |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Datapath**       | The 5-stage pipeline (IF/ID/EX/MEM/WB) rendered live. Double-click a stage for a full decode of the instruction sitting in it; right-click to set or clear a breakpoint on that instruction's address. |
+| **Registers**      | All 32 registers with ABI aliases (`$t0`, `$sp`, …), updated every cycle.                                                                                                                              |
+| **Memory**         | A scrollable hex dump (16 bytes/row with an ASCII column) from any base address you enter.                                                                                                             |
+| **Pipeline Trace** | An instruction × cycle grid — the classic pipeline diagram from Patterson & Hennessy, generated automatically from your program's actual execution instead of drawn by hand.                           |
+| **Code Editor**    | Write MIPS assembly directly, or load one of the built-in example programs, then Assemble and Load it into the running simulator.                                                                      |
+| **Statistics**     | Cycles, instructions retired, CPI, and per-category hazard/forwarding/stall/flush counts.                                                                                                              |
 
 The assembler supports the same instruction subset as the rest of clearCore (`add`, `addi`, `lw`/`sw`, `beq`/`bne`, `j`/`jal`, shifts, and friends) plus labels, so branches and loops assemble the same way they would on real MIPS toolchains.
 
@@ -139,12 +139,12 @@ clearCore ships two independent front ends over the same `mips_core`/`nsc_core` 
 ### Terminal UI (`number_system_converter`)
 
 | # | Tab                | Purpose                                              |
-|---|--------------------|-------------------------------------------------------|
-| 0 | **Converter**      | Live binary/hex/decimal conversion                    |
-| 1 | **CPU Dashboard**  | Registers, pipeline stages, hazard badges, telemetry   |
-| 2 | **CPU Config**     | Switch between single-cycle and pipelined backends     |
-| 3 | **Program Loader** | Load a flat instruction-word program into memory       |
-| 4 | **Signal Monitor** | Ambient oscilloscope animation during execution        |
+|---|--------------------|------------------------------------------------------|
+| 0 | **Converter**      | Live binary/hex/decimal conversion                   |
+| 1 | **CPU Dashboard**  | Registers, pipeline stages, hazard badges, telemetry |
+| 2 | **CPU Config**     | Switch between single-cycle and pipelined backends   |
+| 3 | **Program Loader** | Load a flat instruction-word program into memory     |
+| 4 | **Signal Monitor** | Ambient oscilloscope animation during execution      |
 
 ### Qt6 desktop GUI (`clearCore-gui`)
 
@@ -202,15 +202,15 @@ The system is split into two decoupled core libraries plus two independent UI la
 
 ### Core Module Responsibilities
 
-| Module               | Responsibility                                                  | NSC Core | MIPS Core | Qt GUI |
-|:---------------------|:------------------------------------------------------------------|:--------:|:---------:|:------:|
-| **Converter**         | Manages `uint64_t` state, exposes base views                      |    ✅     |           |        |
-| **Parser/Formatter**  | String validation and serialization across bases                  |    ✅     |           |        |
-| **IProcessor**        | Abstract interface for execution engine + visualizer contract     |          |     ✅     |        |
-| **CPUs (SC/Pipe)**    | Core CPU implementation logic (datapath)                          |          |     ✅     |        |
-| **Decoder / ALU**     | Instruction format detection, control signals, arithmetic/logic   |          |     ✅     |        |
-| **SimulatorController** | Owns an `IProcessor`, re-emits its state as Qt signals for widgets to render | | | ✅ |
-| **In-app assembler**  | Parses MIPS assembly with labels into instruction words for the Code Editor tab | | | ✅ |
+| Module                  | Responsibility                                                                  | NSC Core | MIPS Core | Qt GUI |
+|:------------------------|:--------------------------------------------------------------------------------|:--------:|:---------:|:------:|
+| **Converter**           | Manages `uint64_t` state, exposes base views                                    |    ✅     |           |        |
+| **Parser/Formatter**    | String validation and serialization across bases                                |    ✅     |           |        |
+| **IProcessor**          | Abstract interface for execution engine + visualizer contract                   |          |     ✅     |        |
+| **CPUs (SC/Pipe)**      | Core CPU implementation logic (datapath)                                        |          |     ✅     |        |
+| **Decoder / ALU**       | Instruction format detection, control signals, arithmetic/logic                 |          |     ✅     |        |
+| **SimulatorController** | Owns an `IProcessor`, re-emits its state as Qt signals for widgets to render    |          |           |   ✅    |
+| **In-app assembler**    | Parses MIPS assembly with labels into instruction words for the Code Editor tab |          |           |   ✅    |
 
 ### Design Conventions & Built With
 - **Languages/Tools:** C++20 (`std::format`, `std::optional`), FTXUI v7.0.0, Qt6 (Widgets, OpenGL), CMake FetchContent.
@@ -220,13 +220,13 @@ The system is split into two decoupled core libraries plus two independent UI la
 
 ClearCore sits alongside established educational and research simulators, applying the Ripes pluggable-backend pattern — and, uniquely among this set, offering both a terminal UI and a native desktop GUI over the same core.
 
-| Aspect            | ClearCore                | Ripes              | DrMIPS          | EduMIPS64       | QtMips            | WebRISC-V   |
-|-------------------|--------------------------|---------------------|-----------------|-----------------|--------------------|-------------|
-| **Language**      | C++20                    | C++/Qt              | Java            | Java            | C++/Qt             | PHP/JS      |
-| **UI**            | FTXUI (TUI) **+** Qt6 (GUI) | Qt (GUI)          | Swing (GUI)     | Swing (GUI)     | Qt (GUI)           | Web Browser |
-| **ISA**           | MIPS                     | RISC-V              | MIPS            | MIPS64          | MIPS               | RISC-V      |
-| **Backends**      | 2 (SC / 5-stage)         | 5+ models           | ~2              | ~1              | ~1                 | ~1          |
-| **Visualization** | Pipeline state + hazards | Datapath schematic  | Visual datapath | Register/memory | Datapath + memory  | Cycle grid  |
+| Aspect            | ClearCore                   | Ripes              | DrMIPS          | EduMIPS64       | QtMips            | WebRISC-V   |
+|-------------------|-----------------------------|--------------------|-----------------|-----------------|-------------------|-------------|
+| **Language**      | C++20                       | C++/Qt             | Java            | Java            | C++/Qt            | PHP/JS      |
+| **UI**            | FTXUI (TUI) **+** Qt6 (GUI) | Qt (GUI)           | Swing (GUI)     | Swing (GUI)     | Qt (GUI)          | Web Browser |
+| **ISA**           | MIPS                        | RISC-V             | MIPS            | MIPS64          | MIPS              | RISC-V      |
+| **Backends**      | 2 (SC / 5-stage)            | 5+ models          | ~2              | ~1              | ~1                | ~1          |
+| **Visualization** | Pipeline state + hazards    | Datapath schematic | Visual datapath | Register/memory | Datapath + memory | Cycle grid  |
 
 Reference texts: **Harris & Harris**, *Digital Design and Computer Architecture* (single-cycle datapath, control signal generation), and **Patterson & Hennessy**, *Computer Organization and Design* (pipelining, hazards, forwarding).
 
