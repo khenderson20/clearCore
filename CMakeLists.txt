@@ -15,8 +15,9 @@
 #   cmake --build build
 #
 # Build Options:
-#   -DBUILD_NYXSTONE=ON|OFF  : Enable/disable Nyxstone assembler (default: ON)
-#   -DBUILD_QT6_UI=ON|OFF    : Build Qt6 desktop GUI (default: ON)
+#   -DBUILD_NYXSTONE=ON|OFF     : Enable/disable Nyxstone assembler (default: ON)
+#   -DBUILD_QT6_UI=ON|OFF       : Build Qt6 Widgets desktop GUI (default: ON)
+#   -DBUILD_QT6_QUICK_UI=ON|OFF : Build Qt Quick (QML) desktop GUI (default: ON)
 #
 # Install dependencies:
 #   Fedora/RHEL:
@@ -457,6 +458,110 @@ else()
     message(STATUS "Qt6 GUI disabled (set -DBUILD_QT6_UI=ON to enable)")
 endif()
 
+# ---- Executable: clearCore-quick (Qt Quick / QML Desktop Application) ----
+#
+# Redesigned QML front end: single-window layout with the pipeline datapath
+# permanently visible, editor alongside it, and Registers/Memory/Trace/Stats
+# in a bottom inspector dock. Reuses mips_core plus the framework-agnostic
+# pieces of the Widgets GUI (SimulatorController, assembler, examples).
+#
+# Requires qt6-qtdeclarative:
+#   Fedora/RHEL:   sudo dnf install qt6-qtdeclarative-devel
+#   Ubuntu/Debian: sudo apt install qt6-declarative-dev qml6-module-qtquick-controls
+#   macOS:         brew install qt@6   (declarative included)
+#
+# Enable/disable with: -DBUILD_QT6_QUICK_UI=ON|OFF
+#
+option(BUILD_QT6_QUICK_UI "Build Qt Quick (QML) desktop GUI" ON)
+
+if(BUILD_QT6_QUICK_UI)
+    # Step 1: Locate the Qt Quick modules (needs more than qt6-qtbase)
+    find_package(Qt6 6.5
+            COMPONENTS Core Gui Qml Quick QuickControls2
+            QUIET
+    )
+
+    if(NOT Qt6Quick_FOUND)
+        message(WARNING
+                "Qt6 Quick not found (qt6-qtdeclarative missing).\n"
+                "  Fedora/RHEL:  sudo dnf install qt6-qtdeclarative-devel\n"
+                "  Ubuntu/Debian: sudo apt install qt6-declarative-dev\n"
+                "Skipping clearCore-quick, or disable with -DBUILD_QT6_QUICK_UI=OFF"
+        )
+        set(BUILD_QT6_QUICK_UI OFF)
+    else()
+        message(STATUS "Qt6 Quick found: Building QML desktop GUI")
+
+        qt_add_executable(clearCore-quick
+                # QML front end
+                src/nsc_quick/main.cpp                      # Application entry
+                src/nsc_quick/quick_simulator.cpp           # QML bridge + models
+                include/nsc_quick/quick_simulator.h         # (moc: Q_OBJECT + QML_ELEMENT)
+
+                # Reused framework-agnostic pieces of the Widgets GUI
+                src/nsc_qt/simulator_controller.cpp         # Emulation control
+                src/nsc_qt/assembler.cpp                    # MIPS assembler
+                src/nsc_qt/examples.cpp                     # Example programs
+                include/nsc_qt/simulator_controller.h       # (moc)
+        )
+
+        # AUTOMOC must be ON *before* qt_add_qml_module: QML type registration
+        # extracts metatypes from moc's JSON output at module-declaration time.
+        set_target_properties(clearCore-quick PROPERTIES
+                AUTOMOC ON                # moc for Q_OBJECT / QML_ELEMENT headers
+                WIN32_EXECUTABLE ON       # Hide console window on Windows
+                MACOSX_BUNDLE ON          # Create .app bundle on macOS
+        )
+
+        # Theme.qml must be flagged as a singleton BEFORE qt_add_qml_module
+        set_source_files_properties(qml/ClearCore/Theme.qml PROPERTIES
+                QT_QML_SINGLETON_TYPE TRUE
+        )
+
+        qt_add_qml_module(clearCore-quick
+                URI ClearCore
+                RESOURCE_PREFIX /qt/qml
+                QML_FILES
+                qml/ClearCore/Main.qml
+                qml/ClearCore/Theme.qml
+                qml/ClearCore/CCButton.qml
+                qml/ClearCore/TransportBar.qml
+                qml/ClearCore/StatusPill.qml
+                qml/ClearCore/DatapathStrip.qml
+                qml/ClearCore/StageCard.qml
+                qml/ClearCore/HazardBadge.qml
+                qml/ClearCore/EditorPane.qml
+                qml/ClearCore/RegistersPane.qml
+                qml/ClearCore/MemoryPane.qml
+                qml/ClearCore/TracePane.qml
+                qml/ClearCore/StatsPane.qml
+        )
+
+        # qmltyperegistrar includes moc'd headers by basename only
+        # (#include <quick_simulator.h>), so its directory must be on the path.
+        target_include_directories(clearCore-quick PRIVATE
+                include
+                include/nsc_quick
+        )
+
+        target_compile_features(clearCore-quick PRIVATE cxx_std_20)
+
+        target_link_libraries(clearCore-quick
+                PRIVATE
+                mips_core             # MIPS emulation logic (+ GSL, spdlog via PUBLIC)
+                Qt6::Core             # Qt framework
+                Qt6::Gui              # GUI base
+                Qt6::Qml              # QML engine
+                Qt6::Quick            # Qt Quick scene graph
+                Qt6::QuickControls2   # QQuickStyle
+        )
+
+        target_compile_options(clearCore-quick PRIVATE -Wall -Wextra -pedantic)
+    endif()
+else()
+    message(STATUS "Qt Quick GUI disabled (set -DBUILD_QT6_QUICK_UI=ON to enable)")
+endif()
+
 # ============================================================================
 # UNIT TESTS
 # ============================================================================
@@ -503,11 +608,15 @@ message(STATUS "  C++ Standard:     C++20")
 message(STATUS "  Threads:          ${CMAKE_THREAD_LIBS_INIT}")
 message(STATUS "  Nyxstone:         ${BUILD_NYXSTONE}")
 message(STATUS "  Qt6 GUI:          ${BUILD_QT6_UI}")
+message(STATUS "  Qt Quick GUI:     ${BUILD_QT6_QUICK_UI}")
 message(STATUS "")
 message(STATUS "Executables:")
 message(STATUS "  • number_system_converter (TUI + MIPS emulator)")
 if(BUILD_QT6_UI)
-    message(STATUS "  • clearCore-gui (Qt6 desktop GUI)")
+    message(STATUS "  • clearCore-gui (Qt6 Widgets desktop GUI)")
+endif()
+if(BUILD_QT6_QUICK_UI)
+    message(STATUS "  • clearCore-quick (Qt Quick / QML desktop GUI)")
 endif()
 message(STATUS "")
 message(STATUS "Run tests: ctest --verbose")
