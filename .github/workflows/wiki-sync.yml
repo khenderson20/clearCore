@@ -1,0 +1,73 @@
+name: Sync wiki
+
+# Keeps the GitHub wiki in sync with docs tracked in this repo, so wiki edits
+# go through the same PR review as code instead of drifting silently via the
+# wiki's separate, unreviewed edit history.
+#
+# Source of truth: the wiki/ directory at the repo root. Each file there
+# corresponds 1:1 to a wiki page (wiki/Home.md -> the "Home" page, etc.),
+# matching GitHub's wiki filename-to-slug convention.
+#
+# Setup required (one-time):
+#   1. Create a CLASSIC personal access token (Settings -> Developer settings
+#      -> Personal access tokens -> Tokens (classic)) with the `repo` scope.
+#      This must be a classic token, not fine-grained: fine-grained PATs are
+#      scoped entirely to REST API permission categories, and wiki push isn't
+#      one of them (it's a raw git push to a separate .wiki.git remote, not
+#      an API call) -- there's no way to grant a fine-grained token access to
+#      it. The default GITHUB_TOKEN also cannot write to wiki repos.
+#   2. Add it as a repository secret named WIKI_SYNC_TOKEN
+#      (Settings -> Secrets and variables -> Actions -> New repository secret).
+#   3. Push once to wiki/** on main to confirm the workflow runs green.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "wiki/**"
+      - ".github/workflows/wiki-sync.yml"
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo (wiki/ source of truth)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: main-repo
+          sparse-checkout: |
+            wiki
+
+      - name: Checkout wiki repo
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-repo
+          token: ${{ secrets.WIKI_SYNC_TOKEN }}
+
+      - name: Copy wiki/ pages into the wiki repo
+        run: |
+          set -euo pipefail
+          # Mirror main-repo/wiki/*.md into wiki-repo/, deleting pages that
+          # were removed from wiki/ so the wiki can't accumulate orphans.
+          rsync -av --delete \
+            --exclude='.git' \
+            main-repo/wiki/ wiki-repo/
+
+      - name: Commit and push if changed
+        working-directory: wiki-repo
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No wiki changes to sync."
+            exit 0
+          fi
+          git add -A
+          git commit -m "Sync wiki from ${GITHUB_SHA:0:7}"
+          git push

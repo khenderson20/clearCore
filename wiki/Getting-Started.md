@@ -1,0 +1,156 @@
+# Getting Started
+
+## Dependencies
+
+| Dependency   | Version | Notes                                                                 |
+|--------------|---------|------------------------------------------------------------------------|
+| C++ compiler | C++20   | GCC 13+ or Clang 16+                                                    |
+| CMake        | 3.20+   | 3.25+ recommended — the preset workflow below is the recommended path  |
+| FTXUI        | v7.0.0  | Auto-fetched via `FetchContent` — no manual install needed             |
+| Qt6          | 6.x     | Optional — powers both `clearCore-gui` (Widgets) and `clearCore-quick` (QML); disable with `-DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF` |
+| LLVM         | 15+     | Optional — powers the Nyxstone assembler/disassembler bridge; disable with `-DBUILD_NYXSTONE=OFF` |
+| Java + Python 3 | any  | Optional — needed only for the MARS differential ("golden") test suite; skipped automatically if missing |
+
+GSL and spdlog are also auto-fetched via `FetchContent` and need no manual install.
+
+### Installing Qt6 and LLVM
+
+Only needed if you want the desktop GUIs or the Nyxstone assembler bridge — skip this if you only want the terminal UI.
+
+```bash
+# Fedora / RHEL
+sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel llvm-devel
+
+# Ubuntu / Debian
+sudo apt install qt6-base-dev qt6-declarative-dev llvm-dev
+
+# macOS
+brew install qt@6 llvm@15
+```
+
+---
+
+## Building
+
+### Recommended: CMake presets
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+```
+
+| Preset      | What it builds                                                  |
+|-------------|--------------------------------------------------------------------|
+| `debug`     | Debug symbols, TUI + both GUIs (everything default-ON)             |
+| `release`   | Optimized release build                                            |
+| `asan`      | Debug build + AddressSanitizer/UBSanitizer (needs `libasan`/`libubsan`) |
+| `core-only` | `mips_core`/`nsc_core` + TUI only — skips Qt6, Qt Quick, and LLVM entirely |
+
+### Manual configure
+
+```bash
+cmake -S . -B cmake-build-debug
+cmake --build cmake-build-debug
+```
+
+### Build a single target
+
+```bash
+# Terminal UI only
+cmake --build cmake-build-debug --target number_system_converter
+
+# Qt6 Widgets GUI only
+cmake --build cmake-build-debug --target clearCore-gui
+
+# Qt Quick / QML GUI only
+cmake --build cmake-build-debug --target clearCore-quick
+```
+
+### Build options
+
+All default **ON** except sanitizers:
+
+| Option                    | Effect                                          |
+|----------------------------|---------------------------------------------------|
+| `-DBUILD_QT6_UI=OFF`       | Skip the Qt6 Widgets GUI (`clearCore-gui`)         |
+| `-DBUILD_QT6_QUICK_UI=OFF` | Skip the Qt Quick / QML GUI (`clearCore-quick`)    |
+| `-DBUILD_NYXSTONE=OFF`     | Skip the LLVM-based Nyxstone assembler/disassembler bridge |
+| `-DGOLDEN_TESTS=OFF`       | Skip the MARS differential test suite               |
+| `-DENABLE_SANITIZERS=ON`   | Build with AddressSanitizer + UBSanitizer (default `OFF`; the `asan` preset sets this for you) |
+
+If Qt6 or LLVM aren't found during configuration, the corresponding target is silently skipped and the rest of the build (including the TUI) still succeeds.
+
+---
+
+## Running
+
+```bash
+# Terminal UI
+./cmake-build-debug/number_system_converter
+
+# Qt6 Widgets desktop GUI
+./cmake-build-debug/clearCore-gui
+
+# Qt Quick / QML desktop GUI
+./cmake-build-debug/clearCore-quick
+```
+
+> **Terminal note:** FTXUI requires an ANSI-capable terminal. If running from an IDE, enable *Emulate terminal in output console* or launch from the shell.
+
+---
+
+## Running tests
+
+```bash
+ctest --preset debug              # all suites
+ctest --preset asan               # same suites under ASan/UBSan
+```
+
+Or manually:
+
+```bash
+cmake --build cmake-build-debug --target decoder_test cpu_test processor_test disasm_test nsc_tests qt_ui_test
+ctest --test-dir cmake-build-debug --output-on-failure
+```
+
+The suite covers:
+
+- `decoder_test` — R/I/J format decoding, opcode + funct → mnemonic
+- `cpu_test` — CPU execution against known programs (both models)
+- `processor_test` — polymorphic harness running both `SingleCycleCpu` and `PipelinedCpu` through identical programs via the `IProcessor` contract
+- `disasm_test` — disassembler and hex program loader
+- `nsc_tests` — number system converter (`parseBase`, conversions)
+- `qt_ui_test` — Qt6 assembler/controller/widget smoke tests (built only when `BUILD_QT6_UI=ON`; runs headless via `QT_QPA_PLATFORM=offscreen`)
+
+**MARS golden tests** (`golden_arith_single`, `golden_fib_pipelined`, etc.) run each program in `tests/golden/` through MARS — the classroom-standard reference MIPS simulator — and both clearCore CPU models, and assert the register files match exactly. These require a JRE and Python 3; CMake downloads MARS automatically and verifies its checksum, and quietly skips the suite if the runtime isn't available or the download fails.
+
+This project uses a lightweight, dependency-free `CHECK()`-macro test harness throughout — not GoogleTest or Catch2.
+
+---
+
+## Terminal requirements
+
+The FTXUI terminal UI requires a real terminal with ANSI escape code support. It will not render correctly in:
+
+- Windows `cmd.exe` without a compatibility layer
+- Some minimal CI/CD environments
+
+Use a standard Linux/macOS terminal, Windows Terminal, or any terminal that supports 256-color ANSI sequences.
+
+---
+
+## First steps
+
+After launching `number_system_converter`, six tabs are available (navigate with **Tab**/**Shift+Tab** or the mouse):
+
+1. **Converter** — type a number in any base; the others update live.
+2. **CPU Dashboard** — load a program from Program Loader, then step through or auto-run.
+3. **CPU Config** — switch between single-cycle and pipelined mode at runtime.
+4. **Program Loader** — enter 32-bit instruction words in hex to load a program.
+5. **Core Pulse** — an oscilloscope-style animation plus per-stage IF/ID/EX/MEM/WB detail.
+6. **Utility** — placeholder tab reserved for future developer tools.
+
+For the Qt6 GUI, write MIPS assembly directly in the Code Editor tab and click **Assemble & Load** — no separate toolchain needed.
+
+See [Terminal UI](Terminal-UI) and [Qt6 GUI](Qt6-GUI) for full descriptions of each tab and its controls.
