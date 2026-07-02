@@ -249,6 +249,16 @@ endif()
 if(BUILD_QT6_UI)
     message(STATUS "Qt6 found: Building desktop GUI")
 
+    # Qt Advanced Docking System (LGPL-2.1) — IDE-style dockable panels for
+    # the GUI. Built as a shared library (QADS default), which is what keeps
+    # the LGPL obligations trivial for this MIT project.
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)  # QADS example apps
+    FetchContent_Declare(qtads
+            GIT_REPOSITORY https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
+            GIT_TAG        4.5.0
+    )
+    FetchContent_MakeAvailable(qtads)
+
     add_executable(clearCore-gui
             src/nsc_qt/main.cpp
             src/nsc_qt/assembler.cpp
@@ -293,6 +303,7 @@ if(BUILD_QT6_UI)
             Qt6::Widgets
             Qt6::OpenGL
             Qt6::OpenGLWidgets
+            ads::qtadvanceddocking-qt6
             clearcore_warnings
     )
 else()

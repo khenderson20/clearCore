@@ -5,11 +5,16 @@
 #include <QMainWindow>
 #include <memory>
 
-class QTabWidget;
 class QLabel;
 class QComboBox;
 class QAction;
 class QToolBar;
+class QMenu;
+class QCloseEvent;
+
+namespace ads {
+class CDockManager;
+}
 
 namespace nsc::qt {
 
@@ -24,6 +29,10 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    // Persists the dock layout so panel arrangements survive restarts.
+    void closeEvent(QCloseEvent* event) override;
 
 private slots:
     void onStep();
@@ -68,7 +77,8 @@ private:
     std::unique_ptr<SimulatorController> controller_;
 
     // Widgets
-    QTabWidget*          tabs_            = nullptr;
+    ads::CDockManager*   dock_manager_    = nullptr;
+    QMenu*               panels_menu_     = nullptr;  // View > Panels toggle actions
     DatapathWidget*      datapath_widget_ = nullptr;
     RegisterWidget*      register_widget_ = nullptr;
     MemoryWidget*        memory_widget_   = nullptr;

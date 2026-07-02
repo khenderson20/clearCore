@@ -17,6 +17,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -31,11 +32,14 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
-#include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <array>
+
+#include <DockAreaWidget.h>
+#include <DockManager.h>
+#include <DockWidget.h>
 
 namespace nsc::qt {
 
@@ -84,6 +88,10 @@ void MainWindow::setupMenuBar() {
 
     // View
     auto* view_menu = mb->addMenu(tr("&View"));
+    // Filled with per-dock toggle actions once the docks exist
+    // (setupCentralWidget runs after this).
+    panels_menu_ = view_menu->addMenu(tr("P&anels"));
+    view_menu->addSeparator();
     view_menu->addAction(tr("&Preferences…"), QKeySequence("Ctrl+,"), this,
                          &MainWindow::onShowPreferences);
     view_menu->addAction(tr("Keyboard &Shortcuts"), QKeySequence("Ctrl+?"), this, [this] {
@@ -118,31 +126,44 @@ void MainWindow::setupToolBar() {
 // ── Central widget ────────────────────────────────────────────────────────────
 
 void MainWindow::setupCentralWidget() {
-    tabs_ = new QTabWidget(this);
-    setCentralWidget(tabs_);
+    // IDE-style docking (Qt Advanced Docking System): every panel starts
+    // tabbed in one central area — visually the old QTabWidget — but can be
+    // dragged out, split, floated, or hidden via View > Panels. The layout
+    // is saved on close and restored below.
+    ads::CDockManager::setConfigFlag(ads::CDockManager::OpaqueSplitterResize, true);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasUndockButton, false);
+    dock_manager_ = new ads::CDockManager(this);  // installs itself as central widget
 
     datapath_widget_ = new DatapathWidget(this);
     register_widget_ = new RegisterWidget(this);
     memory_widget_   = new MemoryWidget(this);
     trace_widget_    = new PipelineTraceWidget(this);
 
-    // Tab 0: Datapath
-    tabs_->addTab(datapath_widget_, tr("Datapath"));
+    ads::CDockAreaWidget* area      = nullptr;
+    const auto            add_panel = [&](const QString& title, QWidget* contents) {
+        auto* dock = new ads::CDockWidget(title);  // objectName = title (saveState key)
+        dock->setWidget(contents);
+        if (area == nullptr)
+            area = dock_manager_->addDockWidget(ads::CenterDockWidgetArea, dock);
+        else
+            dock_manager_->addDockWidgetTabToArea(dock, area);
+        panels_menu_->addAction(dock->toggleViewAction());
+    };
 
-    // Tab 1: Registers
-    tabs_->addTab(register_widget_, tr("Registers"));
+    add_panel(tr("Datapath"), datapath_widget_);
+    add_panel(tr("Registers"), register_widget_);
+    add_panel(tr("Memory"), memory_widget_);
+    add_panel(tr("Pipeline Trace"), trace_widget_);
+    add_panel(tr("Code Editor"), createCodeEditorTab());
+    add_panel(tr("Statistics"), createStatisticsTab());
+    area->setCurrentIndex(0);  // Datapath in front, as before
 
-    // Tab 2: Memory
-    tabs_->addTab(memory_widget_, tr("Memory"));
-
-    // Tab 3: Pipeline Trace
-    tabs_->addTab(trace_widget_, tr("Pipeline Trace"));
-
-    // Tab 4: Code Editor
-    tabs_->addTab(createCodeEditorTab(), tr("Code Editor"));
-
-    // Tab 5: Statistics
-    tabs_->addTab(createStatisticsTab(), tr("Statistics"));
+    // Restore the dock arrangement from the previous session, if any.
+    // restoreState() only touches docks it can match by objectName, so a
+    // stale entry from an older version is ignored harmlessly.
+    const QSettings s("nsc-qt", "clearCore-gui");
+    if (const auto state = s.value("dockLayout").toByteArray(); !state.isEmpty())
+        dock_manager_->restoreState(state);
 
     // Status bar
     status_cycles_lbl_ = new QLabel(tr("Cycles: 0"));
@@ -153,6 +174,12 @@ void MainWindow::setupCentralWidget() {
     statusBar()->addPermanentWidget(status_instrs_lbl_);
     statusBar()->addPermanentWidget(new QLabel("|"));
     statusBar()->addPermanentWidget(status_cpi_lbl_);
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    QSettings s("nsc-qt", "clearCore-gui");
+    s.setValue("dockLayout", dock_manager_->saveState());
+    QMainWindow::closeEvent(event);
 }
 
 QWidget* MainWindow::createCodeEditorTab() {

@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: >
           sudo apt-get update && sudo apt-get install -y
-          ninja-build qt6-base-dev qt6-declarative-dev
+          ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
