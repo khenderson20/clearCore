@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace nsc {
@@ -485,92 +486,294 @@ static Element render_flow_strip(std::size_t frame, bool active) {
 }
 
 // ─── Startup splash animation ─────────────────────────────────────────────────
-// An oscilloscope-style intro: layered sine waves sweep across a graticule grid
-// like a scope trace, phase-shifting over time so the waveform appears to travel.
-// The animation LOOPS continuously; press Enter (or Esc) to dismiss it and enter
-// the app.
+// A pulsing CPU-die animation: a chip package (comb of pins, a die border, and
+// a small pad grid with the "CPU" label) sits at the center of a circuit
+// board. A square "heartbeat" wavefront originates at the die and radiates
+// outward through the pins and PCB traces once per cycle, like a clock pulse
+// propagating off the core. The animation LOOPS continuously; press Enter (or
+// Esc) to dismiss it and enter the app.
 //
 // Implementation notes:
-//   • Canvas coordinates are in braille sub-cells: 2 px per cell on X, 4 on Y.
-//     A canvas of (W, H) sub-cells occupies (W/2, H/4) terminal cells.
-//   • Smooth curves come from DrawPointLine between adjacent samples, not lone
-//     points — that gives the continuous "trace" look of a real scope.
-//   • The ticker thread posts Event::Custom every frame; the renderer reads a
-//     frame counter and redraws. This mirrors the auto-run mechanism in runApp.
+//   • The chip + trace layout is built once into a character grid (`glyph`)
+//     with a parallel `kind` grid used only to pick each cell's color. Trace
+//     routing (lengths, bend points, bend direction) is derived from a small
+//     integer hash of each pin's position rather than <random>, so the board
+//     layout is deterministic and reproducible between runs.
+//   • Every glyph is placed with its own Canvas::DrawText call so each cell
+//     can carry an independent, per-frame color — that's what makes the
+//     traveling pulse possible without rebuilding an Element tree (text +
+//     hbox nodes) for ~2,600 cells every frame, which is the expensive path.
+//   • Distance from a cell to the die center is measured with the row delta
+//     doubled (`|dy| * 2`) to compensate for terminal cells being roughly
+//     twice as tall as they are wide, so the wavefront reads as a square
+//     ring instead of a flattened oval.
+//   • The ticker thread posts Event::Custom every frame; the renderer reads
+//     a frame counter and redraws — same mechanism as the original splash.
+//
+// Requires <algorithm> and <cmath> in addition to whatever this file already
+// includes for FTXUI, std::thread, and std::chrono.
 static void runSplash() {
     using namespace std::chrono;
 
     auto screen = ScreenInteractive::Fullscreen();
 
-    constexpr int     kCanvasW = 200;  // braille sub-cells (→ 100 term cols)
-    constexpr int     kCanvasH = 80;   //                   (→  20 term rows)
-    int               frame    = 0;
+    // ── Character grid dimensions ───────────────────────────────────────────
+    constexpr int kCols = 94;
+    constexpr int kRows = 28;
+    constexpr int cx    = kCols / 2;
+    constexpr int cy    = kRows / 2;
+
+    enum class Kind { Empty, Border, Pin, Trace, Via, Pad, LabelCpu, LabelCaption };
+
+    std::vector<std::string> glyph(static_cast<size_t>(kRows) * kCols, " ");
+    std::vector<Kind>        kind(static_cast<size_t>(kRows) * kCols, Kind::Empty);
+
+    auto idx = [&](int x, int y) { return y * kCols + x; };
+    auto put = [&](int x, int y, const std::string& ch, Kind k) {
+        if (x < 0 || x >= kCols || y < 0 || y >= kRows) return;
+        glyph[idx(x, y)] = ch;
+        kind[idx(x, y)]  = k;
+    };
+    auto putStr = [&](int x0, int y, const std::string& s, Kind k) {
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == ' ') continue;
+            put(x0 + static_cast<int>(i), y, std::string(1, s[i]), k);
+        }
+    };
+
+    // Small deterministic hash used to vary trace geometry per pin without
+    // pulling in <random> or reseeding anything.
+    auto hashf = [](int a, int b) -> uint32_t {
+        uint32_t h = static_cast<uint32_t>(a * 374761393 + b * 668265263 + 0x9E3779B9u);
+        h          = (h ^ (h >> 13)) * 1274126177u;
+        return h ^ (h >> 16);
+    };
+
+    // ── Outer package: bordered square ringed with a comb of pins ──────────
+    constexpr int pkgL = cx - 23, pkgR = cx + 23;
+    constexpr int pkgT = cy - 8, pkgB = cy + 8;
+
+    for (int x = pkgL; x <= pkgR; ++x) {
+        put(x, pkgT, "─", Kind::Border);
+        put(x, pkgB, "─", Kind::Border);
+    }
+    for (int y = pkgT; y <= pkgB; ++y) {
+        put(pkgL, y, "│", Kind::Border);
+        put(pkgR, y, "│", Kind::Border);
+    }
+    put(pkgL, pkgT, "┌", Kind::Border);
+    put(pkgR, pkgT, "┐", Kind::Border);
+    put(pkgL, pkgB, "└", Kind::Border);
+    put(pkgR, pkgB, "┘", Kind::Border);
+
+    for (int x = pkgL + 2; x < pkgR - 1; x += 2) {
+        put(x, pkgT - 1, "│", Kind::Pin);
+        put(x, pkgB + 1, "│", Kind::Pin);
+    }
+    for (int y = pkgT + 1; y < pkgB; ++y) {
+        put(pkgL - 1, y, "─", Kind::Pin);
+        put(pkgR + 1, y, "─", Kind::Pin);
+    }
+
+    // ── Die: inner square, pad grid, and labels ─────────────────────────────
+    constexpr int dieL = pkgL + 3, dieR = pkgR - 3;
+    constexpr int dieT = pkgT + 2, dieB = pkgB - 2;
+
+    for (int x = dieL; x <= dieR; ++x) {
+        put(x, dieT, "─", Kind::Border);
+        put(x, dieB, "─", Kind::Border);
+    }
+    for (int y = dieT; y <= dieB; ++y) {
+        put(dieL, y, "│", Kind::Border);
+        put(dieR, y, "│", Kind::Border);
+    }
+    put(dieL, dieT, "┌", Kind::Border);
+    put(dieR, dieT, "┐", Kind::Border);
+    put(dieL, dieB, "└", Kind::Border);
+    put(dieR, dieB, "┘", Kind::Border);
+
+    constexpr int padT = cy - 4, padB = cy - 2;
+    constexpr int padL = cx - 9, padR = cx + 9;
+    for (int y = padT; y <= padB; ++y)
+        for (int x = padL; x <= padR; x += 2)
+            put(x, y, "▪", Kind::Pad);
+
+    putStr(cx - 1, cy, "CPU", Kind::LabelCpu);
+    putStr(cx - 6, cy + 3, "CPU SIMULATOR", Kind::LabelCaption);
+
+    // ── PCB traces: one vertical/horizontal run out of the package, with an
+    //    optional single right-angle bend, terminating in a via ─────────────
+    auto traceUp = [&](int x) {
+        int vertLen = 2 + static_cast<int>(hashf(x, 11) % 5);
+        int y0 = pkgT - 1, yBend = y0 - vertLen;
+        for (int y = y0; y > yBend; --y)
+            put(x, y, "│", Kind::Trace);
+        if (hashf(x, 12) % 3 == 0) {
+            put(x, yBend, "│", Kind::Trace);
+            put(x, yBend - 1, "▫", Kind::Via);
+            return;
+        }
+        bool right  = hashf(x, 13) % 2 == 0;
+        int  runLen = 2 + static_cast<int>(hashf(x, 14) % 5);
+        int  xEnd   = x + (right ? runLen : -runLen);
+        put(x, yBend, right ? "┌" : "┐", Kind::Trace);
+        for (int xx = x + (right ? 1 : -1); xx != xEnd; xx += (right ? 1 : -1))
+            put(xx, yBend, "─", Kind::Trace);
+        put(xEnd, yBend, "▫", Kind::Via);
+    };
+    auto traceDown = [&](int x) {
+        int vertLen = 2 + static_cast<int>(hashf(x, 21) % 5);
+        int y0 = pkgB + 1, yBend = y0 + vertLen;
+        for (int y = y0; y < yBend; ++y)
+            put(x, y, "│", Kind::Trace);
+        if (hashf(x, 22) % 3 == 0) {
+            put(x, yBend, "│", Kind::Trace);
+            put(x, yBend + 1, "▫", Kind::Via);
+            return;
+        }
+        bool right  = hashf(x, 23) % 2 == 0;
+        int  runLen = 2 + static_cast<int>(hashf(x, 24) % 5);
+        int  xEnd   = x + (right ? runLen : -runLen);
+        put(x, yBend, right ? "└" : "┘", Kind::Trace);
+        for (int xx = x + (right ? 1 : -1); xx != xEnd; xx += (right ? 1 : -1))
+            put(xx, yBend, "─", Kind::Trace);
+        put(xEnd, yBend, "▫", Kind::Via);
+    };
+    auto traceLeft = [&](int yy) {
+        int horizLen = 2 + static_cast<int>(hashf(yy, 31) % 5);
+        int x0 = pkgL - 1, xBend = x0 - horizLen;
+        for (int x = x0; x > xBend; --x)
+            put(x, yy, "─", Kind::Trace);
+        if (hashf(yy, 32) % 3 == 0) {
+            put(xBend, yy, "─", Kind::Trace);
+            put(xBend - 1, yy, "▫", Kind::Via);
+            return;
+        }
+        bool down   = hashf(yy, 33) % 2 == 0;
+        int  runLen = 2 + static_cast<int>(hashf(yy, 34) % 4);
+        int  yEnd   = yy + (down ? runLen : -runLen);
+        put(xBend, yy, down ? "┌" : "└", Kind::Trace);
+        for (int y2 = yy + (down ? 1 : -1); y2 != yEnd; y2 += (down ? 1 : -1))
+            put(xBend, y2, "│", Kind::Trace);
+        put(xBend, yEnd, "▫", Kind::Via);
+    };
+    auto traceRight = [&](int yy) {
+        int horizLen = 2 + static_cast<int>(hashf(yy, 41) % 5);
+        int x0 = pkgR + 1, xBend = x0 + horizLen;
+        for (int x = x0; x < xBend; ++x)
+            put(x, yy, "─", Kind::Trace);
+        if (hashf(yy, 42) % 3 == 0) {
+            put(xBend, yy, "─", Kind::Trace);
+            put(xBend + 1, yy, "▫", Kind::Via);
+            return;
+        }
+        bool down   = hashf(yy, 43) % 2 == 0;
+        int  runLen = 2 + static_cast<int>(hashf(yy, 44) % 4);
+        int  yEnd   = yy + (down ? runLen : -runLen);
+        put(xBend, yy, down ? "┐" : "┘", Kind::Trace);
+        for (int y2 = yy + (down ? 1 : -1); y2 != yEnd; y2 += (down ? 1 : -1))
+            put(xBend, y2, "│", Kind::Trace);
+        put(xBend, yEnd, "▫", Kind::Via);
+    };
+
+    for (int x = pkgL + 3; x <= pkgR - 3; x += 6)
+        traceUp(x);
+    for (int x = pkgL + 3; x <= pkgR - 3; x += 6)
+        traceDown(x);
+    for (int y = pkgT + 2; y <= pkgB - 2; y += 3)
+        traceLeft(y);
+    for (int y = pkgT + 2; y <= pkgB - 2; y += 3)
+        traceRight(y);
+
+    // ── Pulse animation state ───────────────────────────────────────────────
+    int               frame = 0;
     std::atomic<bool> live{true};
 
+    const float sigma   = 3.2f;  // ring thickness, in cells
+    const float maxDist = static_cast<float>(std::max(cx, kCols - cx)) + 10.f;
+    const float period  = 85.f;  // frames per pulse cycle
+    const float speed   = (maxDist + 4.f * sigma) / period;
+
+    auto mix = [](int br, int bg, int bb, int pr, int pg, int pb, float t) {
+        t         = std::clamp(t, 0.f, 1.f);
+        auto lerp = [&](int a, int b) { return static_cast<unsigned char>(a + (b - a) * t); };
+        return Color::RGB(lerp(br, pr), lerp(bg, pg), lerp(bb, pb));
+    };
+
     auto renderer = Renderer([&] {
-        // Time in radians; advances each frame so the wave travels.
-        const float ph  = static_cast<float>(frame) * 0.18f;
-        const int   mid = kCanvasH / 2;
+        const float ringPos = std::fmod(static_cast<float>(frame) * speed, maxDist + 4.f * sigma);
 
-        Canvas c = Canvas(kCanvasW, kCanvasH);
+        Canvas c(kCols * 2, kRows * 4);
 
-        // ── Graticule: dim grid lines like a scope screen ─────────────────
-        // Vertical divisions every 20 sub-cells, horizontal every 16.
-        for (int x = 0; x < kCanvasW; x += 20)
-            for (int y = 0; y < kCanvasH; y += 4)
-                c.DrawPoint(x, y, true, Color::GrayDark);
-        for (int y = 0; y < kCanvasH; y += 16)
-            for (int x = 0; x < kCanvasW; x += 2)
-                c.DrawPoint(x, y, true, Color::GrayDark);
-        // Brighter center axis (the scope's zero line).
-        for (int x = 0; x < kCanvasW; ++x)
-            c.DrawPoint(x, mid, true, Color::Blue);
+        for (int y = 0; y < kRows; ++y) {
+            for (int x = 0; x < kCols; ++x) {
+                Kind k = kind[idx(x, y)];
+                if (k == Kind::Empty) continue;
 
-        // ── A single sine trace, sampled and connected by short lines ──────
-        // amp     : vertical swing in sub-cells
-        // k       : spatial frequency (waves across the screen)
-        // phase   : per-wave time offset so the layers travel independently
-        // col     : trace colour
-        auto draw_wave = [&](float amp, float k, float phase, Color col) {
-            int prev_x = 0;
-            int prev_y = mid + static_cast<int>(amp * std::sin(k * 0.0f + phase));
-            for (int x = 1; x < kCanvasW; ++x) {
-                const float u = static_cast<float>(x);
-                const int   y = mid + static_cast<int>(amp * std::sin(k * u + phase));
-                c.DrawPointLine(prev_x, prev_y, x, y, col);
-                prev_x = x;
-                prev_y = y;
+                const float dx = static_cast<float>(x - cx);
+                const float dy = static_cast<float>(y - cy) * 2.0f;
+                const float d  = std::max(std::fabs(dx), std::fabs(dy));
+                float       t  = std::exp(-((d - ringPos) * (d - ringPos)) / (2.f * sigma * sigma));
+
+                if (k == Kind::Pad) {
+                    const float shimmer =
+                        0.18f *
+                        (0.5f + 0.5f * std::sin(frame * 0.15f +
+                                                static_cast<float>(hashf(x, y) % 1000) * 0.006f));
+                    t = std::min(1.f, t + shimmer);
+                }
+
+                Color col;
+                bool  bold = t > 0.55f;
+                switch (k) {
+                case Kind::Border:
+                    col = mix(70, 55, 20, 255, 205, 110, t);
+                    break;
+                case Kind::Pin:
+                    col = mix(55, 45, 18, 210, 170, 90, t);
+                    break;
+                case Kind::Trace:
+                    col = mix(60, 48, 20, 255, 210, 120, t);
+                    break;
+                case Kind::Via:
+                    col = mix(95, 75, 30, 255, 255, 220, t);
+                    break;
+                case Kind::Pad:
+                    col = mix(85, 85, 95, 255, 255, 255, t);
+                    break;
+                case Kind::LabelCpu:
+                    col  = mix(205, 205, 212, 255, 255, 255, t);
+                    bold = true;
+                    break;
+                case Kind::LabelCaption:
+                    col = mix(150, 120, 55, 255, 215, 140, t);
+                    break;
+                default:
+                    col = Color::White;
+                }
+
+                c.DrawText(x * 2, y * 4, glyph[idx(x, y)], [&](Cell& p) {
+                    p.foreground_color = col;
+                    if (bold) p.bold = true;
+                });
             }
-        };
+        }
 
-        // Amplitude "breathes" gently via a slow envelope.
-        const float env = 0.80f + 0.20f * std::sin(ph * 0.5f);
-
-        // Three layered traces, phase-shifted, evoking a multi-channel scope.
-        draw_wave(26.0f * env, 0.11f, ph, Color::CyanLight);
-        draw_wave(18.0f * env, 0.16f, ph * 1.3f + 1, Color::GreenLight);
-        draw_wave(11.0f * env, 0.23f, -ph * 1.7f + 2, Color::MagentaLight);
-
-        // ── Title overlaid on the trace ───────────────────────────────────
-        // DrawText y should be a multiple of 4 (normal-character rows).
-        c.DrawText(kCanvasW / 2 - 26, mid - 24, "C L E A R C O R E", [](Cell& p) {
-            p.foreground_color = Color::CyanLight;
-            p.bold             = true;
-        });
-        c.DrawText(kCanvasW / 2 - 18, mid + 20, "MIPS  EMULATOR", Color::GrayLight);
+        const float coreT       = std::exp(-(ringPos * ringPos) / (2.f * sigma * sigma));
+        const Color promptColor = mix(120, 95, 40, 255, 225, 150, coreT);
 
         return vbox({
                    filler(),
-                   hbox({filler(), canvas(std::move(c)) | border, filler()}),
+                   hbox({filler(), canvas(std::move(c)), filler()}),
                    filler(),
-                   text("press [Enter] to start") | bold | center | color(Color::CyanLight),
-                   text("oscilloscope warming up…") | dim | center,
+                   text("press [Enter] to start") | bold | center | color(promptColor),
+                   text("cpu core warming up…") | dim | center,
                }) |
                flex;
     });
 
     // Enter or Esc dismisses the splash; everything else is ignored so the
-    // wave keeps running until the user is ready.
+    // pulse keeps running until the user is ready.
     auto root = CatchEvent(renderer, [&](const Event& e) {
         if (e == Event::Custom) return true;
         if (e == Event::Return || e == Event::Escape) {
@@ -603,7 +806,6 @@ static void runSplash() {
 // approximate panel bounding box (see runApp()'s CatchEvent).
 static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool& mouse_active,
                                                uint64_t cycle_counter) {
-
     return Renderer([&, cycle_counter] {
         // Persistent across frames: this lambda's compiled body is shared by
         // every Renderer instance create_datapath_3d_background() produces,
@@ -744,7 +946,6 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
 
 // ─── runApp ───────────────────────────────────────────────────────────────────
 int runApp() {
-
     // run the splash screen()
     runSplash();
     // ── Mouse tracking for the Core Pulse panel ─────────────────────────────────
@@ -1155,10 +1356,8 @@ int runApp() {
                 separatorEmpty(),
                 window(text(" R-format bit breakdown (32-bit) "), hbox(bits_row)),
             });
-        }
-
-        // ══ TAB 1: CPU Dashboard ══════════════════════════════════════════════
-        else if (tab_idx == 1) {
+        } else if (tab_idx == 1) {
+            // ══ TAB 1: CPU Dashboard ═════════════════════════════════════════
             const auto& ps = cpu->pipeline_state();
 
             // ── PC / mode header bar ─────────────────────────────────────────
@@ -1261,10 +1460,8 @@ int runApp() {
                 tel_panel,
                 ctrl_panel,
             });
-        }
-
-        // ══ TAB 2: CPU Config ═════════════════════════════════════════════════
-        else if (tab_idx == 2) {
+        } else if (tab_idx == 2) {
+            // ══ TAB 2: CPU Config ════════════════════════════════════════════
             // Pending change: selected != currently running
             const bool pending = (cpu_mode_idx == 0) ? (cpu_mode != CpuMode::SingleCycle)
                                                      : (cpu_mode != CpuMode::Pipelined);
@@ -1352,10 +1549,8 @@ int runApp() {
                               flex;
 
             content = hbox({sel_panel, separatorEmpty(), desc_panel});
-        }
-
-        // ══ TAB 3: Program Loader ═════════════════════════════════════════════
-        else if (tab_idx == 3) {
+        } else if (tab_idx == 3) {
+            // ══ TAB 3: Program Loader ════════════════════════════════════════
             // ── File path row: input + button on the same line ────────────────
             // window() embeds the label in the border — FTXUI dom §window
             auto file_panel = window(text(" File path "), hbox({
@@ -1436,15 +1631,13 @@ int runApp() {
                 separatorEmpty(),
                 hbox({preview_panel, separatorEmpty(), fmt_panel}) | flex,
             });
-        }
-
-        // ══ TAB 4: Core Pulse ════════════════════════════════════════════════
-        // Shows the live datapath trace for the instruction at PC:
-        //   IF — what was fetched
-        //   ID — register file reads (A/B inputs)
-        //   EX/MEM/WB — control signals from last committed instruction
-        // In pipelined mode, also shows the stage snapshot row + hazards.
-        else if (tab_idx == 4) {
+        } else if (tab_idx == 4) {
+            // ══ TAB 4: Core Pulse ════════════════════════════════════════════
+            // Shows the live datapath trace for the instruction at PC:
+            //   IF — what was fetched
+            //   ID — register file reads (A/B inputs)
+            //   EX/MEM/WB — control signals from last committed instruction
+            // In pipelined mode, also shows the stage snapshot row + hazards.
             const auto& ps    = cpu->pipeline_state();
             const bool  is_pl = (cpu_mode == CpuMode::Pipelined);
 
@@ -1639,9 +1832,8 @@ int runApp() {
             }
             page.push_back(ctrl_panel);
             content = vbox(page);
-        }
-        // ══ TAB 5: Placeholder ══════════════════════════════════════════════════════
-        else if (tab_idx == 5) {
+        } else if (tab_idx == 5) {
+            // ══ TAB 5: Placeholder ══════════════════════════════════════════════════
             content =
                 window(text(" Utility Tools Panel "),
                        vbox({

@@ -57,11 +57,11 @@ target_compile_options(clearcore_warnings INTERFACE
 # instrumented consistently; mixing sanitized and unsanitized code breaks
 # ASan interceptors.
 option(ENABLE_SANITIZERS "Build with AddressSanitizer + UBSanitizer" OFF)
-if(ENABLE_SANITIZERS)
+if (ENABLE_SANITIZERS)
     message(STATUS "Sanitizers enabled: address, undefined")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=address,undefined)
-endif()
+endif ()
 
 find_package(Threads REQUIRED)
 
@@ -106,7 +106,7 @@ FetchContent_MakeAvailable(ftxui GSL spdlog)
 #
 option(BUILD_NYXSTONE "Enable Nyxstone assembler/disassembler (MIT License)" ON)
 
-if(BUILD_NYXSTONE)
+if (BUILD_NYXSTONE)
     message(STATUS "Configuring Nyxstone assembler/disassembler framework...")
 
     find_package(LLVM 15 QUIET CONFIG
@@ -114,7 +114,7 @@ if(BUILD_NYXSTONE)
             HINTS ENV LLVM_DIR ENV NYXSTONE_LLVM_PREFIX
     )
 
-    if(LLVM_FOUND)
+    if (LLVM_FOUND)
         message(STATUS "  ✓ Found LLVM ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR} at ${LLVM_DIR}")
 
         FetchContent_Declare(nyxstone
@@ -124,25 +124,25 @@ if(BUILD_NYXSTONE)
         )
         FetchContent_MakeAvailable(nyxstone)
 
-        if(TARGET nyxstone)
+        if (TARGET nyxstone)
             message(STATUS "  ✓ Built Nyxstone from source (CMake target found)")
             set(NYXSTONE_TARGET nyxstone)
-        else()
+        else ()
             message(WARNING "Nyxstone target not found. Build may have failed. Disabling.")
             set(BUILD_NYXSTONE OFF)
-        endif()
-    else()
+        endif ()
+    else ()
         message(WARNING
                 "LLVM 15+ not found; disabling Nyxstone. Install llvm-devel (Fedora), "
                 "llvm-dev (Debian/Ubuntu), or brew install llvm@15 (macOS), "
                 "or set -DLLVM_DIR=/path/to/llvm/cmake."
         )
         set(BUILD_NYXSTONE OFF)
-    endif()
-else()
+    endif ()
+else ()
     message(STATUS "Nyxstone: disabled (set -DBUILD_NYXSTONE=ON to enable)")
     set(NYXSTONE_TARGET "")
-endif()
+endif ()
 
 # ============================================================================
 # CORE LIBRARIES
@@ -174,15 +174,15 @@ target_link_libraries(mips_core
 target_compile_features(mips_core PUBLIC cxx_std_20)
 
 # Code can check: #if CLEARCORE_NYXSTONE_ENABLED
-if(BUILD_NYXSTONE AND NYXSTONE_TARGET)
+if (BUILD_NYXSTONE AND NYXSTONE_TARGET)
     target_include_directories(mips_core PRIVATE ${LLVM_INCLUDE_DIRS})
     target_link_libraries(mips_core PRIVATE ${NYXSTONE_TARGET} ${LLVM_LIBRARIES})
     target_compile_definitions(mips_core PUBLIC CLEARCORE_NYXSTONE_ENABLED=1)
     message(STATUS "mips_core: Nyxstone assembler/disassembler support enabled")
-else()
+else ()
     target_compile_definitions(mips_core PUBLIC CLEARCORE_NYXSTONE_ENABLED=0)
     message(STATUS "mips_core: Nyxstone support disabled")
-endif()
+endif ()
 
 # ---- nsc_core: number system converter (parse/format/convert bases) ----
 add_library(nsc_core STATIC
@@ -230,12 +230,12 @@ target_link_libraries(number_system_converter PRIVATE nsc_ui)
 # ---- clearCore-gui: Qt6 Widgets desktop GUI (optional) ----
 option(BUILD_QT6_UI "Build Qt6 desktop GUI for processor simulation" ON)
 
-if(BUILD_QT6_UI)
+if (BUILD_QT6_UI)
     find_package(Qt6 6.4
             COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets
             QUIET
     )
-    if(NOT Qt6_FOUND)
+    if (NOT Qt6_FOUND)
         # Degrade gracefully so headless/CI machines can still build and test
         # the core libraries.
         message(WARNING
@@ -243,10 +243,10 @@ if(BUILD_QT6_UI)
                 "Skipping clearCore-gui, or disable with -DBUILD_QT6_UI=OFF"
         )
         set(BUILD_QT6_UI OFF)
-    endif()
-endif()
+    endif ()
+endif ()
 
-if(BUILD_QT6_UI)
+if (BUILD_QT6_UI)
     message(STATUS "Qt6 found: Building desktop GUI")
 
     # Qt Advanced Docking System (LGPL-2.1) — IDE-style dockable panels for
@@ -255,14 +255,14 @@ if(BUILD_QT6_UI)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)  # QADS example apps
     FetchContent_Declare(qtads
             GIT_REPOSITORY https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
-            GIT_TAG        4.5.0
+            GIT_TAG 4.5.0
     )
     FetchContent_MakeAvailable(qtads)
 
     # QHexView (MIT) — the hex-editor widget behind the Memory panel.
     FetchContent_Declare(qhexview
             GIT_REPOSITORY https://github.com/Dax89/QHexView.git
-            GIT_TAG        v5.1.1
+            GIT_TAG v5.1.1
     )
     FetchContent_MakeAvailable(qhexview)
 
@@ -321,16 +321,16 @@ if(BUILD_QT6_UI)
     # libkf6syntaxhighlighting-dev (Ubuntu >= 25.10). Without it the editor
     # is plain text, exactly as before.
     find_package(KF6SyntaxHighlighting QUIET)
-    if(KF6SyntaxHighlighting_FOUND)
+    if (KF6SyntaxHighlighting_FOUND)
         message(STATUS "KSyntaxHighlighting found: Code Editor gets MIPS syntax highlighting")
         target_link_libraries(clearCore-gui PRIVATE KF6::SyntaxHighlighting)
         target_compile_definitions(clearCore-gui PRIVATE HAVE_KSYNTAXHIGHLIGHTING)
-    else()
+    else ()
         message(STATUS "KSyntaxHighlighting not found: Code Editor stays plain text")
-    endif()
-else()
+    endif ()
+else ()
     message(STATUS "Qt6 GUI disabled (set -DBUILD_QT6_UI=ON to enable)")
-endif()
+endif ()
 
 # ---- clearCore-quick: Qt Quick / QML desktop GUI (optional) ----
 #
@@ -340,19 +340,19 @@ endif()
 #
 option(BUILD_QT6_QUICK_UI "Build Qt Quick (QML) desktop GUI" ON)
 
-if(BUILD_QT6_QUICK_UI)
+if (BUILD_QT6_QUICK_UI)
     find_package(Qt6 6.5
             COMPONENTS Core Gui Qml Quick QuickControls2
             QUIET
     )
 
-    if(NOT Qt6Quick_FOUND)
+    if (NOT Qt6Quick_FOUND)
         message(WARNING
                 "Qt6 Quick not found (install qt6-qtdeclarative-devel / qt6-declarative-dev). "
                 "Skipping clearCore-quick, or disable with -DBUILD_QT6_QUICK_UI=OFF"
         )
         set(BUILD_QT6_QUICK_UI OFF)
-    else()
+    else ()
         message(STATUS "Qt6 Quick found: Building QML desktop GUI")
 
         qt_add_executable(clearCore-quick
@@ -417,10 +417,10 @@ if(BUILD_QT6_QUICK_UI)
                 Qt6::QuickControls2
                 clearcore_warnings
         )
-    endif()
-else()
+    endif ()
+else ()
     message(STATUS "Qt Quick GUI disabled (set -DBUILD_QT6_QUICK_UI=ON to enable)")
-endif()
+endif ()
 
 # ============================================================================
 # UNIT TESTS  (run with: ctest --preset debug)
@@ -434,14 +434,14 @@ function(clearcore_add_test name source lib)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-clearcore_add_test(decoder_test   tests/mips/decoder_test.cpp   mips_core)  # Instruction decoding
-clearcore_add_test(cpu_test       tests/mips/cpu_test.cpp       mips_core)  # CPU execution (both models)
+clearcore_add_test(decoder_test tests/mips/decoder_test.cpp mips_core)  # Instruction decoding
+clearcore_add_test(cpu_test tests/mips/cpu_test.cpp mips_core)  # CPU execution (both models)
 clearcore_add_test(processor_test tests/mips/processor_test.cpp mips_core)  # IProcessor contract
-clearcore_add_test(disasm_test    tests/mips/disasm_test.cpp    mips_core)  # Disassembler + hex loader
-clearcore_add_test(nsc_tests      tests/nsc/convert_test.cpp    nsc_core)   # Number conversion
+clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler + hex loader
+clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
 
 # ---- qt_ui_test: exercises assembler/controller/widgets (if Qt6 enabled) ----
-if(BUILD_QT6_UI)
+if (BUILD_QT6_UI)
     # The units under test live in the clearCore-gui target, not a library,
     # so compile them into the test too.
     add_executable(qt_ui_test
@@ -472,7 +472,7 @@ if(BUILD_QT6_UI)
     set_tests_properties(qt_ui_test PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
-endif()
+endif ()
 
 # ---- MARS golden tests: differential testing against a reference simulator ----
 # Each corpus program in tests/golden/ is assembled and executed by MARS (the
@@ -481,49 +481,49 @@ endif()
 # Python 3 — quietly skipped when either is missing or the download fails, so
 # offline and JRE-less builds still configure.
 option(GOLDEN_TESTS "Differential tests against the MARS reference simulator" ON)
-if(GOLDEN_TESTS)
+if (GOLDEN_TESTS)
     find_package(Java QUIET COMPONENTS Runtime)
     find_package(Python3 QUIET COMPONENTS Interpreter)
-    if(Java_JAVA_EXECUTABLE AND Python3_EXECUTABLE)
+    if (Java_JAVA_EXECUTABLE AND Python3_EXECUTABLE)
         set(MARS_JAR "${CMAKE_BINARY_DIR}/mars/Mars4_5.jar")
         set(MARS_SHA256 ac340b676ba2b62246b9df77e62f81ad4447bcfd329ab539716bcd09950b7096)
-        if(NOT EXISTS "${MARS_JAR}")
+        if (NOT EXISTS "${MARS_JAR}")
             message(STATUS "Downloading MARS 4.5.1 (reference MIPS simulator)")
             file(DOWNLOAD
                     https://github.com/dpetersanderson/MARS/releases/download/v.4.5.1/Mars4_5.jar
                     "${MARS_JAR}" STATUS _mars_status)
             list(GET _mars_status 0 _mars_rc)
-            if(NOT _mars_rc EQUAL 0)
+            if (NOT _mars_rc EQUAL 0)
                 file(REMOVE "${MARS_JAR}")
-            endif()
-        endif()
+            endif ()
+        endif ()
         set(_mars_hash "")
-        if(EXISTS "${MARS_JAR}")
+        if (EXISTS "${MARS_JAR}")
             file(SHA256 "${MARS_JAR}" _mars_hash)
-        endif()
-        if(_mars_hash STREQUAL MARS_SHA256)
+        endif ()
+        if (_mars_hash STREQUAL MARS_SHA256)
             add_executable(golden_runner tests/golden/golden_runner.cpp)
             target_link_libraries(golden_runner PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
             target_compile_features(golden_runner PUBLIC cxx_std_20)
-            foreach(prog arith logic shift compare fib memdata call)
-                foreach(cpu single pipelined)
+            foreach (prog arith logic shift compare fib memdata call)
+                foreach (cpu single pipelined)
                     add_test(NAME golden_${prog}_${cpu}
                             COMMAND Python3::Interpreter
-                                    "${CMAKE_SOURCE_DIR}/tests/golden/run_golden.py"
-                                    --java "${Java_JAVA_EXECUTABLE}"
-                                    --mars-jar "${MARS_JAR}"
-                                    --runner $<TARGET_FILE:golden_runner>
-                                    --cpu ${cpu}
-                                    "${CMAKE_SOURCE_DIR}/tests/golden/${prog}.asm")
-                endforeach()
-            endforeach()
-        else()
+                            "${CMAKE_SOURCE_DIR}/tests/golden/run_golden.py"
+                            --java "${Java_JAVA_EXECUTABLE}"
+                            --mars-jar "${MARS_JAR}"
+                            --runner $<TARGET_FILE:golden_runner>
+                            --cpu ${cpu}
+                            "${CMAKE_SOURCE_DIR}/tests/golden/${prog}.asm")
+                endforeach ()
+            endforeach ()
+        else ()
             message(STATUS "GOLDEN_TESTS: MARS jar unavailable or checksum mismatch — skipping")
-        endif()
-    else()
+        endif ()
+    else ()
         message(STATUS "GOLDEN_TESTS: Java runtime or Python3 not found — skipping")
-    endif()
-endif()
+    endif ()
+endif ()
 
 # ============================================================================
 # BUILD SUMMARY
@@ -538,13 +538,13 @@ message(STATUS "  Qt6 GUI:          ${BUILD_QT6_UI}")
 message(STATUS "  Qt Quick GUI:     ${BUILD_QT6_QUICK_UI}")
 message(STATUS "")
 message(STATUS "Executables:")
-message(STATUS "  • number_system_converter (TUI + MIPS emulator)")
-if(BUILD_QT6_UI)
+message(STATUS "  • number_system_converter (TUI + MIPS simulator)")
+if (BUILD_QT6_UI)
     message(STATUS "  • clearCore-gui (Qt6 Widgets desktop GUI)")
-endif()
-if(BUILD_QT6_QUICK_UI)
+endif ()
+if (BUILD_QT6_QUICK_UI)
     message(STATUS "  • clearCore-quick (Qt Quick / QML desktop GUI)")
-endif()
+endif ()
 message(STATUS "")
 message(STATUS "Run tests: ctest --preset <preset>")
 message(STATUS "")

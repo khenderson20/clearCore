@@ -1,309 +1,339 @@
-<div style="text-align: center;">
-  <img src="assets/cpu-logo.png" alt="ClearCore logo" width="2048"/>
-</div>
+<p align="center">
+  <img src="assets/cpu-logo.png" alt="clearCore" width="2048"/>
+</p>
 
-<div style="text-align: center;">
+<h1 align="center">clearCore</h1>
 
-**A pure C++20 lab for computer architecture: from number bases to MIPS hardware, with both a terminal UI and a Qt6
-desktop GUI.**
+<p align="center">
+  A C++20 MIPS CPU simulator with interchangeable single-cycle and 5-stage pipelined datapaths,<br>
+  available as both a keyboard-driven terminal UI and a native Qt6 desktop GUI.
+</p>
 
-</div>
+<p align="center">
+  <a href="https://github.com/khenderson20/clearCore/actions/workflows/ci.yml">
+    <img src="https://github.com/khenderson20/clearCore/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="https://codecov.io/gh/khenderson20/clearCore">
+    <img src="https://codecov.io/gh/khenderson20/clearCore/graph/badge.svg" alt="codecov">
+  </a>
+  <a href="https://www.bestpractices.dev/projects/13466">
+    <img src="https://www.bestpractices.dev/projects/13466/badge" alt="OpenSSF Best Practices">
+  </a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/khenderson20/clearCore">
+    <img src="https://api.scorecard.dev/projects/github.com/khenderson20/clearCore/badge" alt="OpenSSF Scorecard">
+  </a>
+</p>
 
-<div style="text-align: center;">
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++20">
+  <img src="https://img.shields.io/badge/TUI-FTXUI%20v7.0.0-2AA198?style=flat-square" alt="FTXUI">
+  <img src="https://img.shields.io/badge/GUI-Qt6-41CD52?style=flat-square&logo=qt&logoColor=white" alt="Qt6">
+  <img src="https://img.shields.io/badge/build-CMake%20%2B%20FetchContent-657B83?style=flat-square" alt="CMake">
+  <img src="https://img.shields.io/badge/platform-Linux-073642?style=flat-square" alt="Linux">
+  <img src="https://img.shields.io/badge/license-MIT-268BD2?style=flat-square" alt="MIT">
+</p>
 
-![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
-![FTXUI](https://img.shields.io/badge/TUI-FTXUI%20v7.0.0-2AA198?style=flat-square)
-![Qt6](https://img.shields.io/badge/GUI-Qt6-41CD52?style=flat-square&logo=qt&logoColor=white)
-[![CI](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml/badge.svg)](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/khenderson20/clearCore/graph/badge.svg)](https://codecov.io/gh/khenderson20/clearCore)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13466/badge)](https://www.bestpractices.dev/projects/13466)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/khenderson20/clearCore/badge)](https://scorecard.dev/viewer/?uri=github.com/khenderson20/clearCore)
-![MIT License](https://img.shields.io/badge/license-MIT-268BD2?style=flat-square)
-![Build](https://img.shields.io/badge/build-CMake%20%2B%20FetchContent-657B83?style=flat-square)
-![Linux](https://img.shields.io/badge/platform-Linux-073642?style=flat-square)
-
-</div>
+<p align="center">
+  <img src="assets/demo_small.gif" alt="clearCore demo" width="85%">
+</p>
 
 ---
 
-This project started as a live terminal number system converter (binary, hex, decimal) and evolved through deliberate
-stages into a **pluggable MIPS CPU emulator** with two interchangeable front ends: the original **FTXUI terminal UI**
-and a newer **Qt6 desktop GUI**. Both sit on top of the same core — interchangeable single-cycle and 5-stage pipelined
-processor models behind a single `IProcessor` interface — so a cycle-accurate pipeline visualizer, hazard/forwarding
-badges, and telemetry all behave identically regardless of which front end you're running.
+- [Overview](#overview)
+- [Qt6 Desktop GUI](#qt6-desktop-gui)
+- [Terminal UI](#terminal-ui)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Ecosystem](#ecosystem)
+- [Roadmap](#roadmap)
+- [Documentation](#documentation)
+- [License](#license)
 
-Built on [FTXUI](https://github.com/ArthurSonzogni/FTXUI) and [Qt6](https://www.qt.io/), the architecture follows the *
-*Ripes/DrMIPS pattern**: the abstract `IProcessor` interface lets `SingleCycleCpu` and `PipelinedCpu` implementations
-swap in and out without touching either UI layer. Both expose the same `PipelineState`, so IF, ID, EX, MEM, and WB
-render identically across the TUI and the GUI.
+---
 
-## 🖼️ Qt6 desktop GUI
+## Overview
 
-The GUI is the fuller-featured way to work with clearCore: a resizable window with a real code editor, a hex memory
-viewer, and a click-through pipeline datapath, alongside everything the terminal UI offers.
+clearCore started as a live number system converter — accepting values in decimal, binary, or hexadecimal and
+propagating changes across all three representations simultaneously — and grew into a full MIPS CPU simulator. Both
+front ends drive the same `mips_core` and `nsc_core` libraries, so every feature (pipeline state, hazard resolution,
+telemetry) behaves identically regardless of which UI you run.
+
+The processor model follows the **Ripes/DrMIPS pluggable-backend pattern**: the abstract `IProcessor` interface
+decouples execution engines from rendering. `SingleCycleCpu` and `PipelinedCpu` swap in and out at runtime — no rebuild,
+no UI change required. Both expose the same `PipelineState`, so IF/ID/EX/MEM/WB render identically across the TUI and
+the Qt6 GUI.
+
+Reference texts: **Harris & Harris** *Digital Design and Computer Architecture* (single-cycle datapath, control signal
+generation) and **Patterson & Hennessy** *Computer Organization and Design* (pipelining, hazards, forwarding).
+
+---
+
+## Qt6 Desktop GUI
+
+The GUI provides a tabbed interface with a cycle-accurate pipeline datapath view, an integrated MIPS assembler and code
+editor, and a hex memory inspector — all driven by the same `mips_core` and `nsc_core` libraries as the terminal UI.
 
 <table>
 <tr>
 <td width="50%">
 
-**Datapath**
-<img src="assets/screenshots/tab-01-datapath.png" alt="Datapath tab showing the 5-stage pipeline">
+**Datapath** — the 5-stage pipeline rendered cycle-by-cycle. Double-click a stage to inspect the instruction inside it;
+right-click to set or clear a breakpoint.
+
+<img src="assets/screenshots/tab-01-datapath.png" alt="Datapath tab showing IF/ID/EX/MEM/WB stages during execution">
 
 </td>
 <td width="50%">
 
-**Registers**
-<img src="assets/screenshots/tab-02-registers.png" alt="Registers tab showing all 32 MIPS registers">
+**Pipeline Trace** — the classic instruction × cycle grid from Patterson & Hennessy, derived automatically from the
+program's execution trace.
+
+<img src="assets/screenshots/tab-04-pipeline.png" alt="Pipeline Trace showing an instruction×cycle grid with color-coded stages">
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-**Memory**
+**Code Editor** — accepts MIPS assembly source with labels, branches, and loops; assembles and loads directly into the
+simulator. No external toolchain required.
+
+<img src="assets/screenshots/tab-05-codeEditor.png" alt="Code Editor tab showing a MIPS sum-loop program assembled and loaded">
+
+</td>
+<td width="50%">
+
+**Memory** — scrollable hex dump (16 bytes/row with ASCII column), navigable from any base address.
+
 <img src="assets/screenshots/tab-03-memory.png" alt="Memory tab showing a hex dump with ASCII column">
 
 </td>
-<td width="50%">
-
-**Pipeline Trace**
-<img src="assets/screenshots/tab-04-pipeline.png" alt="Pipeline trace tab showing an instruction x cycle grid">
-
-</td>
 </tr>
 <tr>
 <td width="50%">
 
-**Code Editor**
-<img src="assets/screenshots/tab-05-codeEditor.png" alt="Code editor tab with an assembled and loaded MIPS program">
+**Registers** — all 32 MIPS registers with ABI aliases (`$t0`, `$sp`, …), updated every cycle.
+
+<img src="assets/screenshots/tab-02-registers.png" alt="Registers tab showing all 32 MIPS registers with ABI aliases">
 
 </td>
 <td width="50%">
 
-**Statistics**
-<img src="assets/screenshots/tab-06-stats.png" alt="Statistics tab showing cycles, CPI, hazards, and forwarding counts">
+**Statistics** — cycles executed, instructions retired, CPI, and per-category hazard, forwarding, stall, and flush
+counts.
+
+<img src="assets/screenshots/tab-06-stats.png" alt="Statistics tab showing CPI, hazard, and forwarding counters">
 
 </td>
 </tr>
 </table>
 
-**What each tab does:**
-
-| Tab                | Purpose                                                                                                                                                                                                |
-|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Datapath**       | The 5-stage pipeline (IF/ID/EX/MEM/WB) rendered live. Double-click a stage for a full decode of the instruction sitting in it; right-click to set or clear a breakpoint on that instruction's address. |
-| **Registers**      | All 32 registers with ABI aliases (`$t0`, `$sp`, …), updated every cycle.                                                                                                                              |
-| **Memory**         | A scrollable hex dump (16 bytes/row with an ASCII column) from any base address you enter.                                                                                                             |
-| **Pipeline Trace** | An instruction × cycle grid — the classic pipeline diagram from Patterson & Hennessy, generated automatically from your program's actual execution instead of drawn by hand.                           |
-| **Code Editor**    | Write MIPS assembly directly, or load one of the built-in example programs, then Assemble and Load it into the running simulator.                                                                      |
-| **Statistics**     | Cycles, instructions retired, CPI, and per-category hazard/forwarding/stall/flush counts.                                                                                                              |
-
-The assembler supports the same instruction subset as the rest of clearCore (`add`, `addi`, `lw`/`sw`, `beq`/`bne`, `j`/
-`jal`, shifts, and friends) plus labels, so branches and loops assemble the same way they would on real MIPS toolchains.
-
 ### Building the GUI
 
-The Qt6 GUI is built by default alongside the terminal UI:
-
 ```bash
+# Install Qt6
+sudo dnf install qt6-qtbase-devel qt6-qtbase-gui   # Fedora / RHEL
+sudo apt install qt6-base-dev                       # Ubuntu / Debian
+brew install qt@6                                   # macOS
+
 cmake -S . -B cmake-build-debug
 cmake --build cmake-build-debug --target clearCore-gui
 ./cmake-build-debug/clearCore-gui
 ```
 
-> ⚠️ **Qt6 is required by default.** `BUILD_QT6_UI` defaults to `ON`, so `cmake --build` will fail at the configure step
-> if Qt6 isn't installed. Either install it, or configure with the GUI turned off:
->
-> ```bash
-> # Install Qt6 (pick your platform)
-> sudo dnf install qt6-qtbase-devel qt6-qtbase-gui   # Fedora/RHEL
-> sudo apt install qt6-base-dev                      # Ubuntu/Debian
-> brew install qt@6                                   # macOS
->
-> # ...or skip the GUI entirely and build the TUI only
-> cmake -S . -B cmake-build-debug -DBUILD_QT6_UI=OFF
-> ```
+> `BUILD_QT6_UI` defaults to `ON`. To build the TUI only, add `-DBUILD_QT6_UI=OFF` to the configure step.
 
-## ✨ Key Features
+---
 
-- **Live Number Conversion** — instant two-way conversion between binary, hex, and decimal, backed by a single
-  `uint64_t` source of truth with robust input validation.
-- **CPU Mode Switching** — toggle between single-cycle and 5-stage pipelined CPUs at runtime, no rebuild required.
-- **Pipeline Visualization** — all five stages rendered cycle by cycle, with color-coded forwarding paths (EX→EX, WB→EX)
-  and hazard badges (load-use stall, branch/jump flush) — in both the TUI and the Qt6 datapath view.
-- **MIPS Instruction Decoding** — enter a raw 32-bit value and see its mnemonic, register fields, and binary breakdown
-  decoded live.
-- **In-app assembler** — write or load MIPS assembly with labels, branches, and loops directly in the Qt6 Code Editor
-  tab, no external toolchain needed.
-- **Telemetry & CPI** — running cycle counters, stall/forward/flush tallies, and a live CPI readout, shared by both
-  interfaces.
-- **Breakpoints & stage inspection** — set breakpoints from the Qt6 Datapath tab and step through a run instruction by
-  instruction.
-- **Signal Monitor** *(TUI only)* — an ambient oscilloscope panel that animates while the CPU runs.
-- **Control & Navigation** — the TUI is fully keyboard-driven (`Tab` to move between panels, `F10` to step, `Esc` to
-  quit); the Qt6 GUI supports both mouse and keyboard, including arrow-key navigation and Enter/Space shortcuts on the
-  Datapath tab.
+## Terminal UI
 
-## 🖥️ Interfaces
+Fully keyboard-driven — `Tab` moves between panels, `F10` steps the CPU, `Esc` quits. Runs in any ANSI terminal.
 
-clearCore ships two independent front ends over the same `mips_core`/`nsc_core` libraries. Pick whichever fits your
-terminal — or build both.
+<table>
+<tr>
+<td width="50%">
 
-### Terminal UI (`number_system_converter`)
+**Splash screen** — animated CPU circuit on startup.
 
-| # | Tab                | Purpose                                              |
-|---|--------------------|------------------------------------------------------|
-| 0 | **Converter**      | Live binary/hex/decimal conversion                   |
-| 1 | **CPU Dashboard**  | Registers, pipeline stages, hazard badges, telemetry |
-| 2 | **CPU Config**     | Switch between single-cycle and pipelined backends   |
-| 3 | **Program Loader** | Load a flat instruction-word program into memory     |
-| 4 | **Signal Monitor** | Ambient oscilloscope animation during execution      |
+<img src="assets/screenshots/01_splash_screen.png" alt="Animated splash screen showing a CPU circuit diagram">
 
-### Qt6 desktop GUI (`clearCore-gui`)
+</td>
+<td width="50%">
 
-See the [screenshot gallery and tab reference](#️-qt6-desktop-gui) above.
+**Converter** — live three-way number conversion with R-format bit breakdown, field decode, and control signal display.
 
-## 🚀 Quick Start
+<img src="assets/screenshots/02_nsc_converter.png" alt="Converter tab showing DEC/HEX/BIN fields and MIPS bit breakdown">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**CPU Dashboard** — registers, instruction decode, execution trace, memory panel, telemetry bar, and step/auto/run
+controls.
+
+<img src="assets/screenshots/03_tab2.png" alt="CPU Dashboard tab showing registers, pipeline state, instruction decode, and telemetry">
+
+</td>
+<td width="50%">
+
+**Core Pulse** — ambient oscilloscope animation with per-stage IF/ID/EX/MEM/WB instruction and signal breakdown.
+
+<img src="assets/screenshots/06_tab5_corepulse.png" alt="Core Pulse tab showing signal monitor waveform and pipeline stage details">
+
+</td>
+</tr>
+</table>
+
+| Tab                | Purpose                                                                               |
+|--------------------|---------------------------------------------------------------------------------------|
+| **Converter**      | Live binary/hex/decimal conversion + R-format bit breakdown and control signal decode |
+| **CPU Dashboard**  | Registers, pipeline stages, hazard badges, instruction trace, memory, telemetry       |
+| **CPU Config**     | Toggle between single-cycle and 5-stage pipelined backends at runtime                 |
+| **Program Loader** | Load a flat `.hex` program (one 32-bit word per line) into memory                     |
+| **Core Pulse**     | Oscilloscope animation + per-stage IF/ID/EX/MEM/WB instruction and signal panel       |
+| **Utility**        | Developer tools and diagnostics                                                       |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **C++20 compiler** — GCC 13+ or Clang 16+
+- **CMake 3.25+**
+- **Qt6** for the desktop GUI (optional — omit with `-DBUILD_QT6_UI=OFF`)
+
+FTXUI v7.0.0 is fetched automatically via CMake FetchContent — no system install required.
 
 ### Build
 
-The build is fully self-contained via CMake FetchContent (FTXUI v7.0.0) — no system-wide FTXUI install required. Qt6 is
-a separate system dependency (see [Building the GUI](#building-the-gui) above); if it isn't installed, the GUI targets
-are skipped automatically.
-
-The easiest path is a CMake preset (`debug`, `release`, `asan`, or `core-only`):
+The recommended path uses CMake presets:
 
 ```bash
 cmake --preset debug
 cmake --build --preset debug
 ```
 
-- **`asan`** builds with AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`, e.g.
-  `sudo dnf install libasan libubsan`).
-- **`core-only`** skips Qt6 and Nyxstone/LLVM entirely — fastest way to build the emulator core + TUI on a minimal
-  machine.
-
-Manual configure still works too:
+Manual configure works too:
 
 ```bash
 cmake -S . -B cmake-build-debug
-cmake --build cmake-build-debug --target number_system_converter
+cmake --build cmake-build-debug
 ```
+
+Available presets:
+
+| Preset      | What it builds                                                 |
+|-------------|----------------------------------------------------------------|
+| `debug`     | Debug symbols, TUI + GUI                                       |
+| `release`   | Optimized release build                                        |
+| `asan`      | AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`) |
+| `core-only` | Simulator core + TUI only — skips Qt6 and LLVM entirely        |
 
 ### Run
 
-> ⚠️ **Important:** FTXUI requires a real terminal environment to render correctly due to ANSI escape codes. If running
-> from an IDE, enable "Emulate terminal in output console" or run directly from the shell.
-
 ```bash
+# Terminal UI
 ./cmake-build-debug/number_system_converter
+
+# Qt6 desktop GUI
+./cmake-build-debug/clearCore-gui
 ```
 
-Start by entering `255` in DEC and watch HEX (`FF`) and BIN (`11111111`) update live.
+> **Terminal note:** FTXUI requires an ANSI-capable terminal. If running from an IDE, enable *Emulate terminal in output
+console* or launch from the shell.
 
-Prefer the desktop GUI? Build and run `clearCore-gui` instead — see [Building the GUI](#building-the-gui).
+### Test
 
-### Testing
-
-Five CTest suites cover the decoder, disassembler + program loader, both CPU backends (via the shared `IProcessor`
-contract harness), and the converter core. The Qt6 GUI has its own smoke-test suite (`qt_ui_test`), built only when
-`BUILD_QT6_UI` is on.
+Five CTest suites cover the decoder, disassembler, program loader, both CPU backends via the shared `IProcessor`
+contract harness, and the converter core. The GUI adds a smoke-test suite (`qt_ui_test`) when `BUILD_QT6_UI=ON`.
 
 ```bash
-ctest --preset debug          # or: ctest --test-dir cmake-build-debug --output-on-failure
-ctest --preset asan           # same suites under AddressSanitizer + UBSan
+ctest --preset debug    # run all suites
+ctest --preset asan     # same suites under AddressSanitizer + UBSan
 ```
 
-CI (GitHub Actions) runs the core suites in Debug and ASan/UBSan configurations, plus a full Release build with both
-GUIs and Nyxstone, on every push and pull request. Static-analysis config lives in `.clang-tidy` and code style in
-`.clang-format`:
+CI (GitHub Actions) runs core suites in Debug and ASan/UBSan configurations on every push and pull request.
+Static-analysis config lives in `.clang-tidy`; code style in `.clang-format`.
 
-```bash
-clang-tidy -p build/debug src/mips/*.cpp     # correctness-focused checks; zero findings expected
-```
+---
 
-## 🧠 Technical Architecture
+## Architecture
 
-The system is split into two decoupled core libraries plus two independent UI layers, all wired together with CMake:
+The system is structured as two independent core libraries and two UI layers, linked via CMake:
 
-- **`nsc_core`** — the number system converter logic.
-- **`mips_core`** — the processor logic, behind the `IProcessor` interface.
-- **`nsc_ui`** — FTXUI wiring for the terminal UI; never includes core libraries directly, only their public interfaces.
-- **`nsc_qt`** — Qt6 widgets for the desktop GUI; likewise only depends on `mips_core` through `IProcessor`, via a
-  `SimulatorController` bridge that owns the processor and re-emits its state as Qt signals for the widgets to render.
+![how-it-works.svg](assets/how-it-works.svg)
 
-### MIPS Core: Pluggable Processors (`mips/`)
+`nsc_qt` (the Qt6 layer) owns a `SimulatorController` that wraps an `IProcessor` and re-emits its state as Qt signals
+for the tab widgets to render. The TUI's `nsc_ui` layer talks to the same interfaces directly.
 
-`IProcessor` is the contract between either UI and any execution engine, so both backends are interchangeable and both
-front ends drive them identically:
+### Module Reference
 
-- **`SingleCycleCpu`** — a basic, non-pipelined datapath (H&H Chapter 7).
-- **`PipelinedCpu`** — a full 5-stage pipeline (IF, ID, EX, MEM, WB) adhering to H&H Chapter 8, including:
-    - Load-use stall detection
-    - Forwarding paths (EX/MEM → EX and MEM/WB → EX)
-    - Hazard detection and control-flow resolution (branch/jump flushes)
+| Module                 | Library     | Responsibility                                                                          |
+|------------------------|-------------|-----------------------------------------------------------------------------------------|
+| `Converter`            | `nsc_core`  | `uint64_t` state, base-N views                                                          |
+| `Parser` / `Formatter` | `nsc_core`  | String validation and serialization                                                     |
+| `IProcessor`           | `mips_core` | Abstract contract for all execution engines                                             |
+| `SingleCycleCpu`       | `mips_core` | Non-pipelined datapath — CPI = 1 (H&H §7)                                               |
+| `PipelinedCpu`         | `mips_core` | 5-stage pipeline with load-use stalls, EX/MEM→EX forwarding, branch/jump flush (H&H §8) |
+| `Decoder` / `ALU`      | `mips_core` | Format detection, control signal generation, arithmetic                                 |
+| `SimulatorController`  | `nsc_qt`    | Owns an `IProcessor`; re-emits its state as Qt signals                                  |
+| In-app assembler       | `nsc_qt`    | Parses MIPS assembly with labels into instruction words                                 |
 
-### Core Module Responsibilities
+### Design Conventions
 
-| Module                  | Responsibility                                                                  | NSC Core | MIPS Core | Qt GUI |
-|:------------------------|:--------------------------------------------------------------------------------|:--------:|:---------:|:------:|
-| **Converter**           | Manages `uint64_t` state, exposes base views                                    |    ✅     |           |        |
-| **Parser/Formatter**    | String validation and serialization across bases                                |    ✅     |           |        |
-| **IProcessor**          | Abstract interface for execution engine + visualizer contract                   |          |     ✅     |        |
-| **CPUs (SC/Pipe)**      | Core CPU implementation logic (datapath)                                        |          |     ✅     |        |
-| **Decoder / ALU**       | Instruction format detection, control signals, arithmetic/logic                 |          |     ✅     |        |
-| **SimulatorController** | Owns an `IProcessor`, re-emits its state as Qt signals for widgets to render    |          |           |   ✅    |
-| **In-app assembler**    | Parses MIPS assembly with labels into instruction words for the Code Editor tab |          |           |   ✅    |
+- `mips_core` and `nsc_core` contain pure logic with no UI dependency — tested independently.
+- Polymorphism via `IProcessor` keeps backends swappable at runtime.
+- `enum class` for all hardware fields; `[[nodiscard]]` on all pure queries.
+- C++20 throughout: `std::format`, `std::optional`, ranges.
 
-### Design Conventions & Built With
+---
 
-- **Languages/Tools:** C++20 (`std::format`, `std::optional`), FTXUI v7.0.0, Qt6 (Widgets, OpenGL), CMake FetchContent.
-- **Design Focus:** `mips_core` and `nsc_core` contain pure logic with no UI dependency; polymorphism via `IProcessor`
-  keeps backends swappable; `enum class` for hardware fields; `[[nodiscard]]` on pure queries.
+## Ecosystem
 
-## 🌍 Ecosystem Positioning
+clearCore applies the Ripes pluggable-backend pattern to the MIPS ISA. It is distinct among this set in providing both a
+terminal UI and a native desktop GUI over a shared simulation core.
 
-ClearCore sits alongside established educational and research simulators, applying the Ripes pluggable-backend pattern —
-and, uniquely among this set, offering both a terminal UI and a native desktop GUI over the same core.
+|                  | clearCore             | Ripes              | DrMIPS          | EduMIPS64        | QtMips            |
+|------------------|-----------------------|--------------------|-----------------|------------------|-------------------|
+| **Language**     | C++20                 | C++/Qt             | Java            | Java             | C++/Qt            |
+| **UI**           | TUI + Qt6 GUI         | Qt GUI             | Swing GUI       | Swing GUI        | Qt GUI            |
+| **ISA**          | MIPS                  | RISC-V             | MIPS            | MIPS64           | MIPS              |
+| **Backends**     | 2 (SC / 5-stage)      | 5+ models          | ~2              | ~1               | ~1                |
+| **Pipeline viz** | Stage state + hazards | Datapath schematic | Visual datapath | Registers/memory | Datapath + memory |
 
-| Aspect            | ClearCore                   | Ripes              | DrMIPS          | EduMIPS64       | QtMips            | WebRISC-V   |
-|-------------------|-----------------------------|--------------------|-----------------|-----------------|-------------------|-------------|
-| **Language**      | C++20                       | C++/Qt             | Java            | Java            | C++/Qt            | PHP/JS      |
-| **UI**            | FTXUI (TUI) **+** Qt6 (GUI) | Qt (GUI)           | Swing (GUI)     | Swing (GUI)     | Qt (GUI)          | Web Browser |
-| **ISA**           | MIPS                        | RISC-V             | MIPS            | MIPS64          | MIPS              | RISC-V      |
-| **Backends**      | 2 (SC / 5-stage)            | 5+ models          | ~2              | ~1              | ~1                | ~1          |
-| **Visualization** | Pipeline state + hazards    | Datapath schematic | Visual datapath | Register/memory | Datapath + memory | Cycle grid  |
+---
 
-Reference texts: **Harris & Harris**, *Digital Design and Computer Architecture* (single-cycle datapath, control signal
-generation), and **Patterson & Hennessy**, *Computer Organization and Design* (pipelining, hazards, forwarding).
+## Roadmap
 
-## 🗺️ Roadmap
-
-- ✅ **Stage 1** — Number converter core + MIPS decoder
-- ✅ **Stage 1.5** — `IProcessor` refactor, single-cycle and pipelined backends
-- 🟡 **Stage 2** — TUI execution visualizer (memory panel, instruction decode, hazard badges, speed controls, telemetry —
-  complete)
-- ✅ **Stage 2.5** — Qt6 desktop GUI (datapath, registers, memory, pipeline trace, code editor with in-app assembler,
-  statistics)
-- ⬜ **Stage 3** — Two-pass assembler with symbol table, label resolution, pseudo-instructions *(the Qt6 Code Editor's
-  assembler covers a first pass of this already — labels and branches work; pseudo-instructions are still outstanding)*
-- ⬜ **Stage 4** — Instruction × cycle grid, per-stage telemetry, CPI analysis, performance summary panel *(the Qt6
-  Pipeline Trace and Statistics tabs cover this for the GUI; TUI-side work is still outstanding)*
-- ⬜ **Stage 5** — Branch prediction and speculative execution
+- [x] **Stage 1** — Number converter core + MIPS decoder
+- [x] **Stage 1.5** — `IProcessor` refactor; single-cycle and pipelined backends
+- [x] **Stage 2** — TUI execution visualizer: memory panel, hazard badges, speed controls, telemetry
+- [x] **Stage 2.5** — Qt6 GUI: datapath, registers, memory, pipeline trace, code editor with in-app assembler,
+  statistics
+- [ ] **Stage 3** — Two-pass assembler with full symbol table, label resolution, and pseudo-instruction expansion *(the
+  Qt6 Code Editor covers labels and branches; pseudo-instructions are still outstanding)*
+- [ ] **Stage 4** — Per-stage TUI telemetry and CPI analysis to reach parity with the GUI's Pipeline Trace and
+  Statistics tabs
+- [ ] **Stage 5** — Branch prediction and speculative execution
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full breakdown.
 
-## 📄 Documentation
+---
 
-- **🚀 For Beginners:** [USER_GUIDE.md](docs/USER_GUIDE.md) — learn MIPS concepts through the TUI visualization.
-- **🧠 For Developers:** [ARCHITECTURE_DESIGN.md](docs/ARCHITECTURE_DESIGN.md) — design patterns, hardware abstractions,
-  and academic grounding.
-- **🖼️ Qt6 GUI Architecture:** [QT6_ARCHITECTURE.md](docs/QT6_ARCHITECTURE.md) — how `nsc_qt` and `SimulatorController`
-  are structured.
-- **⚙️ For Contributors:** [CONTRIBUTING.md](docs/CONTRIBUTING.md) — branching model, code style, and testing
-  guidelines.
-- **🗺️ Roadmap:** [ROADMAP.md](docs/ROADMAP.md) — staged feature plan and reference patterns.
+## Documentation
 
-## 📄 License
+| Doc                                                   | Audience                                                       |
+|-------------------------------------------------------|----------------------------------------------------------------|
+| [USER_GUIDE.md](docs/USER_GUIDE.md)                   | Beginners learning MIPS concepts through the TUI visualization |
+| [ARCHITECTURE_DESIGN.md](docs/ARCHITECTURE_DESIGN.md) | Design patterns, hardware abstractions, and academic grounding |
+| [QT6_ARCHITECTURE.md](docs/QT6_ARCHITECTURE.md)       | How `nsc_qt` and `SimulatorController` are structured          |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md)               | Branching model, code style, and testing guidelines            |
+| [ROADMAP.md](docs/ROADMAP.md)                         | Staged feature plan and reference patterns                     |
+
+---
+
+## License
 
 MIT — see [LICENSE](LICENSE).
