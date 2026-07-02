@@ -2,13 +2,15 @@
 #include "nsc_qt/ui_scale.h"
 
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QTableWidget>
-#include <QTableWidgetItem>
 #include <QVBoxLayout>
+
+#include <QHexView/model/buffer/qmemorybuffer.h>
+#include <QHexView/model/qhexcursor.h>
+#include <QHexView/model/qhexdocument.h>
+#include <QHexView/qhexview.h>
 
 namespace nsc::qt {
 
@@ -19,10 +21,6 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
     // ── Navigation bar ──────────────────────────────────────────────────────
     auto* nav = new QHBoxLayout;
 
-    // "Jump to 0x0" chip -- reuses the existing addr_spin_ -> onAddressChanged
-    // plumbing, so no new refresh logic is needed here. This is the simplest
-    // of the three quick-jump chips from the redesign mockup; PC and SP need
-    // a value fed in from SimulatorController first (separate change).
     auto* jump_start_btn = new QPushButton(tr("Jump to 0x0"), this);
     jump_start_btn->setToolTip(tr("Jump to the start of memory"));
     jump_start_btn->setFont(scale::monoFont(scale::kFontSizeBody));
@@ -31,17 +29,17 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
 
     nav->addStretch();
 
-    auto* nav_lbl = new QLabel(tr("Base address:"), this);
+    auto* nav_lbl = new QLabel(tr("Go to address:"), this);
     nav_lbl->setFont(scale::monoFont(scale::kFontSizeBody));
     nav->addWidget(nav_lbl);
 
     addr_spin_ = new QSpinBox(this);
     addr_spin_->setFont(scale::monoFont(scale::kFontSizeBody));
     addr_spin_->setRange(0, 0x7FFFFFFF);
-    addr_spin_->setValue(static_cast<int>(DEF_BASE));
+    addr_spin_->setValue(0);
     addr_spin_->setDisplayIntegerBase(16);
     addr_spin_->setPrefix("0x");
-    addr_spin_->setSingleStep(256);
+    addr_spin_->setSingleStep(16);
     nav->addWidget(addr_spin_);
 
     status_lbl_ = new QLabel(this);
@@ -49,99 +47,52 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
     nav->addWidget(status_lbl_);
     vl->addLayout(nav);
 
-    buildTable();
-    vl->addWidget(table_);
+    hex_view_ = new QHexView(this);
+    hex_view_->setReadOnly(true);
+    hex_view_->setFont(scale::monoFont(scale::kFontSizeDense));
+    vl->addWidget(hex_view_);
 
     connect(addr_spin_, qOverload<int>(&QSpinBox::valueChanged), this,
             &MemoryWidget::onAddressChanged);
 }
 
-void MemoryWidget::buildTable() {
-    // Columns: Address | B0..B15 | ASCII
-    const int total_cols = 1 + COLS_HEX + 1;
-    table_               = new QTableWidget(ROWS, total_cols, this);
-
-    QStringList headers;
-    headers << tr("Address");
-    for (int i = 0; i < COLS_HEX; ++i)
-        headers << QString("+%1").arg(i, 2, 16, QChar('0')).toUpper();
-    headers << tr("ASCII");
-    table_->setHorizontalHeaderLabels(headers);
-
-    table_->verticalHeader()->hide();
-    table_->horizontalHeader()->setDefaultSectionSize(32);
-    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    table_->horizontalHeader()->setSectionResizeMode(total_cols - 1, QHeaderView::ResizeToContents);
-    table_->verticalHeader()->setDefaultSectionSize(24);
-    table_->setFont(scale::monoFont(scale::kFontSizeDense));
-    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    table_->setAlternatingRowColors(true);
-    table_->setShowGrid(true);
-
-    // Pre-populate with empty items
-    for (int row = 0; row < ROWS; ++row) {
-        for (int col = 0; col < total_cols; ++col) {
-            auto* item = new QTableWidgetItem;
-            item->setTextAlignment(Qt::AlignCenter);
-            table_->setItem(row, col, item);
-        }
-    }
-}
-
 void MemoryWidget::updateDisplay(const mips::Memory& mem) {
     last_mem_ = &mem;
-    refreshRows(mem);
+    refreshView(mem);
 }
 
 void MemoryWidget::markWritten(uint32_t addr) {
     written_addrs_.insert(addr);
 }
 
-void MemoryWidget::refreshRows(const mips::Memory& mem) {
-    const uint32_t base = base_addr_;
-    for (int row = 0; row < ROWS; ++row) {
-        const uint32_t row_addr = base + static_cast<uint32_t>(row * COLS_HEX);
+void MemoryWidget::refreshView(const mips::Memory& mem) {
+    const auto       raw = mem.raw();
+    const QByteArray ba(reinterpret_cast<const char*>(raw.data()),
+                        static_cast<qsizetype>(raw.size()));
 
-        // Address column
-        table_->item(row, 0)->setText(QString("0x%1").arg(row_addr, 8, 16, QChar('0')).toUpper());
-
-        QString ascii_str;
-        for (int col = 0; col < COLS_HEX; ++col) {
-            const uint32_t byte_addr = row_addr + static_cast<uint32_t>(col);
-            auto           byte_val  = mem.read_byte(byte_addr);
-            auto*          item      = table_->item(row, 1 + col);
-
-            if (byte_val) {
-                item->setText(QString("%1").arg(*byte_val, 2, 16, QChar('0')).toUpper());
-                ascii_str += (*byte_val >= 0x20 && *byte_val < 0x7F)
-                                 ? QChar(static_cast<char>(*byte_val))
-                                 : QChar('.');
-                // Highlight recently written bytes
-                if (written_addrs_.count(byte_addr))
-                    item->setBackground(QColor("#FFF9C4"));
-                else
-                    item->setBackground(dark_mode_ ? QColor(0x2A, 0x2A, 0x2A) : Qt::white);
-            } else {
-                item->setText("--");
-                item->setBackground(dark_mode_ ? QColor(0x1A, 0x1A, 0x1A)
-                                               : QColor(0xEE, 0xEE, 0xEE));
-                ascii_str += ' ';
-            }
-        }
-        table_->item(row, 1 + COLS_HEX)->setText(ascii_str);
+    if (doc_ == nullptr) {
+        doc_ = QHexDocument::fromMemory<QMemoryBuffer>(ba, this);
+        hex_view_->setDocument(doc_);
+        status_lbl_->setText(tr("%1 KiB RAM").arg(raw.size() / 1024));
+    } else {
+        doc_->setData(ba);
     }
+
+    // Repaint the "written last step" highlights.
+    hex_view_->clearMetadata();
+    const QColor written_bg = dark_mode_ ? QColor(0x7A, 0x6E, 0x1F) : QColor(0xFF, 0xF9, 0xC4);
+    for (const uint32_t addr : written_addrs_)
+        hex_view_->setBackgroundSize(addr, 1, written_bg);
     written_addrs_.clear();
 }
 
 void MemoryWidget::onAddressChanged(int value) {
-    base_addr_ = static_cast<uint32_t>(value) & ~0xFu;  // align to 16
-    if (last_mem_) refreshRows(*last_mem_);
+    hex_view_->hexCursor()->move(static_cast<qint64>(value));
 }
 
 void MemoryWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
-    if (last_mem_) refreshRows(*last_mem_);
+    if (last_mem_) refreshView(*last_mem_);
 }
 
 }  // namespace nsc::qt

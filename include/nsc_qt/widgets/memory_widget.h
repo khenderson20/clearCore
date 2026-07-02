@@ -5,19 +5,23 @@
 #include <cstdint>
 #include <unordered_set>
 
-class QTableWidget;
+class QHexView;
+class QHexDocument;
 class QSpinBox;
 class QLabel;
 
 namespace nsc::qt {
 
+// Hex view of the emulated RAM, built on QHexView (MIT). The whole address
+// space is shown in one scrollable view; bytes stored by the last step are
+// highlighted until the next refresh.
 class MemoryWidget : public QWidget {
     Q_OBJECT
 
 public:
     explicit MemoryWidget(QWidget* parent = nullptr);
 
-    // Refresh display from `mem` starting at `base_addr_`.
+    // Refresh display from `mem`.
     void updateDisplay(const mips::Memory& mem);
 
     // Highlight `addr` as recently written.
@@ -29,19 +33,14 @@ private slots:
     void onAddressChanged(int value);
 
 private:
-    static constexpr int      ROWS     = 16;
-    static constexpr int      COLS_HEX = 16;  // 16 bytes per row
-    static constexpr uint32_t DEF_BASE = 0x00000000;
+    void refreshView(const mips::Memory& mem);
 
-    void buildTable();
-    void refreshRows(const mips::Memory& mem);
-
-    QTableWidget* table_      = nullptr;
+    QHexView*     hex_view_   = nullptr;
+    QHexDocument* doc_        = nullptr;
     QSpinBox*     addr_spin_  = nullptr;
     QLabel*       status_lbl_ = nullptr;
 
-    uint32_t base_addr_ = DEF_BASE;
-    bool     dark_mode_ = false;
+    bool dark_mode_ = false;
 
     // Set of byte addresses written in the last step.
     std::unordered_set<uint32_t> written_addrs_{};

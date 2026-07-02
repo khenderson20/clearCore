@@ -259,6 +259,13 @@ if(BUILD_QT6_UI)
     )
     FetchContent_MakeAvailable(qtads)
 
+    # QHexView (MIT) — the hex-editor widget behind the Memory panel.
+    FetchContent_Declare(qhexview
+            GIT_REPOSITORY https://github.com/Dax89/QHexView.git
+            GIT_TAG        v5.1.1
+    )
+    FetchContent_MakeAvailable(qhexview)
+
     add_executable(clearCore-gui
             src/nsc_qt/main.cpp
             src/nsc_qt/assembler.cpp
@@ -304,6 +311,7 @@ if(BUILD_QT6_UI)
             Qt6::OpenGL
             Qt6::OpenGLWidgets
             ads::qtadvanceddocking-qt6
+            QHexView
             clearcore_warnings
     )
 else()
@@ -439,6 +447,7 @@ if(BUILD_QT6_UI)
     target_link_libraries(qt_ui_test PRIVATE
             Qt6::Widgets
             mips_core
+            QHexView  # memory_widget.cpp is compiled into the test
             clearcore_warnings
     )
     target_compile_features(qt_ui_test PUBLIC cxx_std_20)
