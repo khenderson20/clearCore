@@ -108,21 +108,14 @@ Follow the project's existing style (visible in `git log`):
 
 ---
 
-## Keeping the wiki, README, and docs/ in sync
+## Keeping the wiki and README in sync
 
-This wiki, `README.md`, and the files under `docs/` (`ARCHITECTURE_DESIGN.md`, `ROADMAP.md`, `QT6_ARCHITECTURE.md`, `USER_GUIDE.md`) describe the same project at different levels of detail, and they drift independently. As of this update:
-
-- `README.md` is the most current top-level source and reflects Stage 2.5 (Qt6 GUI).
-- The wiki now matches `README.md` and the actual source tree (CMakeLists.txt targets, decoder ISA, TUI tab list).
-- `docs/ARCHITECTURE_DESIGN.md`, `docs/ROADMAP.md`, and `docs/QT6_ARCHITECTURE.md` still predate Stage 2.5 — they describe `nsc_qt` as a future plan rather than shipped code, and don't mention `nsc_quick`, Nyxstone, or the golden test suite. They're due for the same pass this wiki just got.
-
-**When you land a feature that changes what a user or contributor sees**, treat these as one update, not three separate ones:
+**When you land a feature that changes what a user or contributor sees**, treat these as one update, not two separate ones:
 
 1. Update `README.md` first — it's the single most-read entry point.
-2. Update the matching `docs/*.md` file if the change is design/architecture-level detail that belongs there rather than in the README.
-3. Update the matching wiki page(s). If you don't want to hand-edit the wiki through the GitHub web UI, see the sync workflow below.
+2. Update the matching wiki page(s). If you don't want to hand-edit the wiki through the GitHub web UI, see the sync workflow below.
 
-A GitHub Actions workflow (`.github/workflows/wiki-sync.yml`) can push a `wiki/` directory in this repository to the wiki automatically on merge to `main`, so wiki edits go through the same PR review as code — see the workflow file for setup (it needs a personal access token with wiki write access stored as a repository secret, since the default `GITHUB_TOKEN` can't push to the wiki repo).
+A GitHub Actions workflow (`.github/workflows/wiki-sync.yml`) pushes the `wiki/` directory in this repository to the GitHub wiki automatically on merge to `main`, so wiki edits go through the same PR review as code — see the workflow file for setup (it needs a personal access token with wiki write access stored as a repository secret, since the default `GITHUB_TOKEN` can't push to the wiki repo).
 
 ---
 

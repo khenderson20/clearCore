@@ -318,19 +318,19 @@ terminal UI and a native desktop GUI over a shared simulation core.
   Statistics tabs
 - [ ] **Stage 5** — Branch prediction and speculative execution
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full breakdown.
+See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
 
 ---
 
 ## Documentation
 
-| Doc                                                   | Audience                                                       |
-|-------------------------------------------------------|----------------------------------------------------------------|
-| [USER_GUIDE.md](docs/USER_GUIDE.md)                   | Beginners learning MIPS concepts through the TUI visualization |
-| [ARCHITECTURE_DESIGN.md](docs/ARCHITECTURE_DESIGN.md) | Design patterns, hardware abstractions, and academic grounding |
-| [QT6_ARCHITECTURE.md](docs/QT6_ARCHITECTURE.md)       | How `nsc_qt` and `SimulatorController` are structured          |
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)               | Branching model, code style, and testing guidelines            |
-| [ROADMAP.md](docs/ROADMAP.md)                         | Staged feature plan and reference patterns                     |
+| Doc                                                                                              | Audience                                                       |
+|--------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| [Getting Started](https://github.com/khenderson20/clearCore/wiki/Getting-Started)                | Beginners learning MIPS concepts through the TUI visualization |
+| [Architecture](https://github.com/khenderson20/clearCore/wiki/Architecture)                      | Design patterns, hardware abstractions, and academic grounding |
+| [Qt6 GUI](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)                               | How `nsc_qt` and `SimulatorController` are structured          |
+| [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing)                      | Branching model, code style, and testing guidelines            |
+| [Roadmap](https://github.com/khenderson20/clearCore/wiki/Roadmap)                               | Staged feature plan and reference patterns                     |
 
 ---
 
