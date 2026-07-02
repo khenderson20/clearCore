@@ -1,0 +1,9 @@
+# All files
+* @khenderson20
+
+# Qt GUI specifically
+nsc_qt/** @khenderson20
+src/emulator/** @khenderson20
+
+# CI workflows
+.github/workflows/** @khenderson20
