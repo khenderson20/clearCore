@@ -64,10 +64,32 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet && git diff --cached --quiet; then
+
+          git add -A
+          if git diff --cached --quiet; then
             echo "No wiki changes to sync."
             exit 0
           fi
-          git add -A
+
           git commit -m "Sync wiki from ${GITHUB_SHA:0:7}"
-          git push
+
+          # Handle concurrent updates to the wiki branch.
+          for attempt in 1 2; do
+            git fetch origin master
+            git rebase origin/master || {
+              git rebase --abort
+              echo "Rebase conflict while syncing wiki; manual resolution required."
+              exit 1
+            }
+
+            if git push origin HEAD:master; then
+              echo "Wiki sync push succeeded."
+              exit 0
+            fi
+
+            echo "Push rejected (attempt $attempt), retrying..."
+            sleep 2
+          done
+
+          echo "Failed to push wiki sync after retries."
+          exit 1
