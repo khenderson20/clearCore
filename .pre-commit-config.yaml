@@ -1,0 +1,22 @@
+# Pre-commit hooks — one-time setup per clone:
+#   pipx install pre-commit    (or: pip install --user pre-commit)
+#   pre-commit install
+# After that, clang-format auto-fixes staged C++ files on every commit,
+# using the same .clang-format as the editors and CI.
+#
+# clang-tidy is intentionally not hooked here: it needs a configured build
+# (compile_commands.json) and is too slow per-commit. Run it via the preset
+# builds or your IDE instead; .clang-tidy is picked up automatically.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/cpp-linter/cpp-linter-hooks
+    rev: v1.5.0
+    hooks:
+      - id: clang-format
+        args: [--version=22]  # keep in sync with the version pinned in ci.yml

@@ -1,10 +1,16 @@
 # clearCore CI — build and test on every push/PR.
 #
-# Two jobs:
+# Three jobs:
+#   format     : clang-format check via cpp-linter (same .clang-format as the
+#                pre-commit hook and editors; annotates violations on PRs).
 #   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
 #                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
 #   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
 #                Catches Qt/moc/QML regressions that the core job can't see.
+#
+# Build jobs use ccache backed by the GitHub Actions cache; the configure
+# steps inject it via CMAKE_<LANG>_COMPILER_LAUNCHER so the presets stay
+# usable without ccache locally.
 name: CI
 
 on:
@@ -14,6 +20,29 @@ on:
     branches: [main]
 
 jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check clang-format
+        id: linter
+        uses: cpp-linter/cpp-linter-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          style: file          # use the repo's .clang-format
+          tidy-checks: '-*'    # formatting only; clang-tidy runs via builds/IDE
+          version: 22          # keep in sync with .pre-commit-config.yaml
+          files-changed-only: false
+          step-summary: true
+
+      - name: Fail on formatting violations
+        if: steps.linter.outputs.clang-format-checks-failed > 0
+        run: exit 1
+
   core-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -26,9 +55,15 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.preset }}
+
       - name: Configure (sanitizer job disables the GUIs too)
         run: >
           cmake --preset ${{ matrix.preset }}
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
 
       - name: Build
@@ -47,8 +82,15 @@ jobs:
           sudo apt-get update && sudo apt-get install -y
           ninja-build qt6-base-dev qt6-declarative-dev llvm-dev zlib1g-dev
 
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: full-build
+
       - name: Configure
-        run: cmake --preset release
+        run: >
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build --preset release

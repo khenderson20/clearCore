@@ -1,0 +1,11 @@
+# Keep GitHub Actions versions current (checkout, codeql-action, ccache-action,
+# cpp-linter-action, ...). Grouped so version bumps arrive as a single weekly PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
