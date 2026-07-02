@@ -2,7 +2,11 @@ name: ClusterFuzzLite PR fuzzing
 on:
   pull_request:
     branches: [main, develop]
-permissions: read-all
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  security-events: write
 jobs:
   PR:
     runs-on: ubuntu-latest
