@@ -5,6 +5,12 @@
 class QPaintEvent;
 class QResizeEvent;
 
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+namespace KSyntaxHighlighting {
+class SyntaxHighlighter;
+}
+#endif
+
 namespace nsc::qt {
 
 class LineNumberArea;
@@ -36,6 +42,12 @@ private slots:
 private:
     QWidget* line_number_area_ = nullptr;
     bool     dark_mode_        = false;
+
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+    // MIPS assembly highlighting via KSyntaxHighlighting (optional dependency;
+    // without it the editor is plain text). Owned by the document.
+    KSyntaxHighlighting::SyntaxHighlighter* highlighter_ = nullptr;
+#endif
 };
 
 // The gutter widget itself. All painting is delegated back to CodeEditor,

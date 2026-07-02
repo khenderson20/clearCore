@@ -4,7 +4,23 @@
 #include <QPainter>
 #include <QTextBlock>
 
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+#include <KSyntaxHighlighting/Definition>
+#include <KSyntaxHighlighting/Repository>
+#include <KSyntaxHighlighting/SyntaxHighlighter>
+#include <KSyntaxHighlighting/Theme>
+#endif
+
 namespace nsc::qt {
+
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+// One repository for the whole app: loading the syntax definitions is not
+// free, and Definition handles stay valid as long as the repository lives.
+static KSyntaxHighlighting::Repository& syntaxRepository() {
+    static KSyntaxHighlighting::Repository repo;
+    return repo;
+}
+#endif
 
 CodeEditor::CodeEditor(QWidget* parent) : QPlainTextEdit(parent) {
     line_number_area_ = new LineNumberArea(this);
@@ -12,6 +28,15 @@ CodeEditor::CodeEditor(QWidget* parent) : QPlainTextEdit(parent) {
     connect(this, &QPlainTextEdit::blockCountChanged, this, &CodeEditor::updateLineNumberAreaWidth);
     connect(this, &QPlainTextEdit::updateRequest, this, &CodeEditor::updateLineNumberArea);
     connect(this, &QPlainTextEdit::cursorPositionChanged, this, &CodeEditor::highlightCurrentLine);
+
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+    auto& repo   = syntaxRepository();
+    highlighter_ = new KSyntaxHighlighting::SyntaxHighlighter(document());
+    auto def     = repo.definitionForName(QStringLiteral("MIPS Assembler"));
+    if (!def.isValid()) def = repo.definitionForName(QStringLiteral("GNU Assembler"));
+    highlighter_->setDefinition(def);
+    highlighter_->setTheme(repo.defaultTheme(KSyntaxHighlighting::Repository::LightTheme));
+#endif
 
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
@@ -95,6 +120,12 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event) {
 
 void CodeEditor::setDarkMode(bool dark) {
     dark_mode_ = dark;
+#ifdef HAVE_KSYNTAXHIGHLIGHTING
+    auto& repo = syntaxRepository();
+    highlighter_->setTheme(repo.defaultTheme(dark ? KSyntaxHighlighting::Repository::DarkTheme
+                                                  : KSyntaxHighlighting::Repository::LightTheme));
+    highlighter_->rehighlight();
+#endif
     highlightCurrentLine();
     line_number_area_->update();
 }
