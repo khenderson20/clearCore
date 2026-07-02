@@ -21,8 +21,7 @@ public:
     // Single per-cycle entry point: figures out which registers are read
     // this cycle, starts the wall-clock fade animation for any register
     // written this cycle, stores the fresh values, and refreshes every cell.
-    void updateCycle(const mips::PipelineState& state,
-                      const std::array<uint32_t, 32>& vals);
+    void updateCycle(const mips::PipelineState& state, const std::array<uint32_t, 32>& vals);
 
     void setShowAliases(bool show);
     void setDarkMode(bool dark);
@@ -67,7 +66,7 @@ private:
 
     struct CellState {
         Cell*  widget        = nullptr;
-        qint64 fade_start_ms = -1;   // -1 = not fading
+        qint64 fade_start_ms = -1;  // -1 = not fading
     };
 
     void buildGrid();
@@ -76,9 +75,9 @@ private:
 
     std::array<CellState, 32> cells_{};
     std::array<uint32_t, 32>  values_{};
-    QGridLayout* grid_   = nullptr;
-    bool show_aliases_   = true;
-    bool dark_mode_      = false;
+    QGridLayout*              grid_         = nullptr;
+    bool                      show_aliases_ = true;
+    bool                      dark_mode_    = false;
 
     // Registers read by the current instruction in ID stage (highlight cyan).
     uint8_t read_rs_ = 0xFF;
@@ -89,4 +88,4 @@ private:
     QTimer* fade_timer_ = nullptr;
 };
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

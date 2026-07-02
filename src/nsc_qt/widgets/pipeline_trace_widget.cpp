@@ -1,7 +1,7 @@
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
-#include "nsc_qt/ui_scale.h"
 #include "mips/decoder.h"
 #include "mips/registers.h"
+#include "nsc_qt/ui_scale.h"
 
 #include <QHeaderView>
 #include <QTableWidget>
@@ -22,19 +22,15 @@ static const QColor STAGE_CELL_COLORS[5] = {
     QColor("#FFCDD2"),  // WB
 };
 static const QColor STAGE_CELL_COLORS_DARK[5] = {
-    QColor("#0D47A1"),
-    QColor("#006064"),
-    QColor("#1B5E20"),
-    QColor("#F57F17"),
-    QColor("#B71C1C"),
+    QColor("#0D47A1"), QColor("#006064"), QColor("#1B5E20"), QColor("#F57F17"), QColor("#B71C1C"),
 };
 
 static int stage_index(const char* name) {
     if (name[0] == 'I' && name[1] == 'F') return 0;
     if (name[0] == 'I' && name[1] == 'D') return 1;
     if (name[0] == 'E' && name[1] == 'X') return 2;
-    if (name[0] == 'M')                   return 3;
-    if (name[0] == 'W')                   return 4;
+    if (name[0] == 'M') return 3;
+    if (name[0] == 'W') return 4;
     return -1;
 }
 
@@ -47,10 +43,9 @@ static std::string short_mnemonic(uint32_t raw) {
     return std::string(mips::Decoder::mnemonic(*d));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
-PipelineTraceWidget::PipelineTraceWidget(QWidget* parent) : QWidget(parent)
-{
+PipelineTraceWidget::PipelineTraceWidget(QWidget* parent) : QWidget(parent) {
     auto* vl = new QVBoxLayout(this);
     vl->setContentsMargins(4, 4, 4, 4);
 
@@ -65,27 +60,23 @@ PipelineTraceWidget::PipelineTraceWidget(QWidget* parent) : QWidget(parent)
     vl->addWidget(table_);
 }
 
-void PipelineTraceWidget::clear()
-{
+void PipelineTraceWidget::clear() {
     rows_.clear();
     current_cycle_ = 0;
     cycle_base_    = 0;
     rebuildTable();
 }
 
-void PipelineTraceWidget::setDarkMode(bool dark)
-{
+void PipelineTraceWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
     rebuildTable();
 }
 
-void PipelineTraceWidget::updateCycle(const mips::PipelineState& state)
-{
+void PipelineTraceWidget::updateCycle(const mips::PipelineState& state) {
     ++current_cycle_;
 
     // Ensure we have MAX_CYCLES visible columns.
-    if (current_cycle_ > MAX_CYCLES)
-        cycle_base_ = current_cycle_ - MAX_CYCLES;
+    if (current_cycle_ > MAX_CYCLES) cycle_base_ = current_cycle_ - MAX_CYCLES;
 
     // Walk each active stage and record it, keyed by the absolute cycle
     // number (not a window-relative offset).
@@ -95,7 +86,10 @@ void PipelineTraceWidget::updateCycle(const mips::PipelineState& state)
 
         InstrRow* row_ptr = nullptr;
         for (auto& r : rows_)
-            if (r.pc == snap.pc) { row_ptr = &r; break; }
+            if (r.pc == snap.pc) {
+                row_ptr = &r;
+                break;
+            }
 
         if (!row_ptr) {
             rows_.push_back({snap.pc, snap.raw, {}});
@@ -111,16 +105,14 @@ void PipelineTraceWidget::updateCycle(const mips::PipelineState& state)
         while (!r.stages.empty() && r.stages.front().first < cycle_base_ + 1)
             r.stages.pop_front();
     }
-    rows_.erase(
-        std::remove_if(rows_.begin(), rows_.end(),
-                        [](const InstrRow& r) { return r.stages.empty(); }),
-        rows_.end());
+    rows_.erase(std::remove_if(rows_.begin(), rows_.end(),
+                               [](const InstrRow& r) { return r.stages.empty(); }),
+                rows_.end());
 
     rebuildTable();
 }
 
-void PipelineTraceWidget::rebuildTable()
-{
+void PipelineTraceWidget::rebuildTable() {
     const int n_cols = MAX_CYCLES;
     const int n_rows = static_cast<int>(rows_.size());
 
@@ -132,7 +124,8 @@ void PipelineTraceWidget::rebuildTable()
     QStringList col_headers;
     col_headers << tr("Instruction");
     for (int c = 0; c < n_cols; ++c)
-        col_headers << QString::number(static_cast<qulonglong>(cycle_base_ + static_cast<uint64_t>(c) + 1));
+        col_headers << QString::number(
+            static_cast<qulonglong>(cycle_base_ + static_cast<uint64_t>(c) + 1));
     table_->setHorizontalHeaderLabels(col_headers);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
 
@@ -140,10 +133,9 @@ void PipelineTraceWidget::rebuildTable()
         const auto& r = rows_[static_cast<std::size_t>(ri)];
 
         // Instruction label column
-        const std::string mn = short_mnemonic(r.raw);
-        auto* lbl_item = new QTableWidgetItem(
-            QString("0x%1  %2").arg(r.pc, 4, 16, QChar('0'))
-                               .arg(QString::fromStdString(mn)));
+        const std::string mn       = short_mnemonic(r.raw);
+        auto*             lbl_item = new QTableWidgetItem(
+            QString("0x%1  %2").arg(r.pc, 4, 16, QChar('0')).arg(QString::fromStdString(mn)));
         lbl_item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         lbl_item->setFont(scale::monoFont(scale::kFontSizeDense));
         table_->setItem(ri, 0, lbl_item);
@@ -153,9 +145,12 @@ void PipelineTraceWidget::rebuildTable()
         // regardless of how many times the window has scrolled.
         for (int ci = 0; ci < n_cols; ++ci) {
             const uint64_t cycle = cycle_base_ + static_cast<uint64_t>(ci) + 1;
-            std::string stage_name;
+            std::string    stage_name;
             for (const auto& entry : r.stages) {
-                if (entry.first == cycle) { stage_name = entry.second; break; }
+                if (entry.first == cycle) {
+                    stage_name = entry.second;
+                    break;
+                }
             }
 
             auto* item = new QTableWidgetItem(QString::fromStdString(stage_name));
@@ -175,4 +170,4 @@ void PipelineTraceWidget::rebuildTable()
     }
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

@@ -20,8 +20,7 @@ public:
     // Reconstruct assembly text for `dec`. `pc` is the address of the
     // instruction itself; it is only needed to resolve J/JAL absolute targets
     // (target field × 4, combined with PC+4[31:28]).
-    [[nodiscard]] static std::string to_string(const DecodedInstr& dec,
-                                               uint32_t pc) noexcept;
+    [[nodiscard]] static std::string to_string(const DecodedInstr& dec, uint32_t pc) noexcept;
 };
 
-} // namespace mips
+}  // namespace mips

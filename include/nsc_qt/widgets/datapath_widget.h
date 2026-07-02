@@ -26,24 +26,24 @@ signals:
     void stageDetailRequested(int stage_index, uint32_t pc, uint32_t raw_instr);
 
 protected:
-    void initializeGL()             override;
-    void resizeGL(int w, int h)     override;
-    void paintGL()                  override;
-    void mousePressEvent(QMouseEvent* ev)        override;
-    void mouseDoubleClickEvent(QMouseEvent* ev)  override;
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
+    void mousePressEvent(QMouseEvent* ev) override;
+    void mouseDoubleClickEvent(QMouseEvent* ev) override;
     void contextMenuEvent(QContextMenuEvent* ev) override;
 
     // Keyboard access for the stage selection this widget represents --
     // Left/Right move the selection, Enter/Return opens stage detail,
     // Space/B toggles a breakpoint on the selected stage. Without these,
     // breakpoints and stage detail were mouse-only (audit Critical #1).
-    void keyPressEvent(QKeyEvent* ev)   override;
-    void focusInEvent(QFocusEvent* ev)  override;
+    void keyPressEvent(QKeyEvent* ev) override;
+    void focusInEvent(QFocusEvent* ev) override;
     void focusOutEvent(QFocusEvent* ev) override;
 
 private:
     // Returns the stage index (0–4) at widget position, or -1 if none.
-    int stageAtPos(QPoint pos) const;
+    int   stageAtPos(QPoint pos) const;
     QRect stageRect(int idx) const;
 
     void drawStageBox(QPainter& p, int idx, const mips::StageSnapshot& snap) const;
@@ -66,4 +66,4 @@ private:
     static constexpr int GAP_MIN   = 16;
 };
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

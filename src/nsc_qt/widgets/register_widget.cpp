@@ -1,7 +1,7 @@
 #include "nsc_qt/widgets/register_widget.h"
-#include "nsc_qt/ui_scale.h"
 #include "mips/decoder.h"
 #include "mips/registers.h"
+#include "nsc_qt/ui_scale.h"
 
 #include <QDateTime>
 #include <QGridLayout>
@@ -16,19 +16,16 @@ namespace nsc::qt {
 namespace {
 
 QColor lerp_color(QColor a, QColor b, float t) {
-    return QColor(
-        static_cast<int>(a.red()   + (b.red()   - a.red())   * t),
-        static_cast<int>(a.green() + (b.green() - a.green()) * t),
-        static_cast<int>(a.blue()  + (b.blue()  - a.blue())  * t)
-    );
+    return QColor(static_cast<int>(a.red() + (b.red() - a.red()) * t),
+                  static_cast<int>(a.green() + (b.green() - a.green()) * t),
+                  static_cast<int>(a.blue() + (b.blue() - a.blue()) * t));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ── RegisterWidget::Cell ─────────────────────────────────────────────────────
 
-RegisterWidget::Cell::Cell(QWidget* parent) : QWidget(parent)
-{
+RegisterWidget::Cell::Cell(QWidget* parent) : QWidget(parent) {
     auto* fl = new QVBoxLayout(this);
     fl->setContentsMargins(5, 2, 5, 2);
     fl->setSpacing(1);
@@ -43,32 +40,28 @@ RegisterWidget::Cell::Cell(QWidget* parent) : QWidget(parent)
     fl->addWidget(value_);
 }
 
-void RegisterWidget::Cell::setNameText(const QString& text, const QColor& color)
-{
+void RegisterWidget::Cell::setNameText(const QString& text, const QColor& color) {
     name_->setText(text);
     QPalette pal = name_->palette();
     pal.setColor(QPalette::WindowText, color);
     name_->setPalette(pal);
 }
 
-void RegisterWidget::Cell::setValueText(const QString& text, const QColor& color)
-{
+void RegisterWidget::Cell::setValueText(const QString& text, const QColor& color) {
     value_->setText(text);
     QPalette pal = value_->palette();
     pal.setColor(QPalette::WindowText, color);
     value_->setPalette(pal);
 }
 
-void RegisterWidget::Cell::setBackground(const QColor& bg, const QColor& border)
-{
-    if (bg_ == bg && border_ == border) return; // unchanged -- skip the repaint
+void RegisterWidget::Cell::setBackground(const QColor& bg, const QColor& border) {
+    if (bg_ == bg && border_ == border) return;  // unchanged -- skip the repaint
     bg_     = bg;
     border_ = border;
     update();
 }
 
-void RegisterWidget::Cell::paintEvent(QPaintEvent* /*ev*/)
-{
+void RegisterWidget::Cell::paintEvent(QPaintEvent* /*ev*/) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.setBrush(bg_);
@@ -78,15 +71,14 @@ void RegisterWidget::Cell::paintEvent(QPaintEvent* /*ev*/)
 
 // ── RegisterWidget ────────────────────────────────────────────────────────────
 
-RegisterWidget::RegisterWidget(QWidget* parent) : QWidget(parent)
-{
+RegisterWidget::RegisterWidget(QWidget* parent) : QWidget(parent) {
     buildGrid();
 
     fade_timer_ = new QTimer(this);
-    fade_timer_->setInterval(33); // ~30fps while at least one cell is fading
+    fade_timer_->setInterval(33);  // ~30fps while at least one cell is fading
     connect(fade_timer_, &QTimer::timeout, this, [this] {
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
-        bool any_fading = false;
+        const qint64 now        = QDateTime::currentMSecsSinceEpoch();
+        bool         any_fading = false;
         for (int i = 1; i < 32; ++i) {
             auto& cs = cells_[i];
             if (cs.fade_start_ms < 0) continue;
@@ -101,8 +93,7 @@ RegisterWidget::RegisterWidget(QWidget* parent) : QWidget(parent)
     });
 }
 
-void RegisterWidget::buildGrid()
-{
+void RegisterWidget::buildGrid() {
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
@@ -122,7 +113,7 @@ void RegisterWidget::buildGrid()
 
     // Grid fills the remaining space
     auto* grid_container = new QWidget(this);
-    auto* cl = new QVBoxLayout(grid_container);
+    auto* cl             = new QVBoxLayout(grid_container);
     cl->setContentsMargins(4, 4, 4, 4);
     cl->setSpacing(0);
 
@@ -144,14 +135,15 @@ void RegisterWidget::buildGrid()
     }
 
     // Uniform column and row stretch so the grid fills available space
-    for (int c = 0; c < 4; ++c) grid_->setColumnStretch(c, 1);
-    for (int r = 0; r < 8; ++r) grid_->setRowStretch(r, 1);
+    for (int c = 0; c < 4; ++c)
+        grid_->setColumnStretch(c, 1);
+    for (int r = 0; r < 8; ++r)
+        grid_->setRowStretch(r, 1);
 
     outer->addWidget(grid_container, 1);
 }
 
-void RegisterWidget::updateCell(int idx)
-{
+void RegisterWidget::updateCell(int idx) {
     auto&         cs = cells_[idx];
     const uint8_t u  = static_cast<uint8_t>(idx);
 
@@ -159,34 +151,34 @@ void RegisterWidget::updateCell(int idx)
     // not routed through tr(), consistent with datapath_widget's mnemonics).
     QString name_str = QString("$%1").arg(idx);
     if (show_aliases_)
-        name_str += QString(" (%1)").arg(QString::fromStdString(
-            std::string(mips::register_abi_name(u))));
+        name_str +=
+            QString(" (%1)").arg(QString::fromStdString(std::string(mips::register_abi_name(u))));
 
     // Bumped from the previous 0x88 gray -- that was close to the WCAG AA
     // 4.5:1 threshold against the 0x2A dark background (audit Opportunity #8).
-    const QColor text_dim  = dark_mode_ ? QColor(0x9E,0x9E,0x9E) : QColor(0x77,0x77,0x77);
-    const QColor text_norm = dark_mode_ ? QColor(0xCC,0xCC,0xCC) : QColor(0x22,0x22,0x22);
-    const QColor border    = dark_mode_ ? QColor(0x3C,0x3C,0x3C) : QColor(0xDD,0xDD,0xDD);
+    const QColor text_dim  = dark_mode_ ? QColor(0x9E, 0x9E, 0x9E) : QColor(0x77, 0x77, 0x77);
+    const QColor text_norm = dark_mode_ ? QColor(0xCC, 0xCC, 0xCC) : QColor(0x22, 0x22, 0x22);
+    const QColor border    = dark_mode_ ? QColor(0x3C, 0x3C, 0x3C) : QColor(0xDD, 0xDD, 0xDD);
 
     QColor bg, name_color, val_color;
     if (idx == 0) {
-        bg         = dark_mode_ ? QColor(0x28,0x28,0x28) : QColor(0xE8,0xE8,0xE8);
+        bg         = dark_mode_ ? QColor(0x28, 0x28, 0x28) : QColor(0xE8, 0xE8, 0xE8);
         name_color = text_dim;
         val_color  = text_dim;
     } else if (cs.fade_start_ms >= 0) {
         const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - cs.fade_start_ms;
         const float  t = std::clamp(static_cast<float>(elapsed) / kFadeDurationMs, 0.0f, 1.0f);
         const QColor green(0x66, 0xBB, 0x66);
-        const QColor normal = dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white;
-        bg         = lerp_color(green, normal, t);
-        name_color = dark_mode_ ? QColor(0xAA,0xFF,0xAA) : QColor(0x00,0x55,0x00);
-        val_color  = dark_mode_ ? Qt::white : QColor(0x00,0x44,0x00);
+        const QColor normal = dark_mode_ ? QColor(0x2A, 0x2A, 0x2A) : Qt::white;
+        bg                  = lerp_color(green, normal, t);
+        name_color          = dark_mode_ ? QColor(0xAA, 0xFF, 0xAA) : QColor(0x00, 0x55, 0x00);
+        val_color           = dark_mode_ ? Qt::white : QColor(0x00, 0x44, 0x00);
     } else if (u == read_rs_ || u == read_rt_) {
-        bg         = dark_mode_ ? QColor(0x00,0x4D,0x6B) : QColor(0xCC,0xEA,0xF5);
-        name_color = dark_mode_ ? QColor(0x9C,0xDC,0xFE) : QColor(0x00,0x52,0x9B);
+        bg         = dark_mode_ ? QColor(0x00, 0x4D, 0x6B) : QColor(0xCC, 0xEA, 0xF5);
+        name_color = dark_mode_ ? QColor(0x9C, 0xDC, 0xFE) : QColor(0x00, 0x52, 0x9B);
         val_color  = text_norm;
     } else {
-        bg         = dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white;
+        bg         = dark_mode_ ? QColor(0x2A, 0x2A, 0x2A) : Qt::white;
         name_color = text_dim;
         val_color  = text_norm;
     }
@@ -196,26 +188,23 @@ void RegisterWidget::updateCell(int idx)
     cs.widget->setBackground(bg, border);
 }
 
-void RegisterWidget::startFade(int idx)
-{
+void RegisterWidget::startFade(int idx) {
     cells_[idx].fade_start_ms = QDateTime::currentMSecsSinceEpoch();
-    if (!fade_timer_->isActive())
-        fade_timer_->start();
+    if (!fade_timer_->isActive()) fade_timer_->start();
 }
 
 // Single per-cycle update: detects the register written in WB (starts its
 // wall-clock fade) and the registers read in ID, stores the fresh values,
 // and refreshes every cell exactly once.
-void RegisterWidget::updateCycle(const mips::PipelineState& state,
-                                  const std::array<uint32_t, 32>& vals)
-{
+void RegisterWidget::updateCycle(const mips::PipelineState&      state,
+                                 const std::array<uint32_t, 32>& vals) {
     // Detect a register written in WB
     const auto& wb = state.stages[4];
     if (wb.valid && !wb.stalled && !wb.flushed && wb.raw != 0) {
         auto decoded = mips::Decoder::decode(wb.raw);
         if (decoded) {
-            uint8_t dest = 0xFF;
-            const auto& d = *decoded;
+            uint8_t     dest = 0xFF;
+            const auto& d    = *decoded;
             if (d.format == mips::InstrFormat::R) {
                 dest = d.r().rd;
             } else if (d.format == mips::InstrFormat::I) {
@@ -223,16 +212,15 @@ void RegisterWidget::updateCycle(const mips::PipelineState& state,
                     d.opcode != mips::Opcode::BNE)
                     dest = d.i().rt;
             } else if (d.opcode == mips::Opcode::JAL) {
-                dest = 31; // $ra
+                dest = 31;  // $ra
             }
-            if (dest != 0xFF && dest != 0 && dest < 32)
-                startFade(dest);
+            if (dest != 0xFF && dest != 0 && dest < 32) startFade(dest);
         }
     }
 
     // Detect registers read in ID
-    read_rs_ = 0xFF;
-    read_rt_ = 0xFF;
+    read_rs_       = 0xFF;
+    read_rt_       = 0xFF;
     const auto& id = state.stages[1];
     if (id.valid && id.raw != 0) {
         auto decoded = mips::Decoder::decode(id.raw);
@@ -256,26 +244,27 @@ void RegisterWidget::updateCycle(const mips::PipelineState& state,
         updateCell(i);
 }
 
-void RegisterWidget::setShowAliases(bool show)
-{
+void RegisterWidget::setShowAliases(bool show) {
     show_aliases_ = show;
-    for (int i = 0; i < 32; ++i) updateCell(i);
+    for (int i = 0; i < 32; ++i)
+        updateCell(i);
 }
 
-void RegisterWidget::setDarkMode(bool dark)
-{
+void RegisterWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
-    for (int i = 0; i < 32; ++i) updateCell(i);
+    for (int i = 0; i < 32; ++i)
+        updateCell(i);
 }
 
-void RegisterWidget::clear()
-{
+void RegisterWidget::clear() {
     values_.fill(0);
     read_rs_ = 0xFF;
     read_rt_ = 0xFF;
-    for (auto& c : cells_) c.fade_start_ms = -1;
+    for (auto& c : cells_)
+        c.fade_start_ms = -1;
     fade_timer_->stop();
-    for (int i = 0; i < 32; ++i) updateCell(i);
+    for (int i = 0; i < 32; ++i)
+        updateCell(i);
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

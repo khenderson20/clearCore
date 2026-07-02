@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <gsl/gsl>
 #include <optional>
 #include <vector>
-#include <gsl/gsl>
 
 namespace mips {
 
@@ -34,7 +34,7 @@ public:
     // Writes — false on out-of-bounds or misalignment; memory left unchanged.
     bool write_word(uint32_t addr, uint32_t value) noexcept;
     bool write_half(uint32_t addr, uint16_t value) noexcept;
-    bool write_byte(uint32_t addr, uint8_t  value) noexcept;
+    bool write_byte(uint32_t addr, uint8_t value) noexcept;
 
     // Bulk-load a blob of 32-bit words starting at `addr` (e.g. a program
     // image). Returns false if it would not fit. Stored little-endian.
@@ -44,9 +44,7 @@ public:
     void reset() noexcept;
 
     // Read-only span view of the raw memory buffer
-    [[nodiscard]] gsl::span<const std::uint8_t> raw() const noexcept {
-        return {(data_)};
-    }
+    [[nodiscard]] gsl::span<const std::uint8_t> raw() const noexcept { return {(data_)}; }
 
 private:
     [[nodiscard]] bool in_bounds(uint32_t addr, std::size_t n) const noexcept;
@@ -54,4 +52,4 @@ private:
     std::vector<uint8_t> data_;
 };
 
-} // namespace mips
+}  // namespace mips

@@ -21,10 +21,10 @@ namespace mips {
 // On failure, `error` carries a human-readable message and `words` is empty.
 struct HexProgram {
     std::vector<uint32_t>      words;
-    std::optional<std::string> error;   // engaged ⇔ parse failed
+    std::optional<std::string> error;  // engaged ⇔ parse failed
 
     [[nodiscard]] bool ok() const noexcept { return !error.has_value(); }
-    explicit          operator bool() const noexcept { return ok(); }
+    explicit           operator bool() const noexcept { return ok(); }
 };
 
 // Parse a hex listing from an arbitrary input stream.
@@ -34,4 +34,4 @@ struct HexProgram {
 // missing or unreadable.
 [[nodiscard]] HexProgram load_hex_file(const std::string& path);
 
-} // namespace mips
+}  // namespace mips

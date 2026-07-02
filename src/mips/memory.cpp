@@ -14,16 +14,14 @@ bool Memory::in_bounds(uint32_t addr, std::size_t n) const noexcept {
 
 std::optional<uint32_t> Memory::read_word(uint32_t addr) const noexcept {
     if ((addr & 0x3u) != 0 || !in_bounds(addr, 4)) return std::nullopt;
-    return  static_cast<uint32_t>(data_[addr])
-         | (static_cast<uint32_t>(data_[addr + 1]) <<  8)
-         | (static_cast<uint32_t>(data_[addr + 2]) << 16)
-         | (static_cast<uint32_t>(data_[addr + 3]) << 24);
+    return static_cast<uint32_t>(data_[addr]) | (static_cast<uint32_t>(data_[addr + 1]) << 8) |
+           (static_cast<uint32_t>(data_[addr + 2]) << 16) |
+           (static_cast<uint32_t>(data_[addr + 3]) << 24);
 }
 
 std::optional<uint16_t> Memory::read_half(uint32_t addr) const noexcept {
     if ((addr & 0x1u) != 0 || !in_bounds(addr, 2)) return std::nullopt;
-    return static_cast<uint16_t>(
-        data_[addr] | (static_cast<uint16_t>(data_[addr + 1]) << 8));
+    return static_cast<uint16_t>(data_[addr] | (static_cast<uint16_t>(data_[addr + 1]) << 8));
 }
 
 std::optional<uint8_t> Memory::read_byte(uint32_t addr) const noexcept {
@@ -33,8 +31,8 @@ std::optional<uint8_t> Memory::read_byte(uint32_t addr) const noexcept {
 
 bool Memory::write_word(uint32_t addr, uint32_t value) noexcept {
     if ((addr & 0x3u) != 0 || !in_bounds(addr, 4)) return false;
-    data_[addr]     = gsl::narrow_cast<uint8_t>( value        & 0xFFu);
-    data_[addr + 1] = gsl::narrow_cast<uint8_t>((value >>  8) & 0xFFu);
+    data_[addr]     = gsl::narrow_cast<uint8_t>(value & 0xFFu);
+    data_[addr + 1] = gsl::narrow_cast<uint8_t>((value >> 8) & 0xFFu);
     data_[addr + 2] = gsl::narrow_cast<uint8_t>((value >> 16) & 0xFFu);
     data_[addr + 3] = gsl::narrow_cast<uint8_t>((value >> 24) & 0xFFu);
     return true;
@@ -42,7 +40,7 @@ bool Memory::write_word(uint32_t addr, uint32_t value) noexcept {
 
 bool Memory::write_half(uint32_t addr, uint16_t value) noexcept {
     if ((addr & 0x1u) != 0 || !in_bounds(addr, 2)) return false;
-    data_[addr]     = gsl::narrow_cast<uint8_t>( value       & 0xFFu);
+    data_[addr]     = gsl::narrow_cast<uint8_t>(value & 0xFFu);
     data_[addr + 1] = gsl::narrow_cast<uint8_t>((value >> 8) & 0xFFu);
     return true;
 }
@@ -65,4 +63,4 @@ void Memory::reset() noexcept {
     std::ranges::fill(data_, uint8_t{0});
 }
 
-} // namespace mips
+}  // namespace mips

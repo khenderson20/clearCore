@@ -1,7 +1,7 @@
 #pragma once
 
-#include "nsc_qt/simulator_controller.h"
 #include "mips/processor.h"
+#include "nsc_qt/simulator_controller.h"
 #include <QMainWindow>
 #include <memory>
 
@@ -68,29 +68,29 @@ private:
     std::unique_ptr<SimulatorController> controller_;
 
     // Widgets
-    QTabWidget*          tabs_             = nullptr;
-    DatapathWidget*      datapath_widget_  = nullptr;
-    RegisterWidget*      register_widget_  = nullptr;
-    MemoryWidget*        memory_widget_    = nullptr;
-    PipelineTraceWidget* trace_widget_     = nullptr;
-    CodeEditor*          code_editor_      = nullptr;
-    QComboBox*           examples_combo_   = nullptr;
-    QLabel*              asm_status_lbl_   = nullptr;
+    QTabWidget*          tabs_            = nullptr;
+    DatapathWidget*      datapath_widget_ = nullptr;
+    RegisterWidget*      register_widget_ = nullptr;
+    MemoryWidget*        memory_widget_   = nullptr;
+    PipelineTraceWidget* trace_widget_    = nullptr;
+    CodeEditor*          code_editor_     = nullptr;
+    QComboBox*           examples_combo_  = nullptr;
+    QLabel*              asm_status_lbl_  = nullptr;
 
     // Statistics labels
-    QLabel* stat_cycles_lbl_      = nullptr;
-    QLabel* stat_instrs_lbl_      = nullptr;
-    QLabel* stat_cpi_lbl_         = nullptr;
-    QLabel* stat_data_haz_lbl_    = nullptr;
-    QLabel* stat_ctrl_haz_lbl_    = nullptr;
-    QLabel* stat_fwd_lbl_         = nullptr;
-    QLabel* stat_stalls_lbl_      = nullptr;
-    QLabel* stat_flushes_lbl_     = nullptr;
+    QLabel* stat_cycles_lbl_   = nullptr;
+    QLabel* stat_instrs_lbl_   = nullptr;
+    QLabel* stat_cpi_lbl_      = nullptr;
+    QLabel* stat_data_haz_lbl_ = nullptr;
+    QLabel* stat_ctrl_haz_lbl_ = nullptr;
+    QLabel* stat_fwd_lbl_      = nullptr;
+    QLabel* stat_stalls_lbl_   = nullptr;
+    QLabel* stat_flushes_lbl_  = nullptr;
 
     // Status bar labels
-    QLabel* status_cycles_lbl_  = nullptr;
-    QLabel* status_instrs_lbl_  = nullptr;
-    QLabel* status_cpi_lbl_     = nullptr;
+    QLabel* status_cycles_lbl_ = nullptr;
+    QLabel* status_instrs_lbl_ = nullptr;
+    QLabel* status_cpi_lbl_    = nullptr;
 
     // Actions
     QAction* act_step_      = nullptr;
@@ -105,4 +105,4 @@ private:
     std::vector<uint32_t> assembled_words_;
 };
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

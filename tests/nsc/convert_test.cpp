@@ -31,9 +31,9 @@ void parseTests() {
     EXPECT_EQ(nsc::parseBase("255", 10).value_or(0), std::uint64_t{255});
     EXPECT_EQ(nsc::parseBase("FF", 16).value_or(0), std::uint64_t{255});
     EXPECT_EQ(nsc::parseBase("11111111", 2).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("", 10).has_value(), false);    // empty
-    EXPECT_EQ(nsc::parseBase("12x", 10).has_value(), false); // trailing garbage
-    EXPECT_EQ(nsc::parseBase("2", 2).has_value(), false);    // not a binary digit
+    EXPECT_EQ(nsc::parseBase("", 10).has_value(), false);     // empty
+    EXPECT_EQ(nsc::parseBase("12x", 10).has_value(), false);  // trailing garbage
+    EXPECT_EQ(nsc::parseBase("2", 2).has_value(), false);     // not a binary digit
 }
 
 void formatTests() {

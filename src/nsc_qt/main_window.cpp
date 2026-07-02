@@ -15,7 +15,6 @@
 #include "mips/program_loader.h"
 #include "mips/registers.h"
 
-#include <array>
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
@@ -36,14 +35,13 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <array>
 
 namespace nsc::qt {
 
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent)
-    , controller_(std::make_unique<SimulatorController>(
-          std::make_unique<mips::PipelinedCpu>()))
-{
+    : QMainWindow(parent),
+      controller_(std::make_unique<SimulatorController>(std::make_unique<mips::PipelinedCpu>())) {
     setWindowTitle(tr("clearCore — MIPS Simulator"));
     resize(1200, 760);
 
@@ -60,57 +58,54 @@ MainWindow::MainWindow(QWidget* parent)
 
 // ── Menu bar ──────────────────────────────────────────────────────────────────
 
-void MainWindow::setupMenuBar()
-{
+void MainWindow::setupMenuBar() {
     auto* mb = menuBar();
 
     // File
     auto* file_menu = mb->addMenu(tr("&File"));
-    act_open_ = file_menu->addAction(tr("&Open Program…"), QKeySequence("Ctrl+O"),
-                                      this, &MainWindow::onOpenFile);
-    act_save_ = file_menu->addAction(tr("&Save Trace…"), QKeySequence("Ctrl+S"),
-                                      this, &MainWindow::onSaveTrace);
+    act_open_       = file_menu->addAction(tr("&Open Program…"), QKeySequence("Ctrl+O"), this,
+                                           &MainWindow::onOpenFile);
+    act_save_       = file_menu->addAction(tr("&Save Trace…"), QKeySequence("Ctrl+S"), this,
+                                           &MainWindow::onSaveTrace);
     file_menu->addSeparator();
     file_menu->addAction(tr("E&xit"), qApp, &QApplication::quit);
 
     // Simulation
     auto* sim_menu = mb->addMenu(tr("&Simulation"));
-    act_step_ = sim_menu->addAction(tr("&Step"), QKeySequence("F10"),
-                                     this, &MainWindow::onStep);
-    act_run_pause_ = sim_menu->addAction(tr("&Run"), QKeySequence("F5"),
-                                          this, &MainWindow::onRunPause);
-    sim_menu->addAction(tr("Sto&p"), QKeySequence("Shift+F5"),
-                        this, [this]{ controller_->stop(); act_run_pause_->setText(tr("&Run")); });
-    act_reset_ = sim_menu->addAction(tr("&Reset"), QKeySequence("Ctrl+R"),
-                                      this, &MainWindow::onReset);
+    act_step_ = sim_menu->addAction(tr("&Step"), QKeySequence("F10"), this, &MainWindow::onStep);
+    act_run_pause_ =
+        sim_menu->addAction(tr("&Run"), QKeySequence("F5"), this, &MainWindow::onRunPause);
+    sim_menu->addAction(tr("Sto&p"), QKeySequence("Shift+F5"), this, [this] {
+        controller_->stop();
+        act_run_pause_->setText(tr("&Run"));
+    });
+    act_reset_ =
+        sim_menu->addAction(tr("&Reset"), QKeySequence("Ctrl+R"), this, &MainWindow::onReset);
 
     // View
     auto* view_menu = mb->addMenu(tr("&View"));
-    view_menu->addAction(tr("&Preferences…"), QKeySequence("Ctrl+,"),
-                          this, &MainWindow::onShowPreferences);
-    view_menu->addAction(tr("Keyboard &Shortcuts"), QKeySequence("Ctrl+?"),
-                          this, [this] {
-        const QString text = tr(
-            "F10         – Step one cycle\n"
-            "F5          – Run\n"
-            "Shift+F5    – Stop\n"
-            "Ctrl+R      – Reset\n"
-            "Ctrl+O      – Open program file\n"
-            "Ctrl+S      – Save trace to CSV\n"
-            "Ctrl+,      – Preferences\n"
-            "\n"
-            "Datapath tab (click or Tab to focus):\n"
-            "Left/Right  – Select a pipeline stage\n"
-            "Enter       – Show stage detail\n"
-            "Space       – Toggle breakpoint on selected stage");
+    view_menu->addAction(tr("&Preferences…"), QKeySequence("Ctrl+,"), this,
+                         &MainWindow::onShowPreferences);
+    view_menu->addAction(tr("Keyboard &Shortcuts"), QKeySequence("Ctrl+?"), this, [this] {
+        const QString text = tr("F10         – Step one cycle\n"
+                                "F5          – Run\n"
+                                "Shift+F5    – Stop\n"
+                                "Ctrl+R      – Reset\n"
+                                "Ctrl+O      – Open program file\n"
+                                "Ctrl+S      – Save trace to CSV\n"
+                                "Ctrl+,      – Preferences\n"
+                                "\n"
+                                "Datapath tab (click or Tab to focus):\n"
+                                "Left/Right  – Select a pipeline stage\n"
+                                "Enter       – Show stage detail\n"
+                                "Space       – Toggle breakpoint on selected stage");
         QMessageBox::information(this, tr("Keyboard Shortcuts"), text);
     });
 }
 
 // ── Tool bar ──────────────────────────────────────────────────────────────────
 
-void MainWindow::setupToolBar()
-{
+void MainWindow::setupToolBar() {
     auto* tb = addToolBar(tr("Main"));
     tb->setMovable(false);
     tb->addAction(act_step_);
@@ -122,27 +117,26 @@ void MainWindow::setupToolBar()
 
 // ── Central widget ────────────────────────────────────────────────────────────
 
-void MainWindow::setupCentralWidget()
-{
+void MainWindow::setupCentralWidget() {
     tabs_ = new QTabWidget(this);
     setCentralWidget(tabs_);
 
-    datapath_widget_  = new DatapathWidget(this);
-    register_widget_  = new RegisterWidget(this);
-    memory_widget_    = new MemoryWidget(this);
-    trace_widget_     = new PipelineTraceWidget(this);
+    datapath_widget_ = new DatapathWidget(this);
+    register_widget_ = new RegisterWidget(this);
+    memory_widget_   = new MemoryWidget(this);
+    trace_widget_    = new PipelineTraceWidget(this);
 
     // Tab 0: Datapath
-    tabs_->addTab(datapath_widget_,   tr("Datapath"));
+    tabs_->addTab(datapath_widget_, tr("Datapath"));
 
     // Tab 1: Registers
-    tabs_->addTab(register_widget_,   tr("Registers"));
+    tabs_->addTab(register_widget_, tr("Registers"));
 
     // Tab 2: Memory
-    tabs_->addTab(memory_widget_,     tr("Memory"));
+    tabs_->addTab(memory_widget_, tr("Memory"));
 
     // Tab 3: Pipeline Trace
-    tabs_->addTab(trace_widget_,      tr("Pipeline Trace"));
+    tabs_->addTab(trace_widget_, tr("Pipeline Trace"));
 
     // Tab 4: Code Editor
     tabs_->addTab(createCodeEditorTab(), tr("Code Editor"));
@@ -161,8 +155,7 @@ void MainWindow::setupCentralWidget()
     statusBar()->addPermanentWidget(status_cpi_lbl_);
 }
 
-QWidget* MainWindow::createCodeEditorTab()
-{
+QWidget* MainWindow::createCodeEditorTab() {
     auto* w  = new QWidget;
     auto* vl = new QVBoxLayout(w);
     vl->setContentsMargins(0, 0, 0, 0);
@@ -170,12 +163,11 @@ QWidget* MainWindow::createCodeEditorTab()
 
     code_editor_ = new CodeEditor(w);
     code_editor_->setFont(scale::monoFont(scale::kFontSizeBody));
-    code_editor_->setPlaceholderText(
-        tr("# MIPS assembly\n"
-           "# Example:\n"
-           "#   addi $t0, $zero, 5\n"
-           "#   addi $t1, $zero, 10\n"
-           "#   add  $t2, $t0, $t1\n"));
+    code_editor_->setPlaceholderText(tr("# MIPS assembly\n"
+                                        "# Example:\n"
+                                        "#   addi $t0, $zero, 5\n"
+                                        "#   addi $t1, $zero, 10\n"
+                                        "#   add  $t2, $t0, $t1\n"));
     vl->addWidget(code_editor_);
 
     // Separator line above button row
@@ -184,11 +176,11 @@ QWidget* MainWindow::createCodeEditorTab()
     sep->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep);
 
-    auto* btn_row  = new QHBoxLayout;
+    auto* btn_row = new QHBoxLayout;
     btn_row->setContentsMargins(8, 6, 8, 6);
     btn_row->setSpacing(8);
 
-    auto* asm_btn  = new QPushButton(tr("Assemble"), w);
+    auto* asm_btn = new QPushButton(tr("Assemble"), w);
     asm_btn->setObjectName("primaryButton");
     asm_btn->setToolTip(tr("Assemble source and prepare machine code (does not load)"));
 
@@ -206,8 +198,8 @@ QWidget* MainWindow::createCodeEditorTab()
     for (const auto& ex : exampleProgramCatalog())
         examples_combo_->addItem(ex.name);
     examples_combo_->setToolTip(tr("Load a curated example program into the editor"));
-    connect(examples_combo_, qOverload<int>(&QComboBox::activated),
-            this, &MainWindow::onExampleSelected);
+    connect(examples_combo_, qOverload<int>(&QComboBox::activated), this,
+            &MainWindow::onExampleSelected);
 
     asm_status_lbl_ = new QLabel(w);
     asm_status_lbl_->setFont(scale::monoFont(scale::kFontSizeBody));
@@ -220,17 +212,16 @@ QWidget* MainWindow::createCodeEditorTab()
     btn_row->addStretch();
     vl->addLayout(btn_row);
 
-    connect(asm_btn,  &QPushButton::clicked, this, &MainWindow::onAssemble);
+    connect(asm_btn, &QPushButton::clicked, this, &MainWindow::onAssemble);
     connect(load_btn, &QPushButton::clicked, this, &MainWindow::onLoad);
     return w;
 }
 
-void MainWindow::onExampleSelected(int idx)
-{
-    if (idx <= 0) return; // "Load example…" placeholder, not a real entry
+void MainWindow::onExampleSelected(int idx) {
+    if (idx <= 0) return;  // "Load example…" placeholder, not a real entry
 
     const auto& catalog = exampleProgramCatalog();
-    const auto& ex = catalog[static_cast<std::size_t>(idx - 1)];
+    const auto& ex      = catalog[static_cast<std::size_t>(idx - 1)];
 
     if (!code_editor_->toPlainText().trimmed().isEmpty()) {
         const auto reply = QMessageBox::question(
@@ -248,11 +239,10 @@ void MainWindow::onExampleSelected(int idx)
     assembled_words_.clear();
     asm_status_lbl_->setStyleSheet("");
     asm_status_lbl_->setText(tr("Loaded example: %1").arg(ex.name));
-    examples_combo_->setCurrentIndex(0); // reset so the same example can be re-picked later
+    examples_combo_->setCurrentIndex(0);  // reset so the same example can be re-picked later
 }
 
-QWidget* MainWindow::createStatisticsTab()
-{
+QWidget* MainWindow::createStatisticsTab() {
     auto* w  = new QWidget;
     auto* vl = new QVBoxLayout(w);
     vl->setContentsMargins(16, 16, 16, 16);
@@ -270,9 +260,9 @@ QWidget* MainWindow::createStatisticsTab()
     perf_fl->setContentsMargins(12, 8, 12, 8);
     perf_fl->setSpacing(8);
     perf_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(perf_fl, tr("Cycles executed:"),      stat_cycles_lbl_);
+    mkLabel(perf_fl, tr("Cycles executed:"), stat_cycles_lbl_);
     mkLabel(perf_fl, tr("Instructions retired:"), stat_instrs_lbl_);
-    mkLabel(perf_fl, tr("CPI:"),                  stat_cpi_lbl_);
+    mkLabel(perf_fl, tr("CPI:"), stat_cpi_lbl_);
     vl->addWidget(perf_box);
 
     // ── Pipeline events group ──────────────────────────────────────────────────
@@ -281,11 +271,11 @@ QWidget* MainWindow::createStatisticsTab()
     pipe_fl->setContentsMargins(12, 8, 12, 8);
     pipe_fl->setSpacing(8);
     pipe_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(pipe_fl, tr("Data hazards:"),      stat_data_haz_lbl_);
-    mkLabel(pipe_fl, tr("Control hazards:"),   stat_ctrl_haz_lbl_);
+    mkLabel(pipe_fl, tr("Data hazards:"), stat_data_haz_lbl_);
+    mkLabel(pipe_fl, tr("Control hazards:"), stat_ctrl_haz_lbl_);
     mkLabel(pipe_fl, tr("Forwarding events:"), stat_fwd_lbl_);
-    mkLabel(pipe_fl, tr("Stalls:"),            stat_stalls_lbl_);
-    mkLabel(pipe_fl, tr("Flushes:"),           stat_flushes_lbl_);
+    mkLabel(pipe_fl, tr("Stalls:"), stat_stalls_lbl_);
+    mkLabel(pipe_fl, tr("Flushes:"), stat_flushes_lbl_);
     vl->addWidget(pipe_box);
 
     vl->addStretch();
@@ -294,42 +284,35 @@ QWidget* MainWindow::createStatisticsTab()
 
 // ── Connections ───────────────────────────────────────────────────────────────
 
-void MainWindow::setupConnections()
-{
-    connect(controller_.get(), &SimulatorController::cycleExecuted,
-            this, &MainWindow::onCycleExecuted);
-    connect(controller_.get(), &SimulatorController::pipelineStateChanged,
-            this, &MainWindow::onPipelineStateChanged);
-    connect(controller_.get(), &SimulatorController::statisticsUpdated,
-            this, &MainWindow::onStatisticsUpdated);
-    connect(controller_.get(), &SimulatorController::halted,
-            this, &MainWindow::onHalted);
-    connect(controller_.get(), &SimulatorController::faulted,
-            this, &MainWindow::onFaulted);
-    connect(controller_.get(), &SimulatorController::breakpointHit,
-            this, [this](uint32_t pc) {
-                statusBar()->showMessage(
-                    tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
-                act_run_pause_->setText(tr("&Run"));
-            });
+void MainWindow::setupConnections() {
+    connect(controller_.get(), &SimulatorController::cycleExecuted, this,
+            &MainWindow::onCycleExecuted);
+    connect(controller_.get(), &SimulatorController::pipelineStateChanged, this,
+            &MainWindow::onPipelineStateChanged);
+    connect(controller_.get(), &SimulatorController::statisticsUpdated, this,
+            &MainWindow::onStatisticsUpdated);
+    connect(controller_.get(), &SimulatorController::halted, this, &MainWindow::onHalted);
+    connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
+    connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
+        statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
+        act_run_pause_->setText(tr("&Run"));
+    });
 
-    connect(datapath_widget_, &DatapathWidget::breakpointToggleRequested,
-            this, &MainWindow::onBreakpointToggle);
-    connect(datapath_widget_, &DatapathWidget::stageDetailRequested,
-            this, &MainWindow::onStageDetailRequested);
+    connect(datapath_widget_, &DatapathWidget::breakpointToggleRequested, this,
+            &MainWindow::onBreakpointToggle);
+    connect(datapath_widget_, &DatapathWidget::stageDetailRequested, this,
+            &MainWindow::onStageDetailRequested);
 }
 
 // ── Slot implementations ──────────────────────────────────────────────────────
 
-void MainWindow::onStep()
-{
+void MainWindow::onStep() {
     controller_->stop();
     act_run_pause_->setText(tr("&Run"));
     controller_->stepCycle();
 }
 
-void MainWindow::onRunPause()
-{
+void MainWindow::onRunPause() {
     if (controller_->isRunning()) {
         controller_->stop();
         act_run_pause_->setText(tr("&Run"));
@@ -339,8 +322,7 @@ void MainWindow::onRunPause()
     }
 }
 
-void MainWindow::onReset()
-{
+void MainWindow::onReset() {
     controller_->stop();
     act_run_pause_->setText(tr("&Run"));
     controller_->reset();
@@ -349,8 +331,7 @@ void MainWindow::onReset()
     statusBar()->showMessage(tr("Reset."), 2000);
 }
 
-void MainWindow::onOpenFile()
-{
+void MainWindow::onOpenFile() {
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Open Hex Program"), {}, tr("Hex Programs (*.hex *.txt);;All Files (*)"));
     if (path.isEmpty()) return;
@@ -366,12 +347,12 @@ void MainWindow::onOpenFile()
     // have a validated replacement program ready, not before the file
     // picker (audit Critical #2: Load/Open silently wiped simulation state).
     if (controller_->cycleCount() > 0) {
-        const auto reply = QMessageBox::question(
-            this, tr("Discard Current Run?"),
-            tr("Loading this program will discard the current simulation "
-               "progress (%1 cycles executed). Continue?")
-                .arg(static_cast<qulonglong>(controller_->cycleCount())),
-            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+        const auto reply =
+            QMessageBox::question(this, tr("Discard Current Run?"),
+                                  tr("Loading this program will discard the current simulation "
+                                     "progress (%1 cycles executed). Continue?")
+                                      .arg(static_cast<qulonglong>(controller_->cycleCount())),
+                                  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
         if (reply != QMessageBox::Yes) return;
     }
 
@@ -380,22 +361,20 @@ void MainWindow::onOpenFile()
         QMessageBox::critical(this, tr("Load Error"), tr("Program too large for memory."));
         return;
     }
-    statusBar()->showMessage(
-        tr("Loaded %1 instructions from %2").arg(prog.words.size()).arg(path), 4000);
+    statusBar()->showMessage(tr("Loaded %1 instructions from %2").arg(prog.words.size()).arg(path),
+                             4000);
 }
 
-void MainWindow::onSaveTrace()
-{
-    const QString path = QFileDialog::getSaveFileName(
-        this, tr("Save Pipeline Trace"), tr("trace.csv"), tr("CSV Files (*.csv)"));
+void MainWindow::onSaveTrace() {
+    const QString path = QFileDialog::getSaveFileName(this, tr("Save Pipeline Trace"),
+                                                      tr("trace.csv"), tr("CSV Files (*.csv)"));
     if (path.isEmpty()) return;
 
     QMessageBox::information(this, tr("Save Trace"),
                              tr("Trace export not yet implemented for this build."));
 }
 
-void MainWindow::onAssemble()
-{
+void MainWindow::onAssemble() {
     const std::string src = code_editor_->toPlainText().toStdString();
     if (src.empty()) {
         asm_status_lbl_->setText(tr("No source to assemble."));
@@ -412,12 +391,10 @@ void MainWindow::onAssemble()
     }
     assembled_words_ = std::move(result.words);
     asm_status_lbl_->setStyleSheet("color: green;");
-    asm_status_lbl_->setText(
-        tr("✓ %1 instructions assembled").arg(assembled_words_.size()));
+    asm_status_lbl_->setText(tr("✓ %1 instructions assembled").arg(assembled_words_.size()));
 }
 
-void MainWindow::onLoad()
-{
+void MainWindow::onLoad() {
     if (assembled_words_.empty()) {
         asm_status_lbl_->setStyleSheet("color: orange;");
         asm_status_lbl_->setText(tr("Assemble first."));
@@ -426,12 +403,12 @@ void MainWindow::onLoad()
 
     // Same discard confirmation as onOpenFile() -- see audit Critical #2.
     if (controller_->cycleCount() > 0) {
-        const auto reply = QMessageBox::question(
-            this, tr("Discard Current Run?"),
-            tr("Loading this program will discard the current simulation "
-               "progress (%1 cycles executed). Continue?")
-                .arg(static_cast<qulonglong>(controller_->cycleCount())),
-            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+        const auto reply =
+            QMessageBox::question(this, tr("Discard Current Run?"),
+                                  tr("Loading this program will discard the current simulation "
+                                     "progress (%1 cycles executed). Continue?")
+                                      .arg(static_cast<qulonglong>(controller_->cycleCount())),
+                                  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
         if (reply != QMessageBox::Yes) return;
     }
 
@@ -442,31 +419,27 @@ void MainWindow::onLoad()
         return;
     }
     asm_status_lbl_->setStyleSheet("color: green;");
-    asm_status_lbl_->setText(
-        tr("✓ %1 instructions loaded").arg(assembled_words_.size()));
+    asm_status_lbl_->setText(tr("✓ %1 instructions loaded").arg(assembled_words_.size()));
 }
 
-void MainWindow::onShowPreferences()
-{
+void MainWindow::onShowPreferences() {
     PreferencesDialog dlg(this);
-    connect(&dlg, &PreferencesDialog::colorSchemeChanged,  this, &MainWindow::applyColorScheme);
+    connect(&dlg, &PreferencesDialog::colorSchemeChanged, this, &MainWindow::applyColorScheme);
     connect(&dlg, &PreferencesDialog::executionSpeedChanged, controller_.get(),
             &SimulatorController::setExecutionSpeed);
-    connect(&dlg, &PreferencesDialog::showRegisterAliasesChanged,
-            register_widget_, &RegisterWidget::setShowAliases);
+    connect(&dlg, &PreferencesDialog::showRegisterAliasesChanged, register_widget_,
+            &RegisterWidget::setShowAliases);
     connect(&dlg, &PreferencesDialog::fontSizeChanged, this, [this](int sz) {
         if (code_editor_) code_editor_->setFont(scale::monoFont(sz));
     });
     dlg.exec();
 }
 
-void MainWindow::onCycleExecuted(uint64_t count)
-{
+void MainWindow::onCycleExecuted(uint64_t count) {
     status_cycles_lbl_->setText(tr("Cycles: %1").arg(count));
 }
 
-void MainWindow::onPipelineStateChanged(mips::PipelineState state)
-{
+void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     datapath_widget_->setPipelineState(state);
     trace_widget_->updateCycle(state);
 
@@ -481,21 +454,20 @@ void MainWindow::onPipelineStateChanged(mips::PipelineState state)
     memory_widget_->updateDisplay(controller_->memory());
 }
 
-void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats)
-{
+void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
     status_instrs_lbl_->setText(
         tr("Instructions: %1").arg(static_cast<qulonglong>(stats.instructions_retired)));
     const double cpi = stats.cpi();
     status_cpi_lbl_->setText(cpi > 0 ? tr("CPI: %1").arg(cpi, 0, 'f', 2) : tr("CPI: —"));
 
-    stat_cycles_lbl_->setText(   QString::number(stats.cycles_executed));
-    stat_instrs_lbl_->setText(   QString::number(stats.instructions_retired));
+    stat_cycles_lbl_->setText(QString::number(stats.cycles_executed));
+    stat_instrs_lbl_->setText(QString::number(stats.instructions_retired));
 
     if (cpi > 0) {
         stat_cpi_lbl_->setText(QString::number(cpi, 'f', 2));
-        const QColor cpi_color = cpi >= 2.0 ? QColor("#F44336")
-                               : cpi >= 1.5 ? QColor("#FF9800")
-                                            : QColor("#4CAF50");
+        const QColor cpi_color = cpi >= 2.0   ? QColor("#F44336")
+                                 : cpi >= 1.5 ? QColor("#FF9800")
+                                              : QColor("#4CAF50");
         stat_cpi_lbl_->setStyleSheet(
             QString("color: %1; font-weight: bold;").arg(cpi_color.name()));
     } else {
@@ -503,64 +475,58 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats)
         stat_cpi_lbl_->setStyleSheet("");
     }
 
-    stat_data_haz_lbl_->setText( QString::number(stats.data_hazards));
-    stat_ctrl_haz_lbl_->setText( QString::number(stats.control_hazards));
-    stat_fwd_lbl_->setText(      QString::number(stats.forwarding_events));
-    stat_stalls_lbl_->setText(   QString::number(stats.stalls));
-    stat_flushes_lbl_->setText(  QString::number(stats.flushes));
+    stat_data_haz_lbl_->setText(QString::number(stats.data_hazards));
+    stat_ctrl_haz_lbl_->setText(QString::number(stats.control_hazards));
+    stat_fwd_lbl_->setText(QString::number(stats.forwarding_events));
+    stat_stalls_lbl_->setText(QString::number(stats.stalls));
+    stat_flushes_lbl_->setText(QString::number(stats.flushes));
 }
 
-void MainWindow::onHalted()
-{
+void MainWindow::onHalted() {
     controller_->stop();
     act_run_pause_->setText(tr("&Run"));
     flashStatusBanner(true, tr("✓ Program halted (spin-loop detected)."));
 }
 
-void MainWindow::onFaulted()
-{
+void MainWindow::onFaulted() {
     controller_->stop();
     act_run_pause_->setText(tr("&Run"));
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
 }
 
-void MainWindow::flashStatusBanner(bool success, const QString& text)
-{
+void MainWindow::flashStatusBanner(bool success, const QString& text) {
     // Halt (success) and fault used to be delivered identically -- a plain
     // status-bar string either way. Give them visually distinct treatment
     // so finishing a program actually feels different from crashing one
     // (audit Opportunity #7).
-    const QString bg = success ? "#2E7D32" : "#C62828"; // green / red
+    const QString bg = success ? "#2E7D32" : "#C62828";  // green / red
     statusBar()->setStyleSheet(
-        QString("QStatusBar { background: %1; } QStatusBar QLabel { color: white; font-weight: bold; }")
+        QString(
+            "QStatusBar { background: %1; } QStatusBar QLabel { color: white; font-weight: bold; }")
             .arg(bg));
     statusBar()->showMessage(text, 4000);
     QTimer::singleShot(4000, this, [this] { statusBar()->setStyleSheet(""); });
 }
 
-void MainWindow::onBreakpointToggle(uint32_t pc)
-{
+void MainWindow::onBreakpointToggle(uint32_t pc) {
     if (controller_->hasBreakpoint(pc)) {
         controller_->clearBreakpoint(pc);
-        statusBar()->showMessage(
-            tr("Breakpoint cleared at 0x%1").arg(pc, 8, 16, QChar('0')), 2000);
+        statusBar()->showMessage(tr("Breakpoint cleared at 0x%1").arg(pc, 8, 16, QChar('0')), 2000);
     } else {
         controller_->setBreakpoint(pc);
-        statusBar()->showMessage(
-            tr("Breakpoint set at 0x%1").arg(pc, 8, 16, QChar('0')), 2000);
+        statusBar()->showMessage(tr("Breakpoint set at 0x%1").arg(pc, 8, 16, QChar('0')), 2000);
     }
     datapath_widget_->setBreakpoints(controller_->breakpoints());
 }
 
-void MainWindow::onStageDetailRequested(int stage_index, uint32_t pc, uint32_t raw)
-{
+void MainWindow::onStageDetailRequested(int stage_index, uint32_t pc, uint32_t raw) {
     using namespace mips;
     auto decoded = Decoder::decode(raw);
 
     static constexpr const char* STAGES[] = {"IF", "ID", "EX", "MEM", "WB"};
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Stage Detail — %1").arg(
-        stage_index < 5 ? QString(STAGES[stage_index]) : "?"));
+    QDialog                      dlg(this);
+    dlg.setWindowTitle(
+        tr("Stage Detail — %1").arg(stage_index < 5 ? QString(STAGES[stage_index]) : "?"));
     dlg.setMinimumWidth(340);
 
     auto* fl = new QFormLayout(&dlg);
@@ -573,33 +539,38 @@ void MainWindow::onStageDetailRequested(int stage_index, uint32_t pc, uint32_t r
         fl->addRow(key, lbl);
     };
 
-    add_row(tr("PC:"),       QString("0x%1").arg(pc, 8, 16, QChar('0')).toUpper());
+    add_row(tr("PC:"), QString("0x%1").arg(pc, 8, 16, QChar('0')).toUpper());
     add_row(tr("Raw word:"), QString("0x%1").arg(raw, 8, 16, QChar('0')).toUpper());
 
     if (decoded) {
         add_row(tr("Mnemonic:"), QString::fromStdString(std::string(Decoder::mnemonic(*decoded))));
         if (decoded->format == InstrFormat::R) {
             const auto& r = decoded->r();
-            add_row(tr("$rs:"), QString("$%1 (%2) = 0x%3")
+            add_row(tr("$rs:"),
+                    QString("$%1 (%2) = 0x%3")
                         .arg(r.rs)
                         .arg(QString::fromStdString(std::string(register_abi_name(r.rs))))
                         .arg(controller_->registerValue(r.rs), 8, 16, QChar('0')));
-            add_row(tr("$rt:"), QString("$%1 (%2) = 0x%3")
+            add_row(tr("$rt:"),
+                    QString("$%1 (%2) = 0x%3")
                         .arg(r.rt)
                         .arg(QString::fromStdString(std::string(register_abi_name(r.rt))))
                         .arg(controller_->registerValue(r.rt), 8, 16, QChar('0')));
-            add_row(tr("$rd:"), QString("$%1 (%2) = 0x%3")
+            add_row(tr("$rd:"),
+                    QString("$%1 (%2) = 0x%3")
                         .arg(r.rd)
                         .arg(QString::fromStdString(std::string(register_abi_name(r.rd))))
                         .arg(controller_->registerValue(r.rd), 8, 16, QChar('0')));
         } else if (decoded->format == InstrFormat::I) {
             const auto& i = decoded->i();
-            add_row(tr("$rs:"), QString("$%1 (%2) = 0x%3")
+            add_row(tr("$rs:"),
+                    QString("$%1 (%2) = 0x%3")
                         .arg(i.rs)
                         .arg(QString::fromStdString(std::string(register_abi_name(i.rs))))
                         .arg(controller_->registerValue(i.rs), 8, 16, QChar('0')));
-            add_row(tr("imm:"), QString("0x%1 (%2)").arg(i.imm, 4, 16, QChar('0'))
-                                                .arg(static_cast<int16_t>(i.imm)));
+            add_row(tr("imm:"), QString("0x%1 (%2)")
+                                    .arg(i.imm, 4, 16, QChar('0'))
+                                    .arg(static_cast<int16_t>(i.imm)));
         }
     } else {
         add_row(tr("Decode:"), tr("(unknown instruction)"));
@@ -611,36 +582,35 @@ void MainWindow::onStageDetailRequested(int stage_index, uint32_t pc, uint32_t r
     dlg.exec();
 }
 
-void MainWindow::applyColorScheme(bool dark)
-{
+void MainWindow::applyColorScheme(bool dark) {
     dark_mode_ = dark;
 
     // ── Palette (non-styled widgets, tooltips, system colours) ────────────────
     QPalette pal;
     if (dark) {
-        pal.setColor(QPalette::Window,          QColor(0x1E,0x1E,0x1E));
-        pal.setColor(QPalette::WindowText,      Qt::white);
-        pal.setColor(QPalette::Base,            QColor(0x2A,0x2A,0x2A));
-        pal.setColor(QPalette::AlternateBase,   QColor(0x35,0x35,0x35));
-        pal.setColor(QPalette::ToolTipBase,     QColor(0x25,0x25,0x25));
-        pal.setColor(QPalette::ToolTipText,     Qt::white);
-        pal.setColor(QPalette::Text,            Qt::white);
-        pal.setColor(QPalette::Button,          QColor(0x3C,0x3C,0x3C));
-        pal.setColor(QPalette::ButtonText,      Qt::white);
-        pal.setColor(QPalette::BrightText,      Qt::red);
-        pal.setColor(QPalette::Highlight,       QColor(0x26,0x4F,0x78));
+        pal.setColor(QPalette::Window, QColor(0x1E, 0x1E, 0x1E));
+        pal.setColor(QPalette::WindowText, Qt::white);
+        pal.setColor(QPalette::Base, QColor(0x2A, 0x2A, 0x2A));
+        pal.setColor(QPalette::AlternateBase, QColor(0x35, 0x35, 0x35));
+        pal.setColor(QPalette::ToolTipBase, QColor(0x25, 0x25, 0x25));
+        pal.setColor(QPalette::ToolTipText, Qt::white);
+        pal.setColor(QPalette::Text, Qt::white);
+        pal.setColor(QPalette::Button, QColor(0x3C, 0x3C, 0x3C));
+        pal.setColor(QPalette::ButtonText, Qt::white);
+        pal.setColor(QPalette::BrightText, Qt::red);
+        pal.setColor(QPalette::Highlight, QColor(0x26, 0x4F, 0x78));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     } else {
-        pal.setColor(QPalette::Window,          QColor(0xF5,0xF5,0xF5));
-        pal.setColor(QPalette::WindowText,      Qt::black);
-        pal.setColor(QPalette::Base,            Qt::white);
-        pal.setColor(QPalette::AlternateBase,   QColor(0xF5,0xF5,0xF5));
-        pal.setColor(QPalette::ToolTipBase,     Qt::white);
-        pal.setColor(QPalette::ToolTipText,     Qt::black);
-        pal.setColor(QPalette::Text,            Qt::black);
-        pal.setColor(QPalette::Button,          QColor(0xEE,0xEE,0xEE));
-        pal.setColor(QPalette::ButtonText,      Qt::black);
-        pal.setColor(QPalette::Highlight,       QColor(0x00,0x78,0xD4));
+        pal.setColor(QPalette::Window, QColor(0xF5, 0xF5, 0xF5));
+        pal.setColor(QPalette::WindowText, Qt::black);
+        pal.setColor(QPalette::Base, Qt::white);
+        pal.setColor(QPalette::AlternateBase, QColor(0xF5, 0xF5, 0xF5));
+        pal.setColor(QPalette::ToolTipBase, Qt::white);
+        pal.setColor(QPalette::ToolTipText, Qt::black);
+        pal.setColor(QPalette::Text, Qt::black);
+        pal.setColor(QPalette::Button, QColor(0xEE, 0xEE, 0xEE));
+        pal.setColor(QPalette::ButtonText, Qt::black);
+        pal.setColor(QPalette::Highlight, QColor(0x00, 0x78, 0xD4));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     }
     qApp->setPalette(pal);
@@ -769,7 +739,7 @@ QFrame[frameShape="5"] { color: #444444; }
 QWidget#regHeader { background: #252526; border-bottom: 1px solid #3C3C3C; }
 QWidget#regHeader QLabel { color: #9CDCFE; background: transparent; border: none; }
 )"
-    : R"(
+                             : R"(
 QMainWindow, QDialog { background: #F5F5F5; }
 
 QMenuBar { background: #F0F0F0; color: #333333; border-bottom: 1px solid #DDDDDD; }
@@ -901,4 +871,4 @@ QWidget#regHeader QLabel { color: #0078D4; background: transparent; border: none
     code_editor_->setDarkMode(dark);
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

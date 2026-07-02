@@ -14,15 +14,14 @@ using namespace mips;
 
 static int g_passed = 0, g_failed = 0;
 
-#define CHECK(expr)                                                         \
-    do {                                                                    \
-        if (expr) {                                                         \
-            ++g_passed;                                                     \
-        } else {                                                            \
-            std::fprintf(stderr, "FAIL  %s:%d  %s\n",                      \
-                         __FILE__, __LINE__, #expr);                        \
-            ++g_failed;                                                     \
-        }                                                                   \
+#define CHECK(expr)                                                                                \
+    do {                                                                                           \
+        if (expr) {                                                                                \
+            ++g_passed;                                                                            \
+        } else {                                                                                   \
+            std::fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);                  \
+            ++g_failed;                                                                            \
+        }                                                                                          \
     } while (false)
 
 // ─── R-type: ADD $t0, $s0, $s1 ───────────────────────────────────────────────
@@ -34,9 +33,9 @@ static void test_r_add() {
     CHECK(result.has_value());
     CHECK(result->format == InstrFormat::R);
     CHECK(Decoder::mnemonic(*result) == "ADD");
-    CHECK(result->r().rs    == 16);   // $s0
-    CHECK(result->r().rt    == 17);   // $s1
-    CHECK(result->r().rd    == 8);    // $t0
+    CHECK(result->r().rs == 16);  // $s0
+    CHECK(result->r().rt == 17);  // $s1
+    CHECK(result->r().rd == 8);   // $t0
     CHECK(result->r().shamt == 0);
     CHECK(result->r().funct == FunctCode::ADD);
 }
@@ -50,9 +49,9 @@ static void test_r_sll() {
     CHECK(result.has_value());
     CHECK(result->format == InstrFormat::R);
     CHECK(Decoder::mnemonic(*result) == "SLL");
-    CHECK(result->r().rs    == 0);
-    CHECK(result->r().rt    == 9);    // $t1
-    CHECK(result->r().rd    == 10);   // $t2
+    CHECK(result->r().rs == 0);
+    CHECK(result->r().rt == 9);   // $t1
+    CHECK(result->r().rd == 10);  // $t2
     CHECK(result->r().shamt == 4);
     CHECK(result->r().funct == FunctCode::SLL);
 }
@@ -65,10 +64,10 @@ static void test_i_lw() {
     auto result = Decoder::decode(0x8FA80004u);
     CHECK(result.has_value());
     CHECK(result->format == InstrFormat::I);
-    CHECK(result->opcode  == Opcode::LW);
+    CHECK(result->opcode == Opcode::LW);
     CHECK(Decoder::mnemonic(*result) == "LW");
-    CHECK(result->i().rs  == 29);     // $sp
-    CHECK(result->i().rt  == 8);      // $t0
+    CHECK(result->i().rs == 29);  // $sp
+    CHECK(result->i().rt == 8);   // $t0
     CHECK(result->i().imm == 4);
 }
 
@@ -81,10 +80,10 @@ static void test_i_beq_negative() {
     auto result = Decoder::decode(0x1100FFFEu);
     CHECK(result.has_value());
     CHECK(result->format == InstrFormat::I);
-    CHECK(result->opcode  == Opcode::BEQ);
-    CHECK(result->i().rs  == 8);        // $t0
-    CHECK(result->i().rt  == 0);        // $zero
-    CHECK(result->i().imm == 0xFFFE);   // raw bits preserved
+    CHECK(result->opcode == Opcode::BEQ);
+    CHECK(result->i().rs == 8);        // $t0
+    CHECK(result->i().rt == 0);        // $zero
+    CHECK(result->i().imm == 0xFFFE);  // raw bits preserved
 
     // The EX stage calls sign_extend; verify the branch offset is correct
     CHECK(Decoder::sign_extend(result->i().imm) == -2);
@@ -97,19 +96,19 @@ static void test_i_beq_negative() {
 static void test_j_jump() {
     auto result = Decoder::decode(0x08100000u);
     CHECK(result.has_value());
-    CHECK(result->format   == InstrFormat::J);
-    CHECK(result->opcode   == Opcode::J);
+    CHECK(result->format == InstrFormat::J);
+    CHECK(result->opcode == Opcode::J);
     CHECK(Decoder::mnemonic(*result) == "J");
     CHECK(result->j().target == 0x100000u);
 }
 
 // ─── sign_extend edge cases ───────────────────────────────────────────────────
 static void test_sign_extend() {
-    CHECK(Decoder::sign_extend(0x0000) ==      0);
-    CHECK(Decoder::sign_extend(0x0001) ==      1);
-    CHECK(Decoder::sign_extend(0x7FFF) ==  32767);   // largest positive
-    CHECK(Decoder::sign_extend(0x8000) == -32768);   // most negative (sign bit set)
-    CHECK(Decoder::sign_extend(0xFFFF) ==     -1);
+    CHECK(Decoder::sign_extend(0x0000) == 0);
+    CHECK(Decoder::sign_extend(0x0001) == 1);
+    CHECK(Decoder::sign_extend(0x7FFF) == 32767);   // largest positive
+    CHECK(Decoder::sign_extend(0x8000) == -32768);  // most negative (sign bit set)
+    CHECK(Decoder::sign_extend(0xFFFF) == -1);
 }
 
 // ─── Unknown / reserved encodings ────────────────────────────────────────────
@@ -124,11 +123,11 @@ static void test_unknown() {
 // ─── format_of ────────────────────────────────────────────────────────────────
 static void test_format_of() {
     CHECK(Decoder::format_of(Opcode::SPECIAL) == InstrFormat::R);
-    CHECK(Decoder::format_of(Opcode::J)       == InstrFormat::J);
-    CHECK(Decoder::format_of(Opcode::JAL)     == InstrFormat::J);
-    CHECK(Decoder::format_of(Opcode::LW)      == InstrFormat::I);
-    CHECK(Decoder::format_of(Opcode::BEQ)     == InstrFormat::I);
-    CHECK(Decoder::format_of(Opcode::SW)      == InstrFormat::I);
+    CHECK(Decoder::format_of(Opcode::J) == InstrFormat::J);
+    CHECK(Decoder::format_of(Opcode::JAL) == InstrFormat::J);
+    CHECK(Decoder::format_of(Opcode::LW) == InstrFormat::I);
+    CHECK(Decoder::format_of(Opcode::BEQ) == InstrFormat::I);
+    CHECK(Decoder::format_of(Opcode::SW) == InstrFormat::I);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

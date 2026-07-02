@@ -15,20 +15,19 @@
 
 static int g_pass = 0, g_fail = 0;
 
-#define CHECK(expr)                                                    \
-    do {                                                               \
-        if (expr) { ++g_pass; }                                        \
-        else {                                                         \
-            ++g_fail;                                                  \
-            std::fprintf(stderr, "FAIL  %s:%d  %s\n",                 \
-                         __FILE__, __LINE__, #expr);                   \
-        }                                                              \
+#define CHECK(expr)                                                                                \
+    do {                                                                                           \
+        if (expr) {                                                                                \
+            ++g_pass;                                                                              \
+        } else {                                                                                   \
+            ++g_fail;                                                                              \
+            std::fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);                  \
+        }                                                                                          \
     } while (false)
 
 // ── Assembler tests ───────────────────────────────────────────────────────────
 
-static void test_assembler_basic()
-{
+static void test_assembler_basic() {
     using namespace nsc::qt;
 
     // nop encodes as 0
@@ -42,7 +41,8 @@ static void test_assembler_basic()
     CHECK(r.ok());
     CHECK(r.words.size() == 1);
     // SPECIAL(0) | rs=$t1(9)<<21 | rt=$t2(10)<<16 | rd=$t0(8)<<11 | shamt=0 | funct=0x20
-    const uint32_t expected = (0u<<26)|(9u<<21)|(10u<<16)|(8u<<11)|(0u<<6)|0x20u;
+    const uint32_t expected =
+        (0u << 26) | (9u << 21) | (10u << 16) | (8u << 11) | (0u << 6) | 0x20u;
     CHECK(r.words[0] == expected);
 
     // addi $t0, $zero, 5
@@ -50,32 +50,30 @@ static void test_assembler_basic()
     CHECK(r.ok());
     CHECK(r.words.size() == 1);
     // 0x08 | rs=$zero(0)<<21 | rt=$t0(8)<<16 | imm=5
-    CHECK(r.words[0] == ((0x08u<<26)|(0u<<21)|(8u<<16)|5u));
+    CHECK(r.words[0] == ((0x08u << 26) | (0u << 21) | (8u << 16) | 5u));
 
     // lw $t0, 4($sp)
     r = assemble("lw $t0, 4($sp)");
     CHECK(r.ok());
     CHECK(r.words.size() == 1);
     // 0x23 | rs=$sp(29)<<21 | rt=$t0(8)<<16 | imm=4
-    CHECK(r.words[0] == ((0x23u<<26)|(29u<<21)|(8u<<16)|4u));
+    CHECK(r.words[0] == ((0x23u << 26) | (29u << 21) | (8u << 16) | 4u));
 
     // sw $t0, 0($sp)
     r = assemble("sw $t0, 0($sp)");
     CHECK(r.ok());
     CHECK(r.words.size() == 1);
-    CHECK(r.words[0] == ((0x2Bu<<26)|(29u<<21)|(8u<<16)|0u));
+    CHECK(r.words[0] == ((0x2Bu << 26) | (29u << 21) | (8u << 16) | 0u));
 }
 
-static void test_assembler_labels()
-{
+static void test_assembler_labels() {
     using namespace nsc::qt;
 
     // Branch to label
-    const std::string src =
-        "loop:\n"
-        "  addi $t0, $t0, 1\n"
-        "  beq $t0, $t1, loop\n";
-    auto r = assemble(src);
+    const std::string src = "loop:\n"
+                            "  addi $t0, $t0, 1\n"
+                            "  beq $t0, $t1, loop\n";
+    auto              r   = assemble(src);
     CHECK(r.ok());
     CHECK(r.words.size() == 2);
     // beq at index 1 targets index 0; offset = 0 - (1+1) = -2
@@ -84,17 +82,16 @@ static void test_assembler_labels()
     CHECK(offset == -2);
 }
 
-static void test_assembler_errors()
-{
+static void test_assembler_errors() {
     using namespace nsc::qt;
 
-    auto r = assemble("add $t0, $t1");   // too few operands
+    auto r = assemble("add $t0, $t1");  // too few operands
     CHECK(!r.ok());
 
     r = assemble("add $t0, $t1, $99");  // invalid register
     CHECK(!r.ok());
 
-    r = assemble("fakeinstr $t0");       // unknown mnemonic
+    r = assemble("fakeinstr $t0");  // unknown mnemonic
     CHECK(!r.ok());
 
     r = assemble("beq $t0, $t1, missing_label");
@@ -103,8 +100,7 @@ static void test_assembler_errors()
 
 // ── SimulatorController signal emission ──────────────────────────────────────
 
-static void test_controller_step_signal()
-{
+static void test_controller_step_signal() {
     using namespace nsc::qt;
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
@@ -127,8 +123,7 @@ static void test_controller_step_signal()
     CHECK(ctrl.cycleCount() == 1);
 }
 
-static void test_controller_breakpoint()
-{
+static void test_controller_breakpoint() {
     using namespace nsc::qt;
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
@@ -136,12 +131,14 @@ static void test_controller_breakpoint()
     CHECK(proc->load_program({0u, 0u, 0x08000002u}));
 
     SimulatorController ctrl(std::move(proc));
-    ctrl.setBreakpoint(0x04); // word 1 (PC = byte address 4)
+    ctrl.setBreakpoint(0x04);  // word 1 (PC = byte address 4)
 
-    bool bp_hit = false;
-    uint32_t bp_pc = 0;
-    QObject::connect(&ctrl, &SimulatorController::breakpointHit,
-                     [&](uint32_t pc) { bp_hit = true; bp_pc = pc; });
+    bool     bp_hit = false;
+    uint32_t bp_pc  = 0;
+    QObject::connect(&ctrl, &SimulatorController::breakpointHit, [&](uint32_t pc) {
+        bp_hit = true;
+        bp_pc  = pc;
+    });
 
     // Step many times until breakpoint fires (or 20 steps max)
     for (int i = 0; i < 20 && !bp_hit; ++i)
@@ -151,12 +148,11 @@ static void test_controller_breakpoint()
     CHECK(bp_pc == 0x04u);
 }
 
-static void test_controller_reset()
-{
+static void test_controller_reset() {
     using namespace nsc::qt;
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
-    CHECK(proc->load_program({0x20080001u})); // addi $t0,$zero,1
+    CHECK(proc->load_program({0x20080001u}));  // addi $t0,$zero,1
 
     SimulatorController ctrl(std::move(proc));
     ctrl.stepCycle();
@@ -169,8 +165,7 @@ static void test_controller_reset()
 
 // ── RegisterWidget state tracking ────────────────────────────────────────────
 
-static void test_register_widget_clear()
-{
+static void test_register_widget_clear() {
     using namespace nsc::qt;
 
     RegisterWidget rw;
@@ -181,8 +176,7 @@ static void test_register_widget_clear()
 
 // ── MemoryWidget navigation ───────────────────────────────────────────────────
 
-static void test_memory_widget_construct()
-{
+static void test_memory_widget_construct() {
     using namespace nsc::qt;
 
     MemoryWidget mw;
@@ -192,8 +186,7 @@ static void test_memory_widget_construct()
 
 // ── PipelineTraceWidget timeline ─────────────────────────────────────────────
 
-static void test_trace_widget_clear()
-{
+static void test_trace_widget_clear() {
     using namespace nsc::qt;
 
     PipelineTraceWidget tw;
@@ -204,8 +197,7 @@ static void test_trace_widget_clear()
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
     test_assembler_basic();

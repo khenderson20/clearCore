@@ -22,17 +22,16 @@
 
 namespace nsc::qt::scale {
 
-    constexpr int kFontSizeDense  = 14;
-    constexpr int kFontSizeBody   = 16;
-    constexpr int kFontSizeHeader = 18;
+constexpr int kFontSizeDense  = 14;
+constexpr int kFontSizeBody   = 16;
+constexpr int kFontSizeHeader = 18;
 
-    // Monospace font at a given scale step, optionally bold.
-    inline QFont monoFont(int pixelSize, bool bold = false)
-    {
-        QFont f("monospace");
-        f.setPixelSize(pixelSize);
-        if (bold) f.setBold(true);
-        return f;
-    }
+// Monospace font at a given scale step, optionally bold.
+inline QFont monoFont(int pixelSize, bool bold = false) {
+    QFont f("monospace");
+    f.setPixelSize(pixelSize);
+    if (bold) f.setBold(true);
+    return f;
+}
 
-} // namespace nsc::qt::scale
+}  // namespace nsc::qt::scale

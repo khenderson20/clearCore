@@ -12,8 +12,7 @@
 
 namespace nsc::qt {
 
-MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent)
-{
+MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
     auto* vl = new QVBoxLayout(this);
     vl->setContentsMargins(4, 4, 4, 4);
 
@@ -27,9 +26,7 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent)
     auto* jump_start_btn = new QPushButton(tr("Jump to 0x0"), this);
     jump_start_btn->setToolTip(tr("Jump to the start of memory"));
     jump_start_btn->setFont(scale::monoFont(scale::kFontSizeBody));
-    connect(jump_start_btn, &QPushButton::clicked, this, [this] {
-        addr_spin_->setValue(0);
-    });
+    connect(jump_start_btn, &QPushButton::clicked, this, [this] { addr_spin_->setValue(0); });
     nav->addWidget(jump_start_btn);
 
     nav->addStretch();
@@ -55,15 +52,14 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent)
     buildTable();
     vl->addWidget(table_);
 
-    connect(addr_spin_, qOverload<int>(&QSpinBox::valueChanged),
-            this, &MemoryWidget::onAddressChanged);
+    connect(addr_spin_, qOverload<int>(&QSpinBox::valueChanged), this,
+            &MemoryWidget::onAddressChanged);
 }
 
-void MemoryWidget::buildTable()
-{
+void MemoryWidget::buildTable() {
     // Columns: Address | B0..B15 | ASCII
     const int total_cols = 1 + COLS_HEX + 1;
-    table_ = new QTableWidget(ROWS, total_cols, this);
+    table_               = new QTableWidget(ROWS, total_cols, this);
 
     QStringList headers;
     headers << tr("Address");
@@ -93,45 +89,43 @@ void MemoryWidget::buildTable()
     }
 }
 
-void MemoryWidget::updateDisplay(const mips::Memory& mem)
-{
+void MemoryWidget::updateDisplay(const mips::Memory& mem) {
     last_mem_ = &mem;
     refreshRows(mem);
 }
 
-void MemoryWidget::markWritten(uint32_t addr)
-{
+void MemoryWidget::markWritten(uint32_t addr) {
     written_addrs_.insert(addr);
 }
 
-void MemoryWidget::refreshRows(const mips::Memory& mem)
-{
+void MemoryWidget::refreshRows(const mips::Memory& mem) {
     const uint32_t base = base_addr_;
     for (int row = 0; row < ROWS; ++row) {
         const uint32_t row_addr = base + static_cast<uint32_t>(row * COLS_HEX);
 
         // Address column
-        table_->item(row, 0)->setText(
-            QString("0x%1").arg(row_addr, 8, 16, QChar('0')).toUpper());
+        table_->item(row, 0)->setText(QString("0x%1").arg(row_addr, 8, 16, QChar('0')).toUpper());
 
         QString ascii_str;
         for (int col = 0; col < COLS_HEX; ++col) {
             const uint32_t byte_addr = row_addr + static_cast<uint32_t>(col);
-            auto byte_val = mem.read_byte(byte_addr);
-            auto* item = table_->item(row, 1 + col);
+            auto           byte_val  = mem.read_byte(byte_addr);
+            auto*          item      = table_->item(row, 1 + col);
 
             if (byte_val) {
                 item->setText(QString("%1").arg(*byte_val, 2, 16, QChar('0')).toUpper());
                 ascii_str += (*byte_val >= 0x20 && *byte_val < 0x7F)
-                             ? QChar(static_cast<char>(*byte_val)) : QChar('.');
+                                 ? QChar(static_cast<char>(*byte_val))
+                                 : QChar('.');
                 // Highlight recently written bytes
                 if (written_addrs_.count(byte_addr))
                     item->setBackground(QColor("#FFF9C4"));
                 else
-                    item->setBackground(dark_mode_ ? QColor(0x2A,0x2A,0x2A) : Qt::white);
+                    item->setBackground(dark_mode_ ? QColor(0x2A, 0x2A, 0x2A) : Qt::white);
             } else {
                 item->setText("--");
-                item->setBackground(dark_mode_ ? QColor(0x1A,0x1A,0x1A) : QColor(0xEE,0xEE,0xEE));
+                item->setBackground(dark_mode_ ? QColor(0x1A, 0x1A, 0x1A)
+                                               : QColor(0xEE, 0xEE, 0xEE));
                 ascii_str += ' ';
             }
         }
@@ -140,16 +134,14 @@ void MemoryWidget::refreshRows(const mips::Memory& mem)
     written_addrs_.clear();
 }
 
-void MemoryWidget::onAddressChanged(int value)
-{
-    base_addr_ = static_cast<uint32_t>(value) & ~0xFu; // align to 16
+void MemoryWidget::onAddressChanged(int value) {
+    base_addr_ = static_cast<uint32_t>(value) & ~0xFu;  // align to 16
     if (last_mem_) refreshRows(*last_mem_);
 }
 
-void MemoryWidget::setDarkMode(bool dark)
-{
+void MemoryWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
     if (last_mem_) refreshRows(*last_mem_);
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

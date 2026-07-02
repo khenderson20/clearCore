@@ -5,9 +5,9 @@
 // to compile unchanged.  New code should include <mips/single_cycle_cpu.h> or
 // <mips/pipelined_cpu.h> directly, and program to the IProcessor interface.
 
+#include "mips/pipelined_cpu.h"
 #include "mips/processor.h"
 #include "mips/single_cycle_cpu.h"
-#include "mips/pipelined_cpu.h"
 
 namespace mips {
 
@@ -15,4 +15,4 @@ namespace mips {
 // to the original class, just now deriving from IProcessor.
 using Cpu = SingleCycleCpu;
 
-} // namespace mips
+}  // namespace mips

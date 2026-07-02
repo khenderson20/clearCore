@@ -15,8 +15,7 @@
 
 namespace nsc::qt {
 
-PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent)
-{
+PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(tr("Preferences"));
     setMinimumWidth(360);
 
@@ -25,8 +24,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent)
     // ── Color scheme ──────────────────────────────────────────────────────────
     auto* scheme_box = new QGroupBox(tr("Color Scheme"), this);
     auto* scheme_hl  = new QHBoxLayout(scheme_box);
-    light_radio_ = new QRadioButton(tr("Light"), scheme_box);
-    dark_radio_  = new QRadioButton(tr("Dark"),  scheme_box);
+    light_radio_     = new QRadioButton(tr("Light"), scheme_box);
+    dark_radio_      = new QRadioButton(tr("Dark"), scheme_box);
     scheme_hl->addWidget(light_radio_);
     scheme_hl->addWidget(dark_radio_);
     vl->addWidget(scheme_box);
@@ -47,7 +46,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent)
     // ── Font & display ────────────────────────────────────────────────────────
     auto* disp_box = new QGroupBox(tr("Display"), this);
     auto* fl       = new QFormLayout(disp_box);
-    font_spin_ = new QSpinBox(disp_box);
+    font_spin_     = new QSpinBox(disp_box);
     font_spin_->setRange(8, 24);
     font_spin_->setValue(scale::kFontSizeBody);
     fl->addRow(tr("Font size:"), font_spin_);
@@ -67,8 +66,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent)
     loadSettings();
 }
 
-void PreferencesDialog::loadSettings()
-{
+void PreferencesDialog::loadSettings() {
     QSettings s("nsc-qt", "clearCore-gui");
     dark_radio_->setChecked(s.value("colorScheme", "light").toString() == "dark");
     light_radio_->setChecked(!dark_radio_->isChecked());
@@ -77,17 +75,15 @@ void PreferencesDialog::loadSettings()
     alias_check_->setChecked(s.value("showRegisterAliases", true).toBool());
 }
 
-void PreferencesDialog::saveSettings()
-{
+void PreferencesDialog::saveSettings() {
     QSettings s("nsc-qt", "clearCore-gui");
-    s.setValue("colorScheme",         dark_radio_->isChecked() ? "dark" : "light");
-    s.setValue("executionSpeed",      speed_slider_->value());
-    s.setValue("fontSize",            font_spin_->value());
+    s.setValue("colorScheme", dark_radio_->isChecked() ? "dark" : "light");
+    s.setValue("executionSpeed", speed_slider_->value());
+    s.setValue("fontSize", font_spin_->value());
     s.setValue("showRegisterAliases", alias_check_->isChecked());
 }
 
-void PreferencesDialog::onAccept()
-{
+void PreferencesDialog::onAccept() {
     saveSettings();
     emit colorSchemeChanged(dark_radio_->isChecked());
     emit executionSpeedChanged(speed_slider_->value());
@@ -96,9 +92,17 @@ void PreferencesDialog::onAccept()
     accept();
 }
 
-bool PreferencesDialog::isDarkMode()          const noexcept { return dark_radio_->isChecked(); }
-int  PreferencesDialog::executionSpeed()      const noexcept { return speed_slider_->value(); }
-int  PreferencesDialog::fontSize()            const noexcept { return font_spin_->value(); }
-bool PreferencesDialog::showRegisterAliases() const noexcept { return alias_check_->isChecked(); }
+bool PreferencesDialog::isDarkMode() const noexcept {
+    return dark_radio_->isChecked();
+}
+int PreferencesDialog::executionSpeed() const noexcept {
+    return speed_slider_->value();
+}
+int PreferencesDialog::fontSize() const noexcept {
+    return font_spin_->value();
+}
+bool PreferencesDialog::showRegisterAliases() const noexcept {
+    return alias_check_->isChecked();
+}
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

@@ -13,16 +13,10 @@ namespace {
 // ── Register table ────────────────────────────────────────────────────────────
 
 const std::unordered_map<std::string, uint8_t> kRegMap = {
-    {"zero",0}, {"at",1},
-    {"v0",2},   {"v1",3},
-    {"a0",4},   {"a1",5},   {"a2",6},   {"a3",7},
-    {"t0",8},   {"t1",9},   {"t2",10},  {"t3",11},
-    {"t4",12},  {"t5",13},  {"t6",14},  {"t7",15},
-    {"s0",16},  {"s1",17},  {"s2",18},  {"s3",19},
-    {"s4",20},  {"s5",21},  {"s6",22},  {"s7",23},
-    {"t8",24},  {"t9",25},
-    {"k0",26},  {"k1",27},
-    {"gp",28},  {"sp",29},  {"fp",30},  {"ra",31},
+    {"zero", 0}, {"at", 1},  {"v0", 2},  {"v1", 3},  {"a0", 4},  {"a1", 5},  {"a2", 6},  {"a3", 7},
+    {"t0", 8},   {"t1", 9},  {"t2", 10}, {"t3", 11}, {"t4", 12}, {"t5", 13}, {"t6", 14}, {"t7", 15},
+    {"s0", 16},  {"s1", 17}, {"s2", 18}, {"s3", 19}, {"s4", 20}, {"s5", 21}, {"s6", 22}, {"s7", 23},
+    {"t8", 24},  {"t9", 25}, {"k0", 26}, {"k1", 27}, {"gp", 28}, {"sp", 29}, {"fp", 30}, {"ra", 31},
 };
 
 // Parses "$name" or "$N"; returns 0xFF on error.
@@ -31,7 +25,7 @@ static std::optional<uint8_t> parse_reg(std::string_view tok) {
     std::string name(tok.substr(1));
     // try numeric
     if (!name.empty() && std::isdigit(static_cast<unsigned char>(name[0]))) {
-        int n = 0;
+        int n          = 0;
         auto [ptr, ec] = std::from_chars(name.data(), name.data() + name.size(), n);
         if (ec == std::errc{} && ptr == name.data() + name.size() && n >= 0 && n < 32)
             return static_cast<uint8_t>(n);
@@ -50,7 +44,7 @@ static std::optional<int32_t> parse_imm(std::string_view tok) {
     int32_t val = 0;
     if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X')) {
         tok.remove_prefix(2);
-        uint32_t u = 0;
+        uint32_t u     = 0;
         auto [ptr, ec] = std::from_chars(tok.data(), tok.data() + tok.size(), u, 16);
         if (ec != std::errc{} || ptr != tok.data() + tok.size()) return std::nullopt;
         val = static_cast<int32_t>(u);
@@ -69,8 +63,8 @@ static std::optional<std::pair<int32_t, uint8_t>> parse_mem_operand(std::string_
         return std::nullopt;
     auto imm_sv = tok.substr(0, lp);
     auto reg_sv = tok.substr(lp + 1, rp - lp - 1);
-    auto imm = parse_imm(imm_sv);
-    auto reg = parse_reg(reg_sv);
+    auto imm    = parse_imm(imm_sv);
+    auto reg    = parse_reg(reg_sv);
     if (!imm || !reg) return std::nullopt;
     return std::pair{*imm, *reg};
 }
@@ -78,18 +72,14 @@ static std::optional<std::pair<int32_t, uint8_t>> parse_mem_operand(std::string_
 // ── Encoding helpers ──────────────────────────────────────────────────────────
 
 static uint32_t enc_r(uint8_t rs, uint8_t rt, uint8_t rd, uint8_t shamt, uint8_t funct) {
-    return (static_cast<uint32_t>(rs    & 0x1F) << 21)
-         | (static_cast<uint32_t>(rt    & 0x1F) << 16)
-         | (static_cast<uint32_t>(rd    & 0x1F) << 11)
-         | (static_cast<uint32_t>(shamt & 0x1F) <<  6)
-         |  static_cast<uint32_t>(funct & 0x3F);
+    return (static_cast<uint32_t>(rs & 0x1F) << 21) | (static_cast<uint32_t>(rt & 0x1F) << 16) |
+           (static_cast<uint32_t>(rd & 0x1F) << 11) | (static_cast<uint32_t>(shamt & 0x1F) << 6) |
+           static_cast<uint32_t>(funct & 0x3F);
 }
 
 static uint32_t enc_i(uint8_t op, uint8_t rs, uint8_t rt, uint16_t imm) {
-    return (static_cast<uint32_t>(op & 0x3F) << 26)
-         | (static_cast<uint32_t>(rs & 0x1F) << 21)
-         | (static_cast<uint32_t>(rt & 0x1F) << 16)
-         |  static_cast<uint32_t>(imm);
+    return (static_cast<uint32_t>(op & 0x3F) << 26) | (static_cast<uint32_t>(rs & 0x1F) << 21) |
+           (static_cast<uint32_t>(rt & 0x1F) << 16) | static_cast<uint32_t>(imm);
 }
 
 static uint32_t enc_j(uint8_t op, uint32_t target) {
@@ -101,18 +91,24 @@ static uint32_t enc_j(uint8_t op, uint32_t target) {
 // Strips leading/trailing whitespace in place.
 static void trim(std::string& s) {
     const auto first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) { s.clear(); return; }
-    const auto last  = s.find_last_not_of(" \t\r\n");
-    s = s.substr(first, last - first + 1);
+    if (first == std::string::npos) {
+        s.clear();
+        return;
+    }
+    const auto last = s.find_last_not_of(" \t\r\n");
+    s               = s.substr(first, last - first + 1);
 }
 
 // Splits `line` on whitespace and commas into tokens.
 static std::vector<std::string> tokenise(const std::string& line) {
     std::vector<std::string> toks;
-    std::string cur;
+    std::string              cur;
     for (char c : line) {
         if (c == ',' || c == ' ' || c == '\t') {
-            if (!cur.empty()) { toks.push_back(cur); cur.clear(); }
+            if (!cur.empty()) {
+                toks.push_back(cur);
+                cur.clear();
+            }
         } else {
             cur += c;
         }
@@ -124,8 +120,8 @@ static std::vector<std::string> tokenise(const std::string& line) {
 // ── Assembler ─────────────────────────────────────────────────────────────────
 
 struct Line {
-    int         lineno = 0;
-    std::string mnemonic;
+    int                      lineno = 0;
+    std::string              mnemonic;
     std::vector<std::string> operands;
 };
 
@@ -133,16 +129,16 @@ static std::string make_error(int lineno, const std::string& msg) {
     return "line " + std::to_string(lineno) + ": " + msg;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 AssemblerResult assemble(const std::string& source) {
     // ── Pass 1: collect labels and strip comments ──────────────────────────────
-    std::unordered_map<std::string, uint32_t> labels; // label → word index
-    std::vector<Line> lines;
+    std::unordered_map<std::string, uint32_t> labels;  // label → word index
+    std::vector<Line>                         lines;
 
     std::istringstream ss(source);
-    std::string raw;
-    int lineno = 0;
+    std::string        raw;
+    int                lineno = 0;
 
     while (std::getline(ss, raw)) {
         ++lineno;
@@ -157,8 +153,7 @@ AssemblerResult assemble(const std::string& source) {
         if (colon != std::string::npos) {
             std::string lbl = raw.substr(0, colon);
             trim(lbl);
-            if (!lbl.empty())
-                labels[lbl] = static_cast<uint32_t>(lines.size());
+            if (!lbl.empty()) labels[lbl] = static_cast<uint32_t>(lines.size());
             raw = raw.substr(colon + 1);
             trim(raw);
             if (raw.empty()) continue;
@@ -171,8 +166,7 @@ AssemblerResult assemble(const std::string& source) {
         ln.lineno   = lineno;
         ln.mnemonic = toks[0];
         // Convert mnemonic to lower-case
-        std::transform(ln.mnemonic.begin(), ln.mnemonic.end(),
-                       ln.mnemonic.begin(), ::tolower);
+        std::transform(ln.mnemonic.begin(), ln.mnemonic.end(), ln.mnemonic.begin(), ::tolower);
         for (std::size_t i = 1; i < toks.size(); ++i)
             ln.operands.push_back(toks[i]);
 
@@ -184,9 +178,9 @@ AssemblerResult assemble(const std::string& source) {
     result.words.reserve(lines.size());
 
     for (std::size_t idx = 0; idx < lines.size(); ++idx) {
-        const auto& ln  = lines[idx];
-        const auto& mn  = ln.mnemonic;
-        const auto& ops = ln.operands;
+        const auto& ln    = lines[idx];
+        const auto& mn    = ln.mnemonic;
+        const auto& ops   = ln.operands;
         const int   ln_no = ln.lineno;
 
         // REMOVED: const uint32_t word_addr = static_cast<uint32_t>(idx * 4);
@@ -207,45 +201,48 @@ AssemblerResult assemble(const std::string& source) {
 
         // ── R-type: add addu sub subu and or xor nor slt sltu ─────────────────
         const std::unordered_map<std::string, uint8_t> r3_map = {
-            {"add",0x20},{"addu",0x21},{"sub",0x22},{"subu",0x23},
-            {"and",0x24},{"or",0x25}, {"xor",0x26},{"nor",0x27},
-            {"slt",0x2A},{"sltu",0x2B},
+            {"add", 0x20}, {"addu", 0x21}, {"sub", 0x22}, {"subu", 0x23}, {"and", 0x24},
+            {"or", 0x25},  {"xor", 0x26},  {"nor", 0x27}, {"slt", 0x2A},  {"sltu", 0x2B},
         };
         if (r3_map.count(mn)) {
             if (!need(3)) return err("expected $rd, $rs, $rt");
             auto rd = parse_reg(ops[0]);
             auto rs = parse_reg(ops[1]);
             auto rt = parse_reg(ops[2]);
-            if (!rd||!rs||!rt) return err("bad register");
+            if (!rd || !rs || !rt) return err("bad register");
             result.words.push_back(enc_r(*rs, *rt, *rd, 0, r3_map.at(mn)));
             continue;
         }
 
         // ── R-type shifts: sll srl sra ($rd, $rt, shamt) ──────────────────────
         const std::unordered_map<std::string, uint8_t> shift_map = {
-            {"sll",0x00},{"srl",0x02},{"sra",0x03},
+            {"sll", 0x00},
+            {"srl", 0x02},
+            {"sra", 0x03},
         };
         if (shift_map.count(mn)) {
             if (!need(3)) return err("expected $rd, $rt, shamt");
             auto rd  = parse_reg(ops[0]);
             auto rt  = parse_reg(ops[1]);
             auto imm = parse_imm(ops[2]);
-            if (!rd||!rt||!imm) return err("bad operands");
+            if (!rd || !rt || !imm) return err("bad operands");
             if (*imm < 0 || *imm > 31) return err("shift amount out of range");
-            result.words.push_back(enc_r(0, *rt, *rd, static_cast<uint8_t>(*imm), shift_map.at(mn)));
+            result.words.push_back(
+                enc_r(0, *rt, *rd, static_cast<uint8_t>(*imm), shift_map.at(mn)));
             continue;
         }
 
         // ── R-type var shifts: sllv srlv ($rd, $rt, $rs) ──────────────────────
         const std::unordered_map<std::string, uint8_t> vshift_map = {
-            {"sllv",0x04},{"srlv",0x06},
+            {"sllv", 0x04},
+            {"srlv", 0x06},
         };
         if (vshift_map.count(mn)) {
             if (!need(3)) return err("expected $rd, $rt, $rs");
             auto rd = parse_reg(ops[0]);
             auto rt = parse_reg(ops[1]);
             auto rs = parse_reg(ops[2]);
-            if (!rd||!rt||!rs) return err("bad register");
+            if (!rd || !rt || !rs) return err("bad register");
             result.words.push_back(enc_r(*rs, *rt, *rd, 0, vshift_map.at(mn)));
             continue;
         }
@@ -264,24 +261,24 @@ AssemblerResult assemble(const std::string& source) {
             if (!need(2)) return err("expected $rd, $rs");
             auto rd = parse_reg(ops[0]);
             auto rs = parse_reg(ops[1]);
-            if (!rd||!rs) return err("bad register");
+            if (!rd || !rs) return err("bad register");
             result.words.push_back(enc_r(*rs, 0, *rd, 0, 0x09));
             continue;
         }
 
         // ── I-type arithmetic: addi addiu slti sltiu andi ori xori ──────────────
         const std::unordered_map<std::string, uint8_t> iarith_map = {
-            {"addi",0x08},{"addiu",0x09},{"slti",0x0A},{"sltiu",0x0B},
-            {"andi",0x0C},{"ori",0x0D},  {"xori",0x0E},
+            {"addi", 0x08}, {"addiu", 0x09}, {"slti", 0x0A}, {"sltiu", 0x0B},
+            {"andi", 0x0C}, {"ori", 0x0D},   {"xori", 0x0E},
         };
         if (iarith_map.count(mn)) {
             if (!need(3)) return err("expected $rt, $rs, imm");
             auto rt  = parse_reg(ops[0]);
             auto rs  = parse_reg(ops[1]);
             auto imm = parse_imm(ops[2]);
-            if (!rt||!rs||!imm) return err("bad operands");
+            if (!rt || !rs || !imm) return err("bad operands");
             result.words.push_back(enc_i(iarith_map.at(mn), *rs, *rt,
-                                          static_cast<uint16_t>(static_cast<int16_t>(*imm))));
+                                         static_cast<uint16_t>(static_cast<int16_t>(*imm))));
             continue;
         }
 
@@ -290,15 +287,18 @@ AssemblerResult assemble(const std::string& source) {
             if (!need(2)) return err("expected $rt, imm");
             auto rt  = parse_reg(ops[0]);
             auto imm = parse_imm(ops[1]);
-            if (!rt||!imm) return err("bad operands");
-            result.words.push_back(enc_i(0x0F, 0, *rt,
-                                          static_cast<uint16_t>(static_cast<int16_t>(*imm))));
+            if (!rt || !imm) return err("bad operands");
+            result.words.push_back(
+                enc_i(0x0F, 0, *rt, static_cast<uint16_t>(static_cast<int16_t>(*imm))));
             continue;
         }
 
         // ── Memory: lw lbu lhu sw ($rt, imm($rs)) ─────────────────────────────
         const std::unordered_map<std::string, uint8_t> mem_map = {
-            {"lw",0x23},{"lbu",0x24},{"lhu",0x25},{"sw",0x2B},
+            {"lw", 0x23},
+            {"lbu", 0x24},
+            {"lhu", 0x25},
+            {"sw", 0x2B},
         };
         if (mem_map.count(mn)) {
             if (!need(2)) return err("expected $rt, imm($rs)");
@@ -307,20 +307,21 @@ AssemblerResult assemble(const std::string& source) {
             auto mem_op = parse_mem_operand(ops[1]);
             if (!mem_op) return err("expected imm($rs)");
             auto [imm, rs] = *mem_op;
-            result.words.push_back(enc_i(mem_map.at(mn), rs, *rt,
-                                          static_cast<uint16_t>(static_cast<int16_t>(imm))));
+            result.words.push_back(
+                enc_i(mem_map.at(mn), rs, *rt, static_cast<uint16_t>(static_cast<int16_t>(imm))));
             continue;
         }
 
         // ── beq bne $rs, $rt, label_or_offset ─────────────────────────────────
         const std::unordered_map<std::string, uint8_t> branch_map = {
-            {"beq",0x04},{"bne",0x05},
+            {"beq", 0x04},
+            {"bne", 0x05},
         };
         if (branch_map.count(mn)) {
             if (!need(3)) return err("expected $rs, $rt, label");
             auto rs = parse_reg(ops[0]);
             auto rt = parse_reg(ops[1]);
-            if (!rs||!rt) return err("bad register");
+            if (!rs || !rt) return err("bad register");
 
             int32_t offset = 0;
             // Try numeric first, then label
@@ -334,24 +335,25 @@ AssemblerResult assemble(const std::string& source) {
                 offset = static_cast<int32_t>(it->second) - static_cast<int32_t>(idx + 1);
             }
             result.words.push_back(enc_i(branch_map.at(mn), *rs, *rt,
-                                          static_cast<uint16_t>(static_cast<int16_t>(offset))));
+                                         static_cast<uint16_t>(static_cast<int16_t>(offset))));
             continue;
         }
 
         // ── j jal target_or_label ─────────────────────────────────────────────
         const std::unordered_map<std::string, uint8_t> jump_map = {
-            {"j",0x02},{"jal",0x03},
+            {"j", 0x02},
+            {"jal", 0x03},
         };
         if (jump_map.count(mn)) {
             if (!need(1)) return err("expected target");
             uint32_t target = 0;
-            auto imm = parse_imm(ops[0]);
+            auto     imm    = parse_imm(ops[0]);
             if (imm) {
                 target = static_cast<uint32_t>(*imm);
             } else {
                 auto it = labels.find(ops[0]);
                 if (it == labels.end()) return err("undefined label '" + ops[0] + "'");
-                target = it->second; // word index; IProcessor::load_program handles byte address
+                target = it->second;  // word index; IProcessor::load_program handles byte address
             }
             result.words.push_back(enc_j(jump_map.at(mn), target));
             continue;
@@ -363,4 +365,4 @@ AssemblerResult assemble(const std::string& source) {
     return result;
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

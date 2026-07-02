@@ -21,30 +21,35 @@ using namespace mips;
 
 static int g_passed = 0, g_failed = 0;
 
-#define CHECK(expr)                                                            \
-    do {                                                                       \
-        if (expr) { ++g_passed; }                                              \
-        else { ++g_failed;                                                     \
-            std::printf("  FAIL %s:%d  %s\n", __FILE__, __LINE__, #expr); }    \
+#define CHECK(expr)                                                                                \
+    do {                                                                                           \
+        if (expr) {                                                                                \
+            ++g_passed;                                                                            \
+        } else {                                                                                   \
+            ++g_failed;                                                                            \
+            std::printf("  FAIL %s:%d  %s\n", __FILE__, __LINE__, #expr);                          \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_EQ(a, b)                                                         \
-    do {                                                                       \
-        const auto va_ = (a); const auto vb_ = (b);                            \
-        if (va_ == vb_) { ++g_passed; }                                        \
-        else { ++g_failed;                                                     \
-            std::printf("  FAIL %s:%d  %s != %s\n",                            \
-                        __FILE__, __LINE__, #a, #b); }                         \
+#define CHECK_EQ(a, b)                                                                             \
+    do {                                                                                           \
+        const auto va_ = (a);                                                                      \
+        const auto vb_ = (b);                                                                      \
+        if (va_ == vb_) {                                                                          \
+            ++g_passed;                                                                            \
+        } else {                                                                                   \
+            ++g_failed;                                                                            \
+            std::printf("  FAIL %s:%d  %s != %s\n", __FILE__, __LINE__, #a, #b);                   \
+        }                                                                                          \
     } while (0)
 
 // ── Encoding helpers (H&H Appendix B) ─────────────────────────────────────────
 static uint32_t enc_r(uint8_t rs, uint8_t rt, uint8_t rd, uint8_t sh, uint8_t funct) {
-    return (0u << 26) | (uint32_t(rs) << 21) | (uint32_t(rt) << 16)
-         | (uint32_t(rd) << 11) | (uint32_t(sh) << 6) | uint32_t(funct);
+    return (0u << 26) | (uint32_t(rs) << 21) | (uint32_t(rt) << 16) | (uint32_t(rd) << 11) |
+           (uint32_t(sh) << 6) | uint32_t(funct);
 }
 static uint32_t enc_i(uint8_t op, uint8_t rs, uint8_t rt, uint16_t imm) {
-    return (uint32_t(op) << 26) | (uint32_t(rs) << 21) | (uint32_t(rt) << 16)
-         | uint32_t(imm);
+    return (uint32_t(op) << 26) | (uint32_t(rs) << 21) | (uint32_t(rt) << 16) | uint32_t(imm);
 }
 static uint32_t enc_j(uint8_t op, uint32_t target) {
     return (uint32_t(op) << 26) | (target & 0x03FF'FFFFu);
@@ -89,11 +94,9 @@ static void test_disasm_itype() {
 
 static void test_disasm_jtype() {
     // j 0x00400000 : target<<2 = 0x00400000 ⇒ target = 0x00100000, op J=0x02
-    CHECK_EQ(dis(enc_j(0x02, 0x0010'0000u), 0x0040'0000u),
-             std::string("j 0x00400000"));
+    CHECK_EQ(dis(enc_j(0x02, 0x0010'0000u), 0x0040'0000u), std::string("j 0x00400000"));
     // jal target, high nibble taken from PC+4
-    CHECK_EQ(dis(enc_j(0x03, 0x0010'0000u), 0x0040'0000u),
-             std::string("jal 0x00400000"));
+    CHECK_EQ(dis(enc_j(0x03, 0x0010'0000u), 0x0040'0000u), std::string("jal 0x00400000"));
 }
 
 static void test_disasm_undecodable() {
@@ -104,7 +107,7 @@ static void test_disasm_undecodable() {
 // ── Program-loader tests ──────────────────────────────────────────────────────
 static void test_loader_basic() {
     std::istringstream in("0x00000020\n0xDEADBEEF\n08\n");
-    const HexProgram p = parse_hex_program(in);
+    const HexProgram   p = parse_hex_program(in);
     CHECK(p.ok());
     CHECK_EQ(p.words.size(), std::size_t{3});
     CHECK_EQ(p.words[0], 0x0000'0020u);
@@ -118,7 +121,7 @@ static void test_loader_comments_and_blanks() {
                           "  0x10   # inline comment\n"
                           "   \n"
                           "20\n");
-    const HexProgram p = parse_hex_program(in);
+    const HexProgram   p = parse_hex_program(in);
     CHECK(p.ok());
     CHECK_EQ(p.words.size(), std::size_t{2});
     CHECK_EQ(p.words[0], 0x10u);
@@ -129,7 +132,7 @@ static void test_loader_bad_hex_reports_line() {
     std::istringstream in("0x01\n"
                           "not_hex\n"
                           "0x03\n");
-    const HexProgram p = parse_hex_program(in);
+    const HexProgram   p = parse_hex_program(in);
     CHECK(!p.ok());
     CHECK(p.words.empty());
     CHECK(p.error.has_value());
@@ -139,13 +142,13 @@ static void test_loader_bad_hex_reports_line() {
 static void test_loader_trailing_garbage_rejected() {
     // "12xy" must not silently parse as 0x12 — the whole token must be hex.
     std::istringstream in("12xy\n");
-    const HexProgram p = parse_hex_program(in);
+    const HexProgram   p = parse_hex_program(in);
     CHECK(!p.ok());
 }
 
 static void test_loader_empty_is_valid() {
     std::istringstream in("# only comments\n\n");
-    const HexProgram p = parse_hex_program(in);
+    const HexProgram   p = parse_hex_program(in);
     CHECK(p.ok());
     CHECK(p.words.empty());
 }

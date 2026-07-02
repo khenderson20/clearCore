@@ -12,21 +12,21 @@ namespace mips {
 // The control() function is the bridge between a DecodedInstr and one of these.
 // H&H calls this the "4-bit ALU control signal" (§7.3, Figure 7.10).
 enum class AluOp : uint8_t {
-    ADD,    // Signed addition   — sets overflow flag on signed overflow
-    ADDU,   // Unsigned addition — overflow flag always false
-    SUB,    // Signed subtraction — sets overflow flag
-    SUBU,   // Unsigned subtraction — overflow flag always false
+    ADD,   // Signed addition   — sets overflow flag on signed overflow
+    ADDU,  // Unsigned addition — overflow flag always false
+    SUB,   // Signed subtraction — sets overflow flag
+    SUBU,  // Unsigned subtraction — overflow flag always false
     AND,
     OR,
     XOR,
     NOR,
-    SLT,    // Set if a < b (signed)   → result is 0 or 1
-    SLTU,   // Set if a < b (unsigned) → result is 0 or 1
-    SLL,    // Shift left logical:           b << shamt
-    SRL,    // Shift right logical (zero):   b >> shamt
-    SRA,    // Shift right arithmetic (sign): b >> shamt, sign-extending
-    LUI,    // Load upper immediate: b << 16  (operand a is unused)
-    PASS_A, // Pass a through unchanged — used by JR and JALR
+    SLT,     // Set if a < b (signed)   → result is 0 or 1
+    SLTU,    // Set if a < b (unsigned) → result is 0 or 1
+    SLL,     // Shift left logical:           b << shamt
+    SRL,     // Shift right logical (zero):   b >> shamt
+    SRA,     // Shift right arithmetic (sign): b >> shamt, sign-extending
+    LUI,     // Load upper immediate: b << 16  (operand a is unused)
+    PASS_A,  // Pass a through unchanged — used by JR and JALR
 };
 
 // ─── ALU result ───────────────────────────────────────────────────────────────
@@ -51,10 +51,7 @@ public:
     //           SLL/SRL/SRA  → instr.r().shamt  (instruction field [10:6])
     //           SLLV/SRLV    → reg[rs] & 0x1F   (lower 5 bits of rs register)
     //         The ALU itself just shifts by whatever value it receives.
-    [[nodiscard]] static AluResult execute(AluOp   op,
-                                           uint32_t a,
-                                           uint32_t b,
-                                           uint8_t  shamt = 0);
+    [[nodiscard]] static AluResult execute(AluOp op, uint32_t a, uint32_t b, uint8_t shamt = 0);
 
     // ALU control block — maps a decoded instruction to an AluOp.
     //
@@ -66,4 +63,4 @@ public:
     [[nodiscard]] static std::optional<AluOp> control(const DecodedInstr& instr);
 };
 
-} // namespace mips
+}  // namespace mips

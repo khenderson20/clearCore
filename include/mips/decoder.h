@@ -14,7 +14,7 @@ enum class InstrFormat : uint8_t { R, I, J, Unknown };
 
 // ─── Opcode field [31:26] ─────────────────────────────────────────────────────
 enum class Opcode : uint8_t {
-    SPECIAL = 0x00,   // R-type: dispatch further on funct [5:0]
+    SPECIAL = 0x00,  // R-type: dispatch further on funct [5:0]
     J       = 0x02,
     JAL     = 0x03,
     BEQ     = 0x04,
@@ -79,9 +79,9 @@ struct JFields {
 // ─── Decoded instruction ──────────────────────────────────────────────────────
 
 struct DecodedInstr {
-    uint32_t    raw    = 0;                    // Original 32-bit word — preserved for TUI display
-    Opcode      opcode = Opcode::SPECIAL;      // [31:26]
-    InstrFormat format = InstrFormat::Unknown; // Derived from opcode
+    uint32_t    raw    = 0;                     // Original 32-bit word — preserved for TUI display
+    Opcode      opcode = Opcode::SPECIAL;       // [31:26]
+    InstrFormat format = InstrFormat::Unknown;  // Derived from opcode
 
     // std::variant enforces which field struct is active.
     // Accessing the wrong member throws std::bad_variant_access, making
@@ -117,10 +117,9 @@ private:
     // Extract bits [hi:lo] from a 32-bit word.
     // Models the wire taps on a datapath schematic: point at a field,
     // get back the integer it holds.
-    [[nodiscard]] static constexpr uint32_t bits(uint32_t word,
-                                                  int hi, int lo) noexcept {
+    [[nodiscard]] static constexpr uint32_t bits(uint32_t word, int hi, int lo) noexcept {
         return (word >> lo) & ((1u << (hi - lo + 1)) - 1);
     }
 };
 
-} // namespace mips
+}  // namespace mips

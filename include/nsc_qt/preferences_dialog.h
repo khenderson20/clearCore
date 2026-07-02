@@ -18,9 +18,9 @@ public:
     void loadSettings();
     void saveSettings();
 
-    [[nodiscard]] bool isDarkMode()          const noexcept;
-    [[nodiscard]] int  executionSpeed()      const noexcept;
-    [[nodiscard]] int  fontSize()            const noexcept;
+    [[nodiscard]] bool isDarkMode() const noexcept;
+    [[nodiscard]] int  executionSpeed() const noexcept;
+    [[nodiscard]] int  fontSize() const noexcept;
     [[nodiscard]] bool showRegisterAliases() const noexcept;
 
 signals:
@@ -40,4 +40,4 @@ private:
     QCheckBox*    alias_check_  = nullptr;
 };
 
-} // namespace nsc::qt
+}  // namespace nsc::qt

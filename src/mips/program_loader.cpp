@@ -8,16 +8,15 @@
 namespace mips {
 
 HexProgram parse_hex_program(std::istream& in) {
-    HexProgram out;
+    HexProgram  out;
     std::string line;
-    int n = 0;
+    int         n = 0;
 
     while (std::getline(in, line)) {
         ++n;
 
         // Strip trailing comment.
-        if (const auto cp = line.find('#'); cp != std::string::npos)
-            line.erase(cp);
+        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
 
         // Strip all whitespace.
         std::string clean;
@@ -28,8 +27,8 @@ HexProgram parse_hex_program(std::istream& in) {
         if (clean.empty()) continue;
 
         try {
-            std::size_t used = 0;
-            const unsigned long v = std::stoul(clean, &used, 16);
+            std::size_t         used = 0;
+            const unsigned long v    = std::stoul(clean, &used, 16);
             if (used != clean.size()) {
                 out.words.clear();
                 out.error = std::format("Bad hex on line {}", n);
@@ -42,7 +41,7 @@ HexProgram parse_hex_program(std::istream& in) {
             return out;
         }
     }
-    return out;   // error == nullopt ⇒ success (an empty program is valid)
+    return out;  // error == nullopt ⇒ success (an empty program is valid)
 }
 
 HexProgram load_hex_file(const std::string& path) {
@@ -55,4 +54,4 @@ HexProgram load_hex_file(const std::string& path) {
     return parse_hex_program(f);
 }
 
-} // namespace mips
+}  // namespace mips

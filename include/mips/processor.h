@@ -29,14 +29,14 @@ namespace mips {
 // Derived purely from opcode+funct (H&H Figure 7.11). Both implementations
 // produce one of these per instruction; the TUI can render it per cycle.
 struct Control {
-    bool reg_write  = false;
-    bool mem_read   = false;
-    bool mem_write  = false;
-    bool mem_to_reg = false;
-    bool alu_src    = false;
-    bool reg_dst    = false;
-    bool branch     = false;
-    bool jump       = false;
+    bool reg_write                              = false;
+    bool mem_read                               = false;
+    bool mem_write                              = false;
+    bool mem_to_reg                             = false;
+    bool alu_src                                = false;
+    bool reg_dst                                = false;
+    bool branch                                 = false;
+    bool jump                                   = false;
     enum class Ext : uint8_t { Sign, Zero } ext = Ext::Sign;
 };
 
@@ -58,12 +58,12 @@ enum class StepResult : uint8_t {
 // forwarding-wire annotations from Arches (Haydel et al., 2025).
 
 struct StageSnapshot {
-    const char* name    = "";      // "IF", "ID", "EX", "MEM", "WB"
-    bool        valid   = false;   // real instruction present
-    bool        stalled = false;   // bubble from a load-use stall
-    bool        flushed = false;   // bubble from a branch/jump flush
-    uint32_t    pc      = 0;       // PC of the instruction in this stage
-    uint32_t    raw     = 0;       // raw 32-bit word (for mnemonic display)
+    const char* name    = "";     // "IF", "ID", "EX", "MEM", "WB"
+    bool        valid   = false;  // real instruction present
+    bool        stalled = false;  // bubble from a load-use stall
+    bool        flushed = false;  // bubble from a branch/jump flush
+    uint32_t    pc      = 0;      // PC of the instruction in this stage
+    uint32_t    raw     = 0;      // raw 32-bit word (for mnemonic display)
 };
 
 struct PipelineState {
@@ -77,8 +77,8 @@ struct PipelineState {
     bool fwd_mem_to_ex_b = false;
 
     // Hazard indicators
-    bool load_stall    = false;
-    bool branch_flush  = false;
+    bool load_stall   = false;
+    bool branch_flush = false;
 
     std::size_t cycle = 0;
 };
@@ -90,7 +90,7 @@ public:
 
     // Load a flat array of 32-bit instruction words at `addr`, reset the PC.
     [[nodiscard]] virtual bool load_program(const std::vector<uint32_t>& words,
-                                            uint32_t addr = 0) = 0;
+                                            uint32_t                     addr = 0) = 0;
 
     // Advance exactly one clock cycle (or one instruction for single-cycle).
     [[nodiscard]] virtual StepResult step() = 0;
@@ -112,24 +112,24 @@ public:
 
     // ── Accessors ──────────────────────────────────────────────────────────────
 
-    [[nodiscard]] virtual uint32_t             pc()            const noexcept = 0;
-    virtual void                               set_pc(uint32_t) noexcept = 0;
+    [[nodiscard]] virtual uint32_t pc() const noexcept       = 0;
+    virtual void                   set_pc(uint32_t) noexcept = 0;
 
-    [[nodiscard]] virtual const RegisterFile&  regs()          const noexcept = 0;
-    [[nodiscard]] virtual       RegisterFile&  regs()                noexcept = 0;
+    [[nodiscard]] virtual const RegisterFile& regs() const noexcept = 0;
+    [[nodiscard]] virtual RegisterFile&       regs() noexcept       = 0;
 
-    [[nodiscard]] virtual const Memory&        mem()           const noexcept = 0;
-    [[nodiscard]] virtual       Memory&        mem()                 noexcept = 0;
+    [[nodiscard]] virtual const Memory& mem() const noexcept = 0;
+    [[nodiscard]] virtual Memory&       mem() noexcept       = 0;
 
     // Control word of the last instruction that committed in WB.
-    [[nodiscard]] virtual const Control&       last_control()  const noexcept = 0;
+    [[nodiscard]] virtual const Control& last_control() const noexcept = 0;
 
     // Number of clock cycles elapsed since the last reset().
-    [[nodiscard]] virtual std::size_t          cycle_count()   const noexcept = 0;
+    [[nodiscard]] virtual std::size_t cycle_count() const noexcept = 0;
 
     // Snapshot of all five pipeline stages from the most recent step().
     // SingleCycleCpu only populates stages[2] (EX); PipelinedCpu fills all five.
     [[nodiscard]] virtual const PipelineState& pipeline_state() const noexcept = 0;
 };
 
-} // namespace mips
+}  // namespace mips

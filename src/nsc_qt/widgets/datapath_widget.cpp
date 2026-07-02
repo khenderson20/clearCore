@@ -1,7 +1,7 @@
 #include "nsc_qt/widgets/datapath_widget.h"
-#include "nsc_qt/ui_scale.h"
 #include "mips/decoder.h"
 #include "mips/registers.h"
+#include "nsc_qt/ui_scale.h"
 
 #include <QContextMenuEvent>
 #include <QDialog>
@@ -31,11 +31,7 @@ static const QColor STAGE_COLORS_LIGHT[5] = {
     QColor("#FFEBEE"),  // WB  – light pink/red
 };
 static const QColor STAGE_COLORS_DARK[5] = {
-    QColor("#0D47A1"),
-    QColor("#006064"),
-    QColor("#1B5E20"),
-    QColor("#F57F17"),
-    QColor("#B71C1C"),
+    QColor("#0D47A1"), QColor("#006064"), QColor("#1B5E20"), QColor("#F57F17"), QColor("#B71C1C"),
 };
 
 static const char* STAGE_NAMES[5] = {"IF", "ID", "EX", "MEM", "WB"};
@@ -47,8 +43,8 @@ static std::string format_instr(uint32_t raw) {
     using namespace mips;
     auto decoded = Decoder::decode(raw);
     if (!decoded) return "(?/?)";
-    const auto& d = *decoded;
-    std::string mn = std::string(Decoder::mnemonic(d));
+    const auto&        d  = *decoded;
+    std::string        mn = std::string(Decoder::mnemonic(d));
     std::ostringstream os;
     os << mn << " ";
     switch (d.format) {
@@ -57,39 +53,33 @@ static std::string format_instr(uint32_t raw) {
         if (d.opcode == Opcode::SPECIAL) {
             using F = FunctCode;
             if (r.funct == F::SLL || r.funct == F::SRL || r.funct == F::SRA) {
-                os << "$" << register_abi_name(r.rd)
-                   << ", $" << register_abi_name(r.rt)
-                   << ", " << +r.shamt;
+                os << "$" << register_abi_name(r.rd) << ", $" << register_abi_name(r.rt) << ", "
+                   << +r.shamt;
             } else if (r.funct == F::JR) {
                 os << "$" << register_abi_name(r.rs);
             } else if (r.funct == F::JALR) {
-                os << "$" << register_abi_name(r.rd)
-                   << ", $" << register_abi_name(r.rs);
+                os << "$" << register_abi_name(r.rd) << ", $" << register_abi_name(r.rs);
             } else {
-                os << "$" << register_abi_name(r.rd)
-                   << ", $" << register_abi_name(r.rs)
-                   << ", $" << register_abi_name(r.rt);
+                os << "$" << register_abi_name(r.rd) << ", $" << register_abi_name(r.rs) << ", $"
+                   << register_abi_name(r.rt);
             }
         }
         break;
     }
     case InstrFormat::I: {
         const auto& i = d.i();
-        if (d.opcode == Opcode::LW || d.opcode == Opcode::LBU ||
-            d.opcode == Opcode::LHU || d.opcode == Opcode::SW) {
-            os << "$" << register_abi_name(i.rt) << ", " << static_cast<int16_t>(i.imm)
-               << "($" << register_abi_name(i.rs) << ")";
+        if (d.opcode == Opcode::LW || d.opcode == Opcode::LBU || d.opcode == Opcode::LHU ||
+            d.opcode == Opcode::SW) {
+            os << "$" << register_abi_name(i.rt) << ", " << static_cast<int16_t>(i.imm) << "($"
+               << register_abi_name(i.rs) << ")";
         } else if (d.opcode == Opcode::LUI) {
-            os << "$" << register_abi_name(i.rt)
-               << ", 0x" << std::hex << i.imm;
+            os << "$" << register_abi_name(i.rt) << ", 0x" << std::hex << i.imm;
         } else if (d.opcode == Opcode::BEQ || d.opcode == Opcode::BNE) {
-            os << "$" << register_abi_name(i.rs)
-               << ", $" << register_abi_name(i.rt)
-               << ", " << static_cast<int16_t>(i.imm);
+            os << "$" << register_abi_name(i.rs) << ", $" << register_abi_name(i.rt) << ", "
+               << static_cast<int16_t>(i.imm);
         } else {
-            os << "$" << register_abi_name(i.rt)
-               << ", $" << register_abi_name(i.rs)
-               << ", " << static_cast<int16_t>(i.imm);
+            os << "$" << register_abi_name(i.rt) << ", $" << register_abi_name(i.rs) << ", "
+               << static_cast<int16_t>(i.imm);
         }
         break;
     }
@@ -98,16 +88,15 @@ static std::string format_instr(uint32_t raw) {
         os << "0x" << std::hex << j.target;
         break;
     }
-    default: break;
+    default:
+        break;
     }
     return os.str();
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
-DatapathWidget::DatapathWidget(QWidget* parent)
-    : QOpenGLWidget(parent)
-{
+DatapathWidget::DatapathWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setMinimumSize(5 * BOX_W_MIN + 4 * GAP_MIN + 40, BOX_H_MIN + 120);
 
     // Keyboard access: Left/Right select a stage, Enter opens stage detail,
@@ -116,36 +105,30 @@ DatapathWidget::DatapathWidget(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
 }
 
-void DatapathWidget::setPipelineState(const mips::PipelineState& state)
-{
+void DatapathWidget::setPipelineState(const mips::PipelineState& state) {
     state_ = state;
     update();
 }
 
-void DatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>& bps)
-{
+void DatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>& bps) {
     breakpoints_ = bps;
     update();
 }
 
-void DatapathWidget::setDarkMode(bool dark)
-{
+void DatapathWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
     update();
 }
 
-void DatapathWidget::initializeGL()
-{
+void DatapathWidget::initializeGL() {
     initializeOpenGLFunctions();
 }
 
-void DatapathWidget::resizeGL(int w, int h)
-{
+void DatapathWidget::resizeGL(int w, int h) {
     glViewport(0, 0, w, h);
 }
 
-void DatapathWidget::paintGL()
-{
+void DatapathWidget::paintGL() {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
@@ -180,64 +163,60 @@ void DatapathWidget::paintGL()
         drawStageBox(p, i, state_.stages[static_cast<std::size_t>(i)]);
 
     // Keyboard focus ring, drawn last so it sits above everything else.
-    if (hasFocus())
-        drawFocusRing(p, selected_stage_);
+    if (hasFocus()) drawFocusRing(p, selected_stage_);
 
     // Forwarding legend at bottom-left when active
-    const bool has_fwd = state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b
-                      || state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b;
+    const bool has_fwd = state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b || state_.fwd_mem_to_ex_a ||
+                         state_.fwd_mem_to_ex_b;
     if (has_fwd) {
         const int lx = 8, ly = height() - 40;
         p.setFont(scale::monoFont(scale::kFontSizeDense, true));
         p.setPen(QColor("#FF6F00"));
-        p.drawText(lx, ly,      tr("── EX/MEM→EX forwarding"));
+        p.drawText(lx, ly, tr("── EX/MEM→EX forwarding"));
         p.setPen(QColor("#7B1FA2"));
         p.drawText(lx, ly + 18, tr("── MEM/WB→EX forwarding"));
     }
 }
 
-QRect DatapathWidget::stageRect(int idx) const
-{
+QRect DatapathWidget::stageRect(int idx) const {
     constexpr int MARGIN_X = 24;
-    constexpr int TITLE_H  = 32;   // title bar + separator
-    constexpr int BOTTOM_H = 48;   // legend + padding
+    constexpr int TITLE_H  = 32;  // title bar + separator
+    constexpr int BOTTOM_H = 48;  // legend + padding
 
     const int avail_w = width() - 2 * MARGIN_X;
     const int avail_h = height() - TITLE_H - BOTTOM_H;
 
     // Gap scales: ~4.5% of available width per gap, min 16px
-    const int gap   = std::max(GAP_MIN, avail_w / 22);
+    const int gap = std::max(GAP_MIN, avail_w / 22);
     // Box width fills remaining space equally across 5 stages
     const int box_w = std::max(BOX_W_MIN, (avail_w - 4 * gap) / 5);
     // Height: 80% of box width, clamped so it fits vertically
     const int box_h = std::clamp(box_w * 4 / 5, BOX_H_MIN, avail_h);
 
     const int total_w = 5 * box_w + 4 * gap;
-    const int x0 = (width() - total_w) / 2;
+    const int x0      = (width() - total_w) / 2;
     // Centre vertically in the available space below the title bar
     const int y0 = TITLE_H + (avail_h - box_h) / 2;
 
     return {x0 + idx * (box_w + gap), y0, box_w, box_h};
 }
 
-int DatapathWidget::stageAtPos(QPoint pos) const
-{
+int DatapathWidget::stageAtPos(QPoint pos) const {
     for (int i = 0; i < 5; ++i)
         if (stageRect(i).contains(pos)) return i;
     return -1;
 }
 
-void DatapathWidget::drawFlowArrows(QPainter& p) const
-{
+void DatapathWidget::drawFlowArrows(QPainter& p) const {
     const QColor shaft_color = dark_mode_ ? QColor(0x55, 0x55, 0x55) : QColor(0xBB, 0xBB, 0xBB);
     p.setBrush(shaft_color);
 
     for (int i = 0; i < 4; ++i) {
         const QRect left  = stageRect(i);
         const QRect right = stageRect(i + 1);
-        const int y  = left.center().y();
-        const int x1 = left.right()  + 2;
-        const int x2 = right.left()  - 2;
+        const int   y     = left.center().y();
+        const int   x1    = left.right() + 2;
+        const int   x2    = right.left() - 2;
 
         // Shaft
         p.setPen(QPen(shaft_color, 2));
@@ -245,7 +224,7 @@ void DatapathWidget::drawFlowArrows(QPainter& p) const
 
         // Arrowhead
         const QPoint head[3] = {
-            QPoint(x2,     y),
+            QPoint(x2, y),
             QPoint(x2 - 8, y - 5),
             QPoint(x2 - 8, y + 5),
         };
@@ -254,13 +233,12 @@ void DatapathWidget::drawFlowArrows(QPainter& p) const
     }
 }
 
-void DatapathWidget::drawStageBox(QPainter& p, int idx,
-                                   const mips::StageSnapshot& snap) const
-{
-    const QRect r = stageRect(idx);
+void DatapathWidget::drawStageBox(QPainter& p, int idx, const mips::StageSnapshot& snap) const {
+    const QRect   r           = stageRect(idx);
     const QColor& stage_color = dark_mode_ ? STAGE_COLORS_DARK[idx] : STAGE_COLORS_LIGHT[idx];
-    const QColor  box_bg = snap.valid ? stage_color
-                         : (dark_mode_ ? QColor(0x2C,0x2C,0x2C) : QColor(0xE8,0xE8,0xE8));
+    const QColor  box_bg = snap.valid
+                               ? stage_color
+                               : (dark_mode_ ? QColor(0x2C, 0x2C, 0x2C) : QColor(0xE8, 0xE8, 0xE8));
 
     // Drop shadow (subtle)
     p.setPen(Qt::NoPen);
@@ -269,11 +247,11 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
 
     // Box fill
     p.setBrush(box_bg);
-    p.setPen(QPen(dark_mode_ ? QColor(0x55,0x55,0x55) : QColor(0xBB,0xBB,0xBB), 1));
+    p.setPen(QPen(dark_mode_ ? QColor(0x55, 0x55, 0x55) : QColor(0xBB, 0xBB, 0xBB), 1));
     p.drawRoundedRect(r, 6, 6);
 
     // ── Header band ────────────────────────────────────────────────────────────
-    const int header_h = std::max(24, r.height() / 4);
+    const int   header_h = std::max(24, r.height() / 4);
     const QRect header_r(r.x(), r.y(), r.width(), header_h);
 
     // Clip to box so rounded corners at top are preserved
@@ -281,9 +259,9 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
     clip.addRoundedRect(r, 6, 6);
     p.setClipPath(clip);
 
-    const QColor header_bg = snap.valid
-        ? (dark_mode_ ? stage_color.darker(160) : stage_color.darker(120))
-        : (dark_mode_ ? QColor(0x22,0x22,0x22) : QColor(0xD8,0xD8,0xD8));
+    const QColor header_bg =
+        snap.valid ? (dark_mode_ ? stage_color.darker(160) : stage_color.darker(120))
+                   : (dark_mode_ ? QColor(0x22, 0x22, 0x22) : QColor(0xD8, 0xD8, 0xD8));
     p.fillRect(header_r, header_bg);
     p.setClipping(false);
 
@@ -296,10 +274,12 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
 
     // ── Inactive state ─────────────────────────────────────────────────────────
     if (!snap.valid) {
-        p.setPen(dark_mode_ ? QColor(0x66,0x66,0x66) : QColor(0xAA,0xAA,0xAA));
+        p.setPen(dark_mode_ ? QColor(0x66, 0x66, 0x66) : QColor(0xAA, 0xAA, 0xAA));
         p.setFont(scale::monoFont(std::max(scale::kFontSizeDense, r.width() / 18)));
         p.drawText(r.adjusted(0, header_h, 0, 0), Qt::AlignCenter,
-                   snap.stalled ? tr("STALL") : snap.flushed ? tr("FLUSH") : tr("---"));
+                   snap.stalled   ? tr("STALL")
+                   : snap.flushed ? tr("FLUSH")
+                                  : tr("---"));
         return;
     }
 
@@ -309,41 +289,38 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
     const int body_font_sz = std::max(scale::kFontSizeDense, r.width() / 18);
 
     // PC label
-    p.setPen(dark_mode_ ? QColor(0x9C,0xDC,0xFE) : QColor(0x00,0x52,0x9B));
+    p.setPen(dark_mode_ ? QColor(0x9C, 0xDC, 0xFE) : QColor(0x00, 0x52, 0x9B));
     p.setFont(scale::monoFont(body_font_sz));
     p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 18),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               tr("PC: 0x%1").arg(snap.pc, 8, 16, QChar('0')));
+               Qt::AlignLeft | Qt::AlignVCenter, tr("PC: 0x%1").arg(snap.pc, 8, 16, QChar('0')));
 
     // Stall/Flush badge (top-right corner of content)
     if (snap.stalled || snap.flushed) {
         p.setPen(snap.stalled ? QColor("#E65100") : QColor("#880E4F"));
         p.setFont(scale::monoFont(body_font_sz, true));
         p.drawText(QRect(r.x() + content_pad, content_top, r.width() - content_pad * 2, 18),
-                   Qt::AlignRight | Qt::AlignVCenter,
-                   snap.stalled ? tr("STALL") : tr("FLUSH"));
+                   Qt::AlignRight | Qt::AlignVCenter, snap.stalled ? tr("STALL") : tr("FLUSH"));
     }
 
     // Decoded instruction text (assembly notation -- not translated, see format_instr)
     if (snap.raw != 0) {
         const std::string decoded = format_instr(snap.raw);
-        p.setPen(dark_mode_ ? QColor(0xE0,0xE0,0xE0) : QColor(0x1A,0x1A,0x1A));
+        p.setPen(dark_mode_ ? QColor(0xE0, 0xE0, 0xE0) : QColor(0x1A, 0x1A, 0x1A));
         p.setFont(scale::monoFont(body_font_sz));
-        p.drawText(
-            QRect(r.x() + content_pad, content_top + 20,
-                  r.width() - content_pad * 2, r.bottom() - content_top - 24),
-            Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
-            QString::fromStdString(decoded));
+        p.drawText(QRect(r.x() + content_pad, content_top + 20, r.width() - content_pad * 2,
+                         r.bottom() - content_top - 24),
+                   Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
+                   QString::fromStdString(decoded));
     }
 
     // Breakpoint indicator: a red ring with a punched-out center ("bullseye"),
     // not a plain filled dot -- gives the marker a shape distinct from any
     // other color-coded element in this widget (audit Warning: color-only cue).
     if (breakpoints_.count(snap.pc)) {
-        const int outer = 14, inner = 6;
+        const int    outer = 14, inner = 6;
         const QPoint c(r.right() - outer / 2 - 5, r.y() + 5 + outer / 2);
         p.setBrush(QColor("#E53935"));
-        p.setPen(QPen(dark_mode_ ? QColor(0xAA,0x00,0x00) : Qt::darkRed, 1));
+        p.setPen(QPen(dark_mode_ ? QColor(0xAA, 0x00, 0x00) : Qt::darkRed, 1));
         p.drawEllipse(c, outer / 2, outer / 2);
         p.setPen(Qt::NoPen);
         p.setBrush(box_bg);
@@ -351,16 +328,15 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx,
     }
 }
 
-void DatapathWidget::drawForwardingArrows(QPainter& p) const
-{
+void DatapathWidget::drawForwardingArrows(QPainter& p) const {
     // Draw an arc above the pipeline boxes for each active forwarding path.
     auto drawArc = [&](int from_idx, int to_idx, const QColor& color) {
-        const QRect from_r = stageRect(from_idx);
-        const QRect to_r   = stageRect(to_idx);
-        const int arc_y    = from_r.top() - 10;
+        const QRect  from_r = stageRect(from_idx);
+        const QRect  to_r   = stageRect(to_idx);
+        const int    arc_y  = from_r.top() - 10;
         const QPoint start(from_r.center().x(), arc_y);
-        const QPoint end(to_r.center().x(),     arc_y);
-        const int lift = std::max(20, (from_r.top() - 34) / 2);
+        const QPoint end(to_r.center().x(), arc_y);
+        const int    lift = std::max(20, (from_r.top() - 34) / 2);
 
         QPainterPath path;
         path.moveTo(start);
@@ -385,21 +361,19 @@ void DatapathWidget::drawForwardingArrows(QPainter& p) const
     };
 
     if (state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b)
-        drawArc(3, 2, QColor("#FF6F00")); // EX/MEM → EX
+        drawArc(3, 2, QColor("#FF6F00"));  // EX/MEM → EX
     if (state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b)
-        drawArc(4, 2, QColor("#7B1FA2")); // MEM/WB → EX
+        drawArc(4, 2, QColor("#7B1FA2"));  // MEM/WB → EX
 }
 
-void DatapathWidget::drawFocusRing(QPainter& p, int idx) const
-{
+void DatapathWidget::drawFocusRing(QPainter& p, int idx) const {
     const QRect r = stageRect(idx).adjusted(-4, -4, 4, 4);
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(dark_mode_ ? QColor("#4FC3F7") : QColor("#0078D4"), 2, Qt::DashLine));
     p.drawRoundedRect(r, 9, 9);
 }
 
-void DatapathWidget::mousePressEvent(QMouseEvent* ev)
-{
+void DatapathWidget::mousePressEvent(QMouseEvent* ev) {
     setFocus(Qt::MouseFocusReason);
     const int idx = stageAtPos(ev->pos());
     if (idx >= 0) {
@@ -409,8 +383,7 @@ void DatapathWidget::mousePressEvent(QMouseEvent* ev)
     QOpenGLWidget::mousePressEvent(ev);
 }
 
-void DatapathWidget::mouseDoubleClickEvent(QMouseEvent* ev)
-{
+void DatapathWidget::mouseDoubleClickEvent(QMouseEvent* ev) {
     const int idx = stageAtPos(ev->pos());
     if (idx < 0) return;
     const auto& snap = state_.stages[static_cast<std::size_t>(idx)];
@@ -418,25 +391,22 @@ void DatapathWidget::mouseDoubleClickEvent(QMouseEvent* ev)
     emit stageDetailRequested(idx, snap.pc, snap.raw);
 }
 
-void DatapathWidget::contextMenuEvent(QContextMenuEvent* ev)
-{
+void DatapathWidget::contextMenuEvent(QContextMenuEvent* ev) {
     const int idx = stageAtPos(ev->pos());
     if (idx < 0) return;
     const auto& snap = state_.stages[static_cast<std::size_t>(idx)];
     if (!snap.valid) return;
 
-    QMenu menu(this);
+    QMenu      menu(this);
     const bool has_bp = breakpoints_.count(snap.pc) > 0;
-    QAction* act = menu.addAction(has_bp ? tr("Clear Breakpoint") : tr("Set Breakpoint"));
-    if (menu.exec(ev->globalPos()) == act)
-        emit breakpointToggleRequested(snap.pc);
+    QAction*   act    = menu.addAction(has_bp ? tr("Clear Breakpoint") : tr("Set Breakpoint"));
+    if (menu.exec(ev->globalPos()) == act) emit breakpointToggleRequested(snap.pc);
 }
 
-void DatapathWidget::keyPressEvent(QKeyEvent* ev)
-{
+void DatapathWidget::keyPressEvent(QKeyEvent* ev) {
     switch (ev->key()) {
     case Qt::Key_Left:
-        selected_stage_ = (selected_stage_ + 4) % 5; // wrap backwards
+        selected_stage_ = (selected_stage_ + 4) % 5;  // wrap backwards
         update();
         ev->accept();
         return;
@@ -464,16 +434,14 @@ void DatapathWidget::keyPressEvent(QKeyEvent* ev)
     }
 }
 
-void DatapathWidget::focusInEvent(QFocusEvent* ev)
-{
+void DatapathWidget::focusInEvent(QFocusEvent* ev) {
     QOpenGLWidget::focusInEvent(ev);
-    update(); // draw the focus ring
+    update();  // draw the focus ring
 }
 
-void DatapathWidget::focusOutEvent(QFocusEvent* ev)
-{
+void DatapathWidget::focusOutEvent(QFocusEvent* ev) {
     QOpenGLWidget::focusOutEvent(ev);
-    update(); // hide the focus ring
+    update();  // hide the focus ring
 }
 
-} // namespace nsc::qt
+}  // namespace nsc::qt
