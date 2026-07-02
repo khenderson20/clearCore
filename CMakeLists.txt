@@ -536,7 +536,7 @@ endif ()
 #
 if (FUZZING_ENGINE)
     add_executable(fuzz_hex_loader tests/fuzz/fuzz_hex_loader.cpp)
-    target_link_libraries(fuzz_hex_loader PRIVATE mips_core ${FUZZING_ENGINE})
+    target_link_libraries(fuzz_hex_loader PRIVATE mips_core clearcore_warnings ${FUZZING_ENGINE})
     target_compile_features(fuzz_hex_loader PUBLIC cxx_std_20)
     message(STATUS "Fuzz targets enabled (engine: ${FUZZING_ENGINE})")
 endif ()
