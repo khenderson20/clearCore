@@ -15,6 +15,7 @@
 ![Qt6](https://img.shields.io/badge/GUI-Qt6-41CD52?style=flat-square&logo=qt&logoColor=white)
 [![CI](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml/badge.svg)](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/khenderson20/clearCore/graph/badge.svg)](https://codecov.io/gh/khenderson20/clearCore)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13466/badge)](https://www.bestpractices.dev/projects/13466)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/khenderson20/clearCore/badge)](https://scorecard.dev/viewer/?uri=github.com/khenderson20/clearCore)
 ![MIT License](https://img.shields.io/badge/license-MIT-268BD2?style=flat-square)
 ![Build](https://img.shields.io/badge/build-CMake%20%2B%20FetchContent-657B83?style=flat-square)
