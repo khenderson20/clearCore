@@ -639,7 +639,18 @@ add_test(NAME nsc_tests COMMAND nsc_tests)
 if(BUILD_QT6_UI)
     add_executable(qt_ui_test tests/qt_ui/qt_ui_test.cpp)
     set_target_properties(qt_ui_test PROPERTIES AUTOMOC ON)
-    target_link_libraries(qt_ui_test PRIVATE Qt6::Widgets)
+
+    # Needed for headers like "nsc_qt/assembler.h", "mips/pipelined_cpu.h"
+    target_include_directories(qt_ui_test PRIVATE include)
+
+    # Test uses assembler/controller/widgets + mips core types
+    target_link_libraries(qt_ui_test PRIVATE
+            Qt6::Widgets
+            mips_core
+            clearcore_warnings
+    )
+
+    target_compile_features(qt_ui_test PUBLIC cxx_std_20)
     add_test(NAME qt_ui_test COMMAND qt_ui_test)
 endif()
 
