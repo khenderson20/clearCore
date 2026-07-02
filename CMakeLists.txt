@@ -314,6 +314,20 @@ if(BUILD_QT6_UI)
             QHexView
             clearcore_warnings
     )
+
+    # Optional: KSyntaxHighlighting (MIT since KF 5.50) gives the Code Editor
+    # real MIPS assembly highlighting using Kate's syntax definitions.
+    # System package: kf6-syntax-highlighting-devel (Fedora) or
+    # libkf6syntaxhighlighting-dev (Ubuntu >= 25.10). Without it the editor
+    # is plain text, exactly as before.
+    find_package(KF6SyntaxHighlighting QUIET)
+    if(KF6SyntaxHighlighting_FOUND)
+        message(STATUS "KSyntaxHighlighting found: Code Editor gets MIPS syntax highlighting")
+        target_link_libraries(clearCore-gui PRIVATE KF6::SyntaxHighlighting)
+        target_compile_definitions(clearCore-gui PRIVATE HAVE_KSYNTAXHIGHLIGHTING)
+    else()
+        message(STATUS "KSyntaxHighlighting not found: Code Editor stays plain text")
+    endif()
 else()
     message(STATUS "Qt6 GUI disabled (set -DBUILD_QT6_UI=ON to enable)")
 endif()

@@ -145,6 +145,11 @@ jobs:
           ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
           llvm-dev zlib1g-dev
 
+      # Only packaged from Ubuntu 25.10 on; the Code Editor falls back to
+      # plain text when the CMake find_package comes up empty.
+      - name: Install KSyntaxHighlighting (optional)
+        run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
+
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2.20
         with:
