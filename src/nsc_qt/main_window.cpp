@@ -36,6 +36,8 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <array>
+#include <string>
+#include <utility>
 
 #include <DockAreaWidget.h>
 #include <DockManager.h>
@@ -141,8 +143,8 @@ void MainWindow::setupCentralWidget() {
 
     ads::CDockAreaWidget* area      = nullptr;
     const auto            add_panel = [&](const QString& title, QWidget* contents) {
-        auto* dock = new ads::CDockWidget(title);  // objectName = title (saveState key)
-        dock->setWidget(contents);
+        auto* dock = new ads::CDockWidget(dock_manager_, title);
+        dock->setObjectName(title);
         if (area == nullptr)
             area = dock_manager_->addDockWidget(ads::CenterDockWidgetArea, dock);
         else
