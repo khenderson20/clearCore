@@ -144,7 +144,7 @@ void MainWindow::setupCentralWidget() {
     ads::CDockAreaWidget* area      = nullptr;
     const auto            add_panel = [&](const QString& title, QWidget* contents) {
         auto* dock = new ads::CDockWidget(dock_manager_, title);
-        dock->setWidget(contents);
+        dock->setObjectName(title);
         if (area == nullptr)
             area = dock_manager_->addDockWidget(ads::CenterDockWidgetArea, dock);
         else
