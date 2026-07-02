@@ -1,8 +1,10 @@
 # clearCore CI — build and test on every push/PR.
 #
-# Three jobs:
+# Jobs:
 #   format     : clang-format check via cpp-linter (same .clang-format as the
 #                pre-commit hook and editors; annotates violations on PRs).
+#   coverage   : core-only build instrumented with --coverage; gcovr report
+#                uploaded to codecov.io via OIDC (no token needed).
 #   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
 #                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
 #   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
@@ -43,6 +45,43 @@ jobs:
         if: steps.linter.outputs.clang-format-checks-failed > 0
         run: exit 1
 
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # codecov OIDC upload (tokenless for public repos)
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
+
+      # No ccache here: cached objects would skip --coverage instrumentation.
+      - name: Configure with coverage
+        run: >
+          cmake --preset core-only
+          -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage
+          -DCMAKE_EXE_LINKER_FLAGS=--coverage
+
+      - name: Build
+        run: cmake --build --preset core-only
+
+      - name: Test
+        run: ctest --preset core-only
+
+      - name: Generate coverage report
+        run: >
+          gcovr --root . build/core-only
+          --filter src/ --filter include/
+          --cobertura coverage.xml --print-summary
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          use_oidc: true
+          fail_ci_if_error: false
+
   core-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -80,7 +119,8 @@ jobs:
       - name: Install dependencies
         run: >
           sudo apt-get update && sudo apt-get install -y
-          ninja-build qt6-base-dev qt6-declarative-dev llvm-dev zlib1g-dev
+          ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
+          llvm-dev zlib1g-dev
 
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1.2
