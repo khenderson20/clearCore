@@ -440,6 +440,57 @@ if(BUILD_QT6_UI)
     )
 endif()
 
+# ---- MARS golden tests: differential testing against a reference simulator ----
+# Each corpus program in tests/golden/ is assembled and executed by MARS (the
+# classroom-standard MIPS simulator, MIT licence) and by both clearCore CPU
+# models; the register files must match exactly. Requires a Java runtime and
+# Python 3 — quietly skipped when either is missing or the download fails, so
+# offline and JRE-less builds still configure.
+option(GOLDEN_TESTS "Differential tests against the MARS reference simulator" ON)
+if(GOLDEN_TESTS)
+    find_package(Java QUIET COMPONENTS Runtime)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Java_JAVA_EXECUTABLE AND Python3_EXECUTABLE)
+        set(MARS_JAR "${CMAKE_BINARY_DIR}/mars/Mars4_5.jar")
+        set(MARS_SHA256 ac340b676ba2b62246b9df77e62f81ad4447bcfd329ab539716bcd09950b7096)
+        if(NOT EXISTS "${MARS_JAR}")
+            message(STATUS "Downloading MARS 4.5.1 (reference MIPS simulator)")
+            file(DOWNLOAD
+                    https://github.com/dpetersanderson/MARS/releases/download/v.4.5.1/Mars4_5.jar
+                    "${MARS_JAR}" STATUS _mars_status)
+            list(GET _mars_status 0 _mars_rc)
+            if(NOT _mars_rc EQUAL 0)
+                file(REMOVE "${MARS_JAR}")
+            endif()
+        endif()
+        set(_mars_hash "")
+        if(EXISTS "${MARS_JAR}")
+            file(SHA256 "${MARS_JAR}" _mars_hash)
+        endif()
+        if(_mars_hash STREQUAL MARS_SHA256)
+            add_executable(golden_runner tests/golden/golden_runner.cpp)
+            target_link_libraries(golden_runner PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
+            target_compile_features(golden_runner PUBLIC cxx_std_20)
+            foreach(prog arith logic shift compare fib memdata call)
+                foreach(cpu single pipelined)
+                    add_test(NAME golden_${prog}_${cpu}
+                            COMMAND Python3::Interpreter
+                                    "${CMAKE_SOURCE_DIR}/tests/golden/run_golden.py"
+                                    --java "${Java_JAVA_EXECUTABLE}"
+                                    --mars-jar "${MARS_JAR}"
+                                    --runner $<TARGET_FILE:golden_runner>
+                                    --cpu ${cpu}
+                                    "${CMAKE_SOURCE_DIR}/tests/golden/${prog}.asm")
+                endforeach()
+            endforeach()
+        else()
+            message(STATUS "GOLDEN_TESTS: MARS jar unavailable or checksum mismatch — skipping")
+        endif()
+    else()
+        message(STATUS "GOLDEN_TESTS: Java runtime or Python3 not found — skipping")
+    endif()
+endif()
+
 # ============================================================================
 # BUILD SUMMARY
 # ============================================================================
