@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/bash -euo pipefail
 
 cmake -S "$SRC/clearCore" -B build -G Ninja \
     -DCMAKE_C_COMPILER="$CC" \
