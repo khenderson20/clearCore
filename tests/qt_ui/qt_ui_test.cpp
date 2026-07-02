@@ -109,7 +109,7 @@ static void test_controller_step_signal()
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
     // Load: addi $t0,$zero,1 (0x20080001)
-    proc->load_program({0x20080001u});
+    CHECK(proc->load_program({0x20080001u}));
 
     SimulatorController ctrl(std::move(proc));
 
@@ -133,7 +133,7 @@ static void test_controller_breakpoint()
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
     // Two nops then a halt-loop (j 0x00000002 → self-loop at word 2)
-    proc->load_program({0u, 0u, 0x08000002u});
+    CHECK(proc->load_program({0u, 0u, 0x08000002u}));
 
     SimulatorController ctrl(std::move(proc));
     ctrl.setBreakpoint(0x04); // word 1 (PC = byte address 4)
@@ -156,7 +156,7 @@ static void test_controller_reset()
     using namespace nsc::qt;
 
     auto proc = std::make_unique<mips::PipelinedCpu>();
-    proc->load_program({0x20080001u}); // addi $t0,$zero,1
+    CHECK(proc->load_program({0x20080001u})); // addi $t0,$zero,1
 
     SimulatorController ctrl(std::move(proc));
     ctrl.stepCycle();
@@ -171,6 +171,8 @@ static void test_controller_reset()
 
 static void test_register_widget_clear()
 {
+    using namespace nsc::qt;
+
     RegisterWidget rw;
     rw.clear();
     // After clear, $t0 (reg 8) should show 0
@@ -181,6 +183,8 @@ static void test_register_widget_clear()
 
 static void test_memory_widget_construct()
 {
+    using namespace nsc::qt;
+
     MemoryWidget mw;
     // Smoke test: widget constructs without crashing
     CHECK(true);
@@ -190,6 +194,8 @@ static void test_memory_widget_construct()
 
 static void test_trace_widget_clear()
 {
+    using namespace nsc::qt;
+
     PipelineTraceWidget tw;
     tw.clear();
     // Smoke test: clear doesn't crash

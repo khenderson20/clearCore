@@ -637,7 +637,20 @@ add_test(NAME nsc_tests COMMAND nsc_tests)
 
 # ---- Test: qt_ui_test (if Qt6 enabled) ----
 if(BUILD_QT6_UI)
-    add_executable(qt_ui_test tests/qt_ui/qt_ui_test.cpp)
+    # The units under test (assembler, controller, widgets) live in the
+    # clearCore-gui target, not a library, so compile them into the test too.
+    add_executable(qt_ui_test
+            tests/qt_ui/qt_ui_test.cpp
+            src/nsc_qt/assembler.cpp
+            src/nsc_qt/simulator_controller.cpp
+            src/nsc_qt/widgets/register_widget.cpp
+            src/nsc_qt/widgets/memory_widget.cpp
+            src/nsc_qt/widgets/pipeline_trace_widget.cpp
+            include/nsc_qt/simulator_controller.h            # (moc)
+            include/nsc_qt/widgets/register_widget.h         # (moc)
+            include/nsc_qt/widgets/memory_widget.h           # (moc)
+            include/nsc_qt/widgets/pipeline_trace_widget.h   # (moc)
+    )
     set_target_properties(qt_ui_test PROPERTIES AUTOMOC ON)
 
     # Needed for headers like "nsc_qt/assembler.h", "mips/pipelined_cpu.h"
@@ -652,6 +665,12 @@ if(BUILD_QT6_UI)
 
     target_compile_features(qt_ui_test PUBLIC cxx_std_20)
     add_test(NAME qt_ui_test COMMAND qt_ui_test)
+
+    # QApplication needs a windowing platform; Qt's offscreen backend lets the
+    # test run on headless machines and CI runners without a display.
+    set_tests_properties(qt_ui_test PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
 
 # ============================================================================
