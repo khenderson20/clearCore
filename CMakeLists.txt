@@ -18,6 +18,10 @@
 #   -DBUILD_NYXSTONE=ON|OFF     : Enable/disable Nyxstone assembler (default: ON)
 #   -DBUILD_QT6_UI=ON|OFF       : Build Qt6 Widgets desktop GUI (default: ON)
 #   -DBUILD_QT6_QUICK_UI=ON|OFF : Build Qt Quick (QML) desktop GUI (default: ON)
+#   -DENABLE_SANITIZERS=ON|OFF  : Build with ASan + UBSan (default: OFF)
+#
+# Presets (see CMakePresets.json):
+#   cmake --preset debug|release|asan && cmake --build --preset <name>
 #
 # Install dependencies:
 #   Fedora/RHEL:
@@ -50,6 +54,29 @@ include(FetchContent)
 
 # Enable CTest for running unit tests via `ctest`
 enable_testing()
+
+# ---- Warnings: shared interface target ----
+# Every first-party target links this; third-party FetchContent code does not,
+# so dependency warnings never pollute our build output.
+add_library(clearcore_warnings INTERFACE)
+target_compile_options(clearcore_warnings INTERFACE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -pedantic>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+)
+
+# ---- Sanitizers: memory/UB error detection for Debug and CI builds ----
+# ASan catches heap/stack overflows and use-after-free; UBSan catches signed
+# overflow, misaligned access, and other undefined behavior — both essential
+# for an emulator that does constant bit manipulation and memory indexing.
+# Applied globally (before FetchContent) so dependencies are instrumented
+# consistently; mixing sanitized and unsanitized code breaks ASan interceptors.
+option(ENABLE_SANITIZERS "Build with AddressSanitizer + UBSanitizer" OFF)
+
+if(ENABLE_SANITIZERS)
+    message(STATUS "Sanitizers enabled: address, undefined")
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 # ============================================================================
 # SYSTEM DEPENDENCIES
@@ -209,7 +236,7 @@ if(BUILD_NYXSTONE)
         # Step 2: Fetch Nyxstone from GitHub
         FetchContent_Declare(nyxstone
                 GIT_REPOSITORY "https://github.com/emproof-com/nyxstone.git"
-                GIT_TAG "main"  # Use 'main' for latest, or pin to release tag like "v0.2.0"
+                GIT_TAG "v0.1.8"  # Pinned for reproducible builds
                 GIT_SHALLOW ON
         )
 
@@ -279,6 +306,7 @@ target_link_libraries(mips_core
         Microsoft.GSL::GSL        # Type-safe wrappers (gsl::span, gsl::not_null)
         spdlog::spdlog            # Structured logging
         PRIVATE
+        clearcore_warnings        # -Wall -Wextra -pedantic
         Threads::Threads          # pthreads (if spdlog async enabled)
 )
 
@@ -324,6 +352,7 @@ target_include_directories(nsc_core PUBLIC include)
 
 target_link_libraries(nsc_core
         PUBLIC Microsoft.GSL::GSL     # Type-safe wrappers
+        PRIVATE clearcore_warnings    # -Wall -Wextra -pedantic
 )
 
 target_compile_features(nsc_core PUBLIC cxx_std_20)
@@ -349,6 +378,7 @@ target_link_libraries(nsc_ui
         Microsoft.GSL::GSL        # Type-safe wrappers
         spdlog::spdlog            # Logging
         PRIVATE
+        clearcore_warnings        # -Wall -Wextra -pedantic
         ftxui::screen             # FTXUI rendering to terminal
         ftxui::dom                # FTXUI declarative components
         ftxui::component          # FTXUI interactive elements
@@ -386,19 +416,21 @@ if(BUILD_QT6_UI)
     )
 
     if(NOT Qt6_FOUND)
-        message(FATAL_ERROR
+        # Degrade gracefully (like the Quick UI below) so headless/CI machines
+        # can still build and test the core libraries.
+        message(WARNING
                 "Qt6 not found. Install it with:\n"
                 "  Fedora/RHEL:  sudo dnf install qt6-qtbase-devel qt6-qtbase-gui\n"
                 "  Ubuntu/Debian: sudo apt install qt6-base-dev\n"
                 "  macOS:        brew install qt@6\n"
-                "Then re-run CMake, or disable with: -DBUILD_QT6_UI=OFF"
+                "Skipping clearCore-gui, or disable with -DBUILD_QT6_UI=OFF"
         )
+        set(BUILD_QT6_UI OFF)
     endif()
+endif()
 
+if(BUILD_QT6_UI)
     message(STATUS "Qt6 found: Building desktop GUI")
-
-    # Step 2: Qt6 UI code generation (moc, uic, rcc)
-    set(Qt6_AUTOGEN_ON)  # Enable automatic moc/uic/rcc
 
     add_executable(clearCore-gui
             # Core source files
@@ -450,9 +482,8 @@ if(BUILD_QT6_UI)
             Qt6::Widgets          # Widget framework
             Qt6::OpenGL           # GPU rendering
             Qt6::OpenGLWidgets    # OpenGL integration
+            clearcore_warnings    # -Wall -Wextra -pedantic
     )
-
-    target_compile_options(clearCore-gui PRIVATE -Wall -Wextra -pedantic)
 
 else()
     message(STATUS "Qt6 GUI disabled (set -DBUILD_QT6_UI=ON to enable)")
@@ -554,9 +585,8 @@ if(BUILD_QT6_QUICK_UI)
                 Qt6::Qml              # QML engine
                 Qt6::Quick            # Qt Quick scene graph
                 Qt6::QuickControls2   # QQuickStyle
+                clearcore_warnings    # -Wall -Wextra -pedantic
         )
-
-        target_compile_options(clearCore-quick PRIVATE -Wall -Wextra -pedantic)
     endif()
 else()
     message(STATUS "Qt Quick GUI disabled (set -DBUILD_QT6_QUICK_UI=ON to enable)")
@@ -572,21 +602,36 @@ endif()
 # ---- Test: decoder_test ----
 # Validates MIPS instruction decoding
 add_executable(decoder_test tests/mips/decoder_test.cpp)
-target_link_libraries(decoder_test PRIVATE mips_core Microsoft.GSL::GSL)
+target_link_libraries(decoder_test PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
 target_compile_features(decoder_test PUBLIC cxx_std_20)
 add_test(NAME decoder_test COMMAND decoder_test)
 
 # ---- Test: cpu_test ----
 # Validates CPU execution (single-cycle and pipelined models)
 add_executable(cpu_test tests/mips/cpu_test.cpp)
-target_link_libraries(cpu_test PRIVATE mips_core Microsoft.GSL::GSL)
+target_link_libraries(cpu_test PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
 target_compile_features(cpu_test PUBLIC cxx_std_20)
 add_test(NAME cpu_test COMMAND cpu_test)
+
+# ---- Test: processor_test ----
+# Validates the IProcessor contract against both concrete implementations
+# (single-cycle and pipelined) using a shared correctness harness
+add_executable(processor_test tests/mips/processor_test.cpp)
+target_link_libraries(processor_test PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
+target_compile_features(processor_test PUBLIC cxx_std_20)
+add_test(NAME processor_test COMMAND processor_test)
+
+# ---- Test: disasm_test ----
+# Validates the disassembler and the hex program loader
+add_executable(disasm_test tests/mips/disasm_test.cpp)
+target_link_libraries(disasm_test PRIVATE mips_core Microsoft.GSL::GSL clearcore_warnings)
+target_compile_features(disasm_test PUBLIC cxx_std_20)
+add_test(NAME disasm_test COMMAND disasm_test)
 
 # ---- Test: nsc_tests ----
 # Validates number system converter logic
 add_executable(nsc_tests tests/nsc/convert_test.cpp)
-target_link_libraries(nsc_tests PRIVATE nsc_core Microsoft.GSL::GSL)
+target_link_libraries(nsc_tests PRIVATE nsc_core Microsoft.GSL::GSL clearcore_warnings)
 target_compile_features(nsc_tests PUBLIC cxx_std_20)
 add_test(NAME nsc_tests COMMAND nsc_tests)
 

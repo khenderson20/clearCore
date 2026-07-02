@@ -22,7 +22,7 @@
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
 ![FTXUI](https://img.shields.io/badge/TUI-FTXUI%20v7.0.0-2AA198?style=flat-square)
 ![Qt6](https://img.shields.io/badge/GUI-Qt6-41CD52?style=flat-square&logo=qt&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-95%2F95%20passing-859900?style=flat-square)
+[![CI](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml/badge.svg)](https://github.com/khenderson20/clearCore/actions/workflows/ci.yml)
 ![MIT License](https://img.shields.io/badge/license-MIT-268BD2?style=flat-square)
 ![Build](https://img.shields.io/badge/build-CMake%20%2B%20FetchContent-657B83?style=flat-square)
 ![Linux](https://img.shields.io/badge/platform-Linux-073642?style=flat-square)
@@ -154,7 +154,19 @@ See the [screenshot gallery and tab reference](#️-qt6-desktop-gui) above.
 
 ### Build
 
-The build is fully self-contained via CMake FetchContent (FTXUI v7.0.0) — no system-wide FTXUI install required. Qt6 is a separate system dependency (see [Building the GUI](#building-the-gui) above); if you don't want to install it, configure with `-DBUILD_QT6_UI=OFF` first.
+The build is fully self-contained via CMake FetchContent (FTXUI v7.0.0) — no system-wide FTXUI install required. Qt6 is a separate system dependency (see [Building the GUI](#building-the-gui) above); if it isn't installed, the GUI targets are skipped automatically.
+
+The easiest path is a CMake preset (`debug`, `release`, `asan`, or `core-only`):
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+```
+
+- **`asan`** builds with AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`, e.g. `sudo dnf install libasan libubsan`).
+- **`core-only`** skips Qt6 and Nyxstone/LLVM entirely — fastest way to build the emulator core + TUI on a minimal machine.
+
+Manual configure still works too:
 
 ```bash
 cmake -S . -B cmake-build-debug
@@ -175,11 +187,17 @@ Prefer the desktop GUI? Build and run `clearCore-gui` instead — see [Building 
 
 ### Testing
 
-95/95 checks passing across the decoder, both CPU backends, and the converter core. The Qt6 GUI has its own smoke-test suite (`qt_ui_test`), built only when `BUILD_QT6_UI` is on.
+Five CTest suites cover the decoder, disassembler + program loader, both CPU backends (via the shared `IProcessor` contract harness), and the converter core. The Qt6 GUI has its own smoke-test suite (`qt_ui_test`), built only when `BUILD_QT6_UI` is on.
 
 ```bash
-cmake --build cmake-build-debug --target decoder_test cpu_test processor_test nsc_tests qt_ui_test
-ctest --test-dir cmake-build-debug --output-on-failure
+ctest --preset debug          # or: ctest --test-dir cmake-build-debug --output-on-failure
+ctest --preset asan           # same suites under AddressSanitizer + UBSan
+```
+
+CI (GitHub Actions) runs the core suites in Debug and ASan/UBSan configurations, plus a full Release build with both GUIs and Nyxstone, on every push and pull request. Static-analysis config lives in `.clang-tidy` and code style in `.clang-format`:
+
+```bash
+clang-tidy -p build/debug src/mips/*.cpp     # correctness-focused checks; zero findings expected
 ```
 
 ## 🧠 Technical Architecture

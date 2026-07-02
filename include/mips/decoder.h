@@ -79,9 +79,9 @@ struct JFields {
 // ─── Decoded instruction ──────────────────────────────────────────────────────
 
 struct DecodedInstr {
-    uint32_t    raw;     // Original 32-bit word — preserved for TUI display
-    Opcode      opcode;  // [31:26]
-    InstrFormat format;  // Derived from opcode
+    uint32_t    raw    = 0;                    // Original 32-bit word — preserved for TUI display
+    Opcode      opcode = Opcode::SPECIAL;      // [31:26]
+    InstrFormat format = InstrFormat::Unknown; // Derived from opcode
 
     // std::variant enforces which field struct is active.
     // Accessing the wrong member throws std::bad_variant_access, making

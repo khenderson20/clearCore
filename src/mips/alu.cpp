@@ -58,8 +58,6 @@ std::optional<AluOp> Alu::control(const DecodedInstr& instr) {
         case InstrFormat::J:
             // J and JAL form their target as { PC[31:28], target, 2'b00 }.
             // No ALU involved — the CPU stage handles it.
-            return std::nullopt;
-
         default:
             return std::nullopt;
     }

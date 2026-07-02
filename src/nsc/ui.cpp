@@ -402,8 +402,10 @@ static Element render_flow_strip(std::size_t frame, bool active) {
     // and amplitude swells while the CPU is auto-running, and settles to a slow
     // idle breathing pattern while paused/stepping, so it's lively without being
     // a distraction during step-by-step inspection.
-    static Element render_oscilloscope_panel(std::size_t frame, bool active,
-                                              std::size_t cycle_count) {
+    // Currently unreferenced: superseded as the ambient panel by the Core Pulse
+    // animation, kept as an alternative visualisation.
+    [[maybe_unused]] static Element render_oscilloscope_panel(std::size_t frame, bool active,
+                                                              std::size_t cycle_count) {
         // D: the (width, height) passed to canvas(w, h, fn) are only a minimum-
         // size *requirement hint* for FTXUI's layout pass — at actual render
         // time CanvasNodeBase rebuilds the Canvas to match whatever box this

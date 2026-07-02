@@ -31,6 +31,4 @@ cmake_install.cmake
 Makefile
 
 # Misc
-.git/
-.gitignore
 *.log

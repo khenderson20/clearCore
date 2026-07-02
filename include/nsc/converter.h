@@ -18,7 +18,7 @@ namespace nsc {
     // editable string buffers and drives this class.
     class Converter {
     public:
-        enum class Base : int {
+        enum class Base : std::uint8_t {  // value doubles as the radix
             Binary = 2,
             Decimal = 10,
             Hex = 16,

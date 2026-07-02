@@ -1,0 +1,57 @@
+# clearCore CI — build and test on every push/PR.
+#
+# Two jobs:
+#   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
+#                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
+#   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
+#                Catches Qt/moc/QML regressions that the core job can't see.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [core-only, asan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure (sanitizer job disables the GUIs too)
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  full-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          ninja-build qt6-base-dev qt6-declarative-dev llvm-dev zlib1g-dev
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --test-dir build/release --output-on-failure

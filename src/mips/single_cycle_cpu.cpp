@@ -29,8 +29,6 @@ Control derive_control(const DecodedInstr& instr) {
                     c.reg_write = true; c.alu_src = true;
                     c.ext = Control::Ext::Sign; return c;
                 case Opcode::ANDI: case Opcode::ORI: case Opcode::XORI:
-                    c.reg_write = true; c.alu_src = true;
-                    c.ext = Control::Ext::Zero; return c;
                 case Opcode::LUI:
                     c.reg_write = true; c.alu_src = true;
                     c.ext = Control::Ext::Zero; return c;

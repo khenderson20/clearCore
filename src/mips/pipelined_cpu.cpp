@@ -316,7 +316,7 @@ StepResult PipelinedCpu::step() {
     // ── Determine next PC and apply flushes ──────────────────────────────────
     // Priority: flush_from_ex (2 stages) > flush_from_id (1 stage) > stall > normal.
 
-    uint32_t next_pc;
+    uint32_t next_pc = pc_ + 4;  // normal advance unless a flush/stall overrides
 
     if (flush_from_ex) {
         // Branch taken or JR/JALR: discard both the IF and ID results.
@@ -333,8 +333,6 @@ StepResult PipelinedCpu::step() {
         next_pc  = pc_;     // do not advance
         new_if   = cur_if;  // hold (overwrite the bubble we may have computed)
         new_id   = {};      // bubble
-    } else {
-        next_pc  = pc_ + 4;
     }
 
     // ── Commit ───────────────────────────────────────────────────────────────
