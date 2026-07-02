@@ -1,0 +1,23 @@
+name: ClusterFuzzLite PR fuzzing
+on:
+  pull_request:
+    branches: [main, develop]
+permissions: read-all
+jobs:
+  PR:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        with:
+          language: c++
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 120
+          mode: 'code-change'
+          output-sarif: true

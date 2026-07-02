@@ -526,6 +526,22 @@ if (GOLDEN_TESTS)
 endif ()
 
 # ============================================================================
+# FUZZ TARGETS  (ClusterFuzzLite / libFuzzer)
+# ============================================================================
+#
+# Pass -DFUZZING_ENGINE=<engine> at configure time to build fuzz harnesses.
+# The ClusterFuzzLite build.sh sets this from the $LIB_FUZZING_ENGINE env var
+# injected by the base-builder image (e.g. /usr/lib/libFuzzer.a or
+# -fsanitize=fuzzer). Not built in normal developer or CI builds.
+#
+if (FUZZING_ENGINE)
+    add_executable(fuzz_hex_loader tests/fuzz/fuzz_hex_loader.cpp)
+    target_link_libraries(fuzz_hex_loader PRIVATE mips_core ${FUZZING_ENGINE})
+    target_compile_features(fuzz_hex_loader PUBLIC cxx_std_20)
+    message(STATUS "Fuzz targets enabled (engine: ${FUZZING_ENGINE})")
+endif ()
+
+# ============================================================================
 # BUILD SUMMARY
 # ============================================================================
 
