@@ -29,7 +29,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 project(clearCore
-        VERSION 0.1.0
+        VERSION 0.0.1
         LANGUAGES CXX C  # C may be needed by some dependencies
         DESCRIPTION "Educational MIPS CPU emulator with pipeline visualization"
 )
