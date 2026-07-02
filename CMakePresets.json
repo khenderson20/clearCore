@@ -5,6 +5,7 @@
     {
       "name": "base",
       "hidden": true,
+      "description": "Shared settings: Ninja generator, all builds under build/<preset>, compile_commands.json for clangd/IDEs",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
@@ -14,6 +15,7 @@
     {
       "name": "debug",
       "displayName": "Debug",
+      "description": "Unoptimized build with debug symbols -> build/debug",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
@@ -22,6 +24,7 @@
     {
       "name": "release",
       "displayName": "Release",
+      "description": "Optimized build -> build/release",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
@@ -30,6 +33,7 @@
     {
       "name": "asan",
       "displayName": "Debug + ASan/UBSan",
+      "description": "Debug build instrumented with Address + UB sanitizers -> build/asan",
       "inherits": "debug",
       "cacheVariables": {
         "ENABLE_SANITIZERS": "ON"
@@ -38,6 +42,7 @@
     {
       "name": "core-only",
       "displayName": "Core libraries + TUI only (no Qt, no LLVM)",
+      "description": "Fast build of mips_core/nsc_core/TUI without Qt or LLVM -> build/core-only",
       "inherits": "debug",
       "cacheVariables": {
         "BUILD_QT6_UI": "OFF",
