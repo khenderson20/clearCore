@@ -15,8 +15,8 @@ clearCore is organized into independent libraries and interface layers that shar
 ┌───────────────────────────────────────────────────────────────────────┐
 │                               mips_core                               │
 │   IProcessor ◄── SingleCycleCpu / PipelinedCpu                        │
-│   Decoder · ALU · RegisterFile · Memory · Disassembler                │
-│   (optional) Nyxstone (LLVM-based assembler/disassembler)             │
+│   Decoder · ALU · RegisterFile · Memory · Disassembler · trace (spdlog)│
+│   (optional) NyxstoneBackend (LLVM-based assembler/disassembler)      │
 └──────────────────────────────┬────────────────────────────────────────┘
                                 │
                     ┌───────────┘
@@ -37,7 +37,7 @@ clearCore is organized into independent libraries and interface layers that shar
 
 **Rule:** `nsc_core` and `mips_core` must never include UI headers. This boundary is enforced in `CMakeLists.txt` through target link dependencies.
 
-All three UI targets, plus `BUILD_NYXSTONE` (LLVM-based assembler/disassembler) and `GOLDEN_TESTS` (MARS differential testing), default to **ON** and degrade gracefully — the build still configures and the TUI still builds even if Qt6, LLVM, or a JRE is missing. See [Getting Started](Getting-Started) for the CMake options.
+All three UI targets, plus `BUILD_NYXSTONE` (LLVM-based assembler/disassembler, LLVM 15–20) and `GOLDEN_TESTS` (MARS differential testing), default to **ON** and degrade gracefully — the build still configures and the TUI still builds even if Qt6, an in-range LLVM, or a JRE is missing. See [Getting Started](Getting-Started) for the CMake options.
 
 ---
 
@@ -90,7 +90,8 @@ A single `derive_control()` free function maps an opcode/funct pair to the full 
 | `PipelinedCpu`    | `src/mips/pipelined_cpu.cpp`     | Concurrent pipeline with five pipeline registers               |
 | Hazard detection  | (internal to `PipelinedCpu`)     | Load-use stall detection, branch/jump flush                    |
 | Forwarding unit   | (internal to `PipelinedCpu`)     | EX/MEM → EX and MEM/WB → EX forwarding paths                   |
-| Nyxstone bridge    | (optional, `CLEARCORE_NYXSTONE_ENABLED`) | LLVM-based text ↔ machine-code assembler/disassembler for testing and display, when LLVM 15+ is found at configure time |
+| Trace log         | `include/mips/trace.h`           | Shared spdlog logger for instruction/pipeline/exception tracing; quiet by default, enable with `CLEARCORE_LOG_LEVEL` |
+| `NyxstoneBackend` | `include/mips/nyxstone_backend.h` (optional, `CLEARCORE_NYXSTONE_ENABLED`) | LLVM-based text ↔ machine-code assembler/disassembler; pimpl'd so no LLVM headers leak. Differentially validates the Decoder/Disassembler (see `nyxstone_test`). Built when LLVM 15–20 is found at configure time |
 
 ---
 
@@ -108,7 +109,7 @@ Widget code never touches the CPU directly and never needs a mutex. `nsc_qt` als
 
 ## Testing architecture
 
-Beyond the five core CTest suites and the Qt smoke-test suite (see [Getting Started](Getting-Started)), `tests/golden/` runs **differential tests**: each `.asm` program in that directory is assembled and executed independently by MARS (a Java-based reference MIPS simulator) and by both clearCore CPU models via `golden_runner`, and the resulting register files are compared for an exact match. This is separate from — and a stronger correctness signal than — the polymorphic `IProcessor` contract tests, which only check the two clearCore backends against each other rather than against an external reference. Golden tests are skipped automatically if no JRE or Python 3 is available.
+Beyond the six core CTest suites (one, `nyxstone_test`, built only when Nyxstone is enabled) and the Qt smoke-test suite (see [Getting Started](Getting-Started)), `tests/golden/` runs **differential tests**: each `.asm` program in that directory is assembled and executed independently by MARS (a Java-based reference MIPS simulator) and by both clearCore CPU models via `golden_runner`, and the resulting register files are compared for an exact match. This is separate from — and a stronger correctness signal than — the polymorphic `IProcessor` contract tests, which only check the two clearCore backends against each other rather than against an external reference. Golden tests are skipped automatically if no JRE or Python 3 is available.
 
 **Fuzz testing**: `tests/fuzz/fuzz_hex_loader.cpp` is a libFuzzer harness targeting `mips::parse_hex_program`. It is not part of the normal CTest runs; it is built and exercised by the ClusterFuzzLite CI workflow (`.github/workflows/cflite_pr.yml`) on every PR. See [Contributing § Fuzzing](Contributing#fuzzing) for how to add new harnesses.
 

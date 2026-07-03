@@ -59,7 +59,8 @@ The project follows a staged development plan. Each stage builds on the previous
 - Statistics tab (post-run CPI and hazard-type breakdown)
 - Built on two additional fetched dependencies: Qt-Advanced-Docking-System (dockable panels) and QHexView (Memory tab)
 - A second, parallel **Qt Quick / QML** interface (`clearCore-quick`, `src/nsc_quick`, `qml/ClearCore/`) targeting the same backend, built by default alongside the Widgets GUI — see [Qt6 GUI § QML](Qt6-GUI#qml-nsc_quick)
-- Optional **Nyxstone** (LLVM-based) assembler/disassembler bridge in `mips_core`, gated behind `BUILD_NYXSTONE` and LLVM 15+ availability
+- Optional **Nyxstone** (LLVM-based) assemble/disassemble bridge in `mips_core` (`NyxstoneBackend`), gated behind `BUILD_NYXSTONE` and LLVM 15–20 availability. Used as a ground-truth oracle: the `nyxstone_test` suite differentially validates the hand-written decoder/disassembler by round-tripping through LLVM's assembler.
+- **Instruction/pipeline trace logging** (`mips::trace`, spdlog) — fetch/decode, stall/flush/hazard events, exception raises, and memory faults; quiet by default, enable at runtime with `CLEARCORE_LOG_LEVEL`
 - **MARS differential ("golden") test suite** (`tests/golden/`) — cross-checks both CPU models against MARS, the classroom-standard reference MIPS simulator, on seven corpus programs
 
 ---
