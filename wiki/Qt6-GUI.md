@@ -45,6 +45,7 @@ An inline MIPS assembler. Write assembly text in the left pane; the right pane s
 - Forward and backward branch resolution
 - Line-numbered syntax error reporting
 - **Assemble & Load** — assembles and transfers the program to the CPU in one click
+- **Optional MIPS syntax highlighting** via [KSyntaxHighlighting](https://invent.kde.org/frameworks/syntax-highlighting) (KDE framework, MIT since KF 5.50) — when the system package is found at configure time, the editor attaches Kate's MIPS Assembler definition (GNU Assembler fallback) and tracks the application light/dark theme preference automatically. Without the package, the editor behaves as before (plain text, no change to any other behavior).
 
 The supported instruction set matches the decoder's ISA subset (see [MIPS CPU Simulator](MIPS-CPU-Emulator#supported-isa-subset)). Pseudo-instructions (`li`, `move`, `la`) and assembler directives (`.data`/`.text`/`.word`) are **not** supported yet — that's the remaining Stage 3 scope; see [Roadmap](Roadmap).
 
@@ -89,6 +90,20 @@ cmake --build cmake-build-debug --target clearCore-gui
 ```
 
 New `.cpp` or `.h` files added to `nsc_qt/` must be registered in `CMakeLists.txt` — Qt's MOC (meta-object compiler) will not pick them up automatically and you will get a linker error, not a compile error.
+
+### KSyntaxHighlighting (optional)
+
+KSyntaxHighlighting is detected automatically at configure time — no CMake flag is needed. To install it:
+
+```bash
+# Fedora / RHEL
+sudo dnf install kf6-syntax-highlighting-devel
+
+# Ubuntu 25.10+
+sudo apt install libkf6syntaxhighlighting-dev
+```
+
+If the package is absent, CMake prints `KSyntaxHighlighting not found: Code Editor stays plain text` and the build proceeds unaffected.
 
 ---
 

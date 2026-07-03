@@ -1,0 +1,92 @@
+name: Update CHANGELOG on release
+
+# Triggers when a GitHub Release is published (not a draft).
+# Converts the [Unreleased] section in CHANGELOG.md to the released version,
+# inserts a fresh [Unreleased] header, and commits back to develop.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: step-security/harden-runner@ec9f2d5744a09e4fc2bb41ae8fb3f8a3c5f2e5e3 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: develop
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Promote [Unreleased] to versioned entry
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_DATE: ${{ github.event.release.published_at }}
+        run: |
+          python3 - <<'EOF'
+          import os, re
+
+          tag_raw = os.environ["RELEASE_TAG"]
+          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw
+          date    = os.environ["RELEASE_DATE"][:10]   # YYYY-MM-DD
+
+          with open("CHANGELOG.md", "r") as f:
+              content = f.read()
+
+          # Insert a fresh empty [Unreleased] section, then the released version heading.
+          # The existing Unreleased contents remain in-place and therefore become the body
+          # of the released entry.
+          new_section = (
+              "## [Unreleased]\n\n"
+              "---\n\n"
+              f"## [{tag}] - {date}\n\n"
+          )
+          python3 - <<'EOF'
+          import os, re, textwrap
+
+          tag   = os.environ["RELEASE_TAG"]
+          date  = os.environ["RELEASE_DATE"][:10]   # YYYY-MM-DD
+          body  = os.environ["RELEASE_BODY"].strip()
+
+          with open("CHANGELOG.md", "r") as f:
+              content = f.read()
+
+          # Replace the [Unreleased] heading with the new versioned heading.
+          # Also insert a blank [Unreleased] section above it for the next cycle.
+          new_section = (
+              "## [Unreleased]\n\n"
+              "---\n\n"
+              f"## [{tag}] - {date}\n\n"
+              f"{body}\n"
+          )
+
+          updated = re.sub(
+              r"## \[Unreleased\]",
+              new_section,
+              content,
+              count=1,
+          )
+
+          with open("CHANGELOG.md", "w") as f:
+              f.write(updated)
+
+          print(f"CHANGELOG.md promoted [Unreleased] → [{tag}] - {date}")
+          EOF
+
+      - name: Commit and push to develop
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: promote [Unreleased] to ${{ github.event.release.tag_name }} in CHANGELOG"
+          git push origin develop

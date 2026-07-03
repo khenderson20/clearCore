@@ -110,6 +110,8 @@ Widget code never touches the CPU directly and never needs a mutex. `nsc_qt` als
 
 Beyond the five core CTest suites and the Qt smoke-test suite (see [Getting Started](Getting-Started)), `tests/golden/` runs **differential tests**: each `.asm` program in that directory is assembled and executed independently by MARS (a Java-based reference MIPS simulator) and by both clearCore CPU models via `golden_runner`, and the resulting register files are compared for an exact match. This is separate from — and a stronger correctness signal than — the polymorphic `IProcessor` contract tests, which only check the two clearCore backends against each other rather than against an external reference. Golden tests are skipped automatically if no JRE or Python 3 is available.
 
+**Fuzz testing**: `tests/fuzz/fuzz_hex_loader.cpp` is a libFuzzer harness targeting `mips::parse_hex_program`. It is not part of the normal CTest runs; it is built and exercised by the ClusterFuzzLite CI workflow (`.github/workflows/cflite_pr.yml`) on every PR. See [Contributing § Fuzzing](Contributing#fuzzing) for how to add new harnesses.
+
 ---
 
 ## Academic foundations
