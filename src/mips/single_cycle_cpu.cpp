@@ -4,6 +4,8 @@
 
 #include "mips/alu.h"
 #include "mips/decoder.h"
+#include "mips/disassembler.h"
+#include "mips/trace.h"
 
 namespace mips {
 
@@ -238,6 +240,11 @@ StepResult SingleCycleCpu::step() {
     const auto     decoded = Decoder::decode(*fetched);
     if (!decoded) return raise(ExceptionCode::RI, cur_pc);
     const DecodedInstr& d = *decoded;
+
+    // Per-instruction trace. Guarded so a quiet run never pays for disassembly.
+    if (trace_enabled(spdlog::level::trace))
+        trace_log().trace("sc  cyc={:<6} pc={:#010x}  {:#010x}  {}", cycle_, cur_pc, *fetched,
+                          Disassembler::to_string(d, cur_pc));
 
     ctrl_            = derive_control(d);
     uint32_t next_pc = pc4;

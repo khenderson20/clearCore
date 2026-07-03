@@ -1,5 +1,7 @@
 #include "mips/cp0.h"
 
+#include "mips/trace.h"
+
 namespace mips {
 
 std::string_view exception_name(ExceptionCode code) noexcept {
@@ -29,6 +31,8 @@ uint32_t Cp0::raise(ExceptionCode code, uint32_t faulting_pc, uint32_t bad_addr)
     cause_    = (cause_ & ~0x7Cu) | (static_cast<uint32_t>(code) << 2);
     status_ |= kStatusEXL;
     bad_vaddr_ = bad_addr;
+    trace_log().debug("exception {} raised: epc={:#010x} bad_vaddr={:#010x} -> vector {:#010x}",
+                      exception_name(code), faulting_pc, bad_addr, kExceptionVector);
     return kExceptionVector;
 }
 
