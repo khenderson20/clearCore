@@ -95,6 +95,12 @@ FetchContent_Declare(GSL
 set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+# Force the bundled fmt. We never provide an external fmt package, so if
+# SPDLOG_FMT_EXTERNAL is ever left ON (e.g. a stale cache value or an IDE-set
+# CMake option), spdlog's own CMakeLists runs find_package(fmt CONFIG REQUIRED)
+# and configuration fails. FORCE overrides any such cached/command-line value.
+set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "" FORCE)
+set(SPDLOG_FMT_EXTERNAL_HO OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(spdlog
         GIT_REPOSITORY "https://github.com/gabime/spdlog.git"
