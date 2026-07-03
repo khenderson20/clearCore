@@ -9,6 +9,7 @@ cmake -S "$SRC/clearCore" -B build -G Ninja \
     -DBUILD_QT6_UI=OFF \
     -DBUILD_QT6_QUICK_UI=OFF \
     -DCMAKE_BUILD_TYPE=Release \
+    -DSPDLOG_USE_STD_FORMAT=ON \
     -DFUZZING_ENGINE="$LIB_FUZZING_ENGINE"
 
 cmake --build build --target fuzz_hex_loader -j"$(nproc)"

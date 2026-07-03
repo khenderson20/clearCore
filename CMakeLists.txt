@@ -83,21 +83,11 @@ FetchContent_Declare(GSL
         GIT_SHALLOW ON
 )
 
-# fmt — formatting library (MIT); fetched first so spdlog uses it instead of
-# its bundled copy. This avoids consteval failures in spdlog's fmt_helper.h
-# under Clang 22+ (seen in the ClusterFuzzLite base-builder image).
-FetchContent_Declare(fmt
-        GIT_REPOSITORY "https://github.com/fmtlib/fmt.git"
-        GIT_TAG "12.2.0"
-        GIT_SHALLOW ON
-)
-FetchContent_MakeAvailable(fmt)
-
 # spdlog — fast structured logging (MIT), https://github.com/gabime/spdlog
 # Used for instruction tracing, pipeline/hazard events, and memory access logs.
-# SPDLOG_FMT_EXTERNAL makes it use the fmt target above instead of its bundled
-# copy, which is required for Clang 22+ compatibility.
-set(SPDLOG_FMT_EXTERNAL ON CACHE BOOL "" FORCE)
+# Uses spdlog's bundled fmt copy to avoid cross-version API mismatches.
+# The ClusterFuzzLite fuzz build overrides this with SPDLOG_USE_STD_FORMAT=ON
+# so Clang 22+ uses C++20 <format> instead, sidestepping fmt entirely.
 set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
