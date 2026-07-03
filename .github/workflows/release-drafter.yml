@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, reopened, synchronize]
+  # NOTE: release-drafter needs write permissions; running on fork PRs will fail due to read-only tokens.
+  # The push-to-main trigger below updates the draft release after merge, so a PR trigger is unnecessary.
 
 permissions:
   contents: read
