@@ -31,8 +31,25 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_DATE: ${{ github.event.release.published_at }}
-          RELEASE_BODY: ${{ github.event.release.body }}
         run: |
+          python3 - <<'EOF'
+          import os, re
+
+          tag_raw = os.environ["RELEASE_TAG"]
+          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw
+          date    = os.environ["RELEASE_DATE"][:10]   # YYYY-MM-DD
+
+          with open("CHANGELOG.md", "r") as f:
+              content = f.read()
+
+          # Insert a fresh empty [Unreleased] section, then the released version heading.
+          # The existing Unreleased contents remain in-place and therefore become the body
+          # of the released entry.
+          new_section = (
+              "## [Unreleased]\n\n"
+              "---\n\n"
+              f"## [{tag}] - {date}\n\n"
+          )
           python3 - <<'EOF'
           import os, re, textwrap
 
