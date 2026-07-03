@@ -165,7 +165,29 @@ add_library(mips_core STATIC
         src/mips/pipelined_cpu.cpp    # 5-stage pipelined CPU with hazard logic
         src/mips/program_loader.cpp   # Load programs into memory
         src/mips/disassembler.cpp     # Machine code back to assembly
+        src/mips/cp0.cpp              # Coprocessor 0: exception model (Status/Cause/EPC)
+        src/mips/elf_loader.cpp       # MIPS ELF32 (mipsel) binary loader
 )
+
+# ── GDB RSP stub (optional — requires POSIX sockets; excluded on non-POSIX) ──
+option(BUILD_GDB_STUB "Build the GDB Remote Serial Protocol stub (requires POSIX sockets)" ON)
+if (BUILD_GDB_STUB)
+    include(CheckIncludeFile)
+    check_include_file("sys/socket.h" HAVE_SYS_SOCKET_H)
+    if (HAVE_SYS_SOCKET_H)
+        target_sources(mips_core PRIVATE src/mips/gdb_stub.cpp)
+        target_compile_definitions(mips_core PUBLIC CLEARCORE_GDB_STUB_ENABLED=1)
+        message(STATUS "GDB stub: enabled (POSIX sockets found)")
+    else ()
+        message(WARNING "sys/socket.h not found — GDB stub disabled; "
+                        "use -DBUILD_GDB_STUB=OFF to suppress this warning")
+        set(BUILD_GDB_STUB OFF)
+        target_compile_definitions(mips_core PUBLIC CLEARCORE_GDB_STUB_ENABLED=0)
+    endif ()
+else ()
+    target_compile_definitions(mips_core PUBLIC CLEARCORE_GDB_STUB_ENABLED=0)
+    message(STATUS "GDB stub: disabled (set -DBUILD_GDB_STUB=ON to enable)")
+endif ()
 
 target_include_directories(mips_core PUBLIC include)
 
@@ -445,6 +467,8 @@ clearcore_add_test(decoder_test tests/mips/decoder_test.cpp mips_core)  # Instru
 clearcore_add_test(cpu_test tests/mips/cpu_test.cpp mips_core)  # CPU execution (both models)
 clearcore_add_test(processor_test tests/mips/processor_test.cpp mips_core)  # IProcessor contract
 clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler + hex loader
+clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
+clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
 
 # ---- qt_ui_test: exercises assembler/controller/widgets (if Qt6 enabled) ----

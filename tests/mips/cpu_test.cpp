@@ -196,17 +196,17 @@ static void test_zero_and_faults() {
     CHECK(cpu.run() == StepResult::Halt);
     CHECK(cpu.regs().read(zero) == 0);
 
-    // An undecodable opcode faults rather than running off the rails.
+    // An undecodable opcode raises a Reserved Instruction (RI) exception.
     Cpu cpu2;
     CHECK(cpu2.load_program({0xFC00'0000u}));  // opcode 0x3F — not in ISA
-    CHECK(cpu2.step() == StepResult::Fault);
+    CHECK(cpu2.step() == StepResult::Exception);
 
-    // Running past the end of memory faults on fetch.
+    // Running past the end of memory raises an AdEL (address error on load) exception.
     Cpu cpu3(8);  // 8 bytes = 2 words
     CHECK(cpu3.load_program({I(ADDI, zero, t0, 1), I(ADDI, zero, t1, 2)}));
-    CHECK(cpu3.step() == StepResult::Ok);     // addr 0
-    CHECK(cpu3.step() == StepResult::Ok);     // addr 4
-    CHECK(cpu3.step() == StepResult::Fault);  // addr 8 — out of bounds
+    CHECK(cpu3.step() == StepResult::Ok);         // addr 0
+    CHECK(cpu3.step() == StepResult::Ok);         // addr 4
+    CHECK(cpu3.step() == StepResult::Exception);  // addr 8 — AdEL
 }
 
 int main() {

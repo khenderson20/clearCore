@@ -48,6 +48,7 @@
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Ecosystem](#ecosystem)
+- [CP0 / Exceptions, ELF Loader, and GDB Stub](#cp0--exceptions-elf-loader-and-gdb-stub)
 - [Roadmap](#roadmap)
 - [Documentation](#documentation)
 - [License](#license)
@@ -312,6 +313,90 @@ terminal UI and a native desktop GUI over a shared simulation core.
 
 ---
 
+## CP0 / Exceptions, ELF Loader, and GDB Stub
+
+These three subsystems extend the simulator from a pure teaching tool into a self-contained MIPS debugging environment.
+
+### CP0 and the exception model
+
+The `mips_core` library now implements **Coprocessor 0 (CP0)** following the MIPS32r2 specification. Both `SingleCycleCpu` and `PipelinedCpu` raise proper hardware exceptions rather than halting on bad instructions or memory accesses.
+
+| What happened before | What happens now |
+|---|---|
+| Bad opcode → `StepResult::Fault` (stop cold) | Bad opcode → Reserved Instruction (RI) exception, EPC saved, PC = `0x8000_0180` |
+| Out-of-bounds memory → `StepResult::Fault` | OOB load/store → AdEL / AdES exception with BadVAddr set |
+| No `SYSCALL`/`BREAK` support | SYSCALL and BREAK raise Sys/Bp exceptions; GDB stub intercepts them as signals |
+
+New instructions: `SYSCALL`, `BREAK`, `MFC0`, `MTC0`, `ERET`.
+
+CP0 registers: `Status` (bit 1 = EXL), `Cause` (ExcCode in [6:2]), `EPC`, `BadVAddr`. The exception vector is `0x8000_0180` — the same address real MIPS hardware uses.
+
+```cpp
+if (cpu.step() == StepResult::Exception) {
+    auto& cp0 = cpu.cp0();
+    // cp0.last_exception(), cp0.epc(), cp0.bad_vaddr() are all valid
+}
+```
+
+See [wiki/CP0-Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions) for the full reference.
+
+---
+
+### ELF loader
+
+The `mips::load_elf_file_into_processor()` function parses a MIPS ELF32 binary, maps each `PT_LOAD` segment into the processor's address space (zero-filling BSS), and sets the PC to the entry point — exactly what a kernel exec does for a static binary.
+
+Only **little-endian MIPS** (`mipsel`, `ELFDATA2LSB`) is supported. Compile with:
+
+```bash
+mipsel-linux-gnu-as -mips32r2 -EL -o hello.o hello.s
+mipsel-linux-gnu-ld -e _start -Ttext=0x0000 -o hello hello.o
+```
+
+Or with musl libc for C programs:
+
+```bash
+mipsel-linux-musl-gcc -static -O2 -o hello hello.c
+```
+
+Then load it at runtime:
+
+```cpp
+mips::SingleCycleCpu cpu(4u << 20);  // 4 MB
+std::string err;
+if (!mips::load_elf_file_into_processor(cpu, "hello", err))
+    std::cerr << err << "\n";
+```
+
+See [wiki/ELF-Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader) for toolchain setup and the full API.
+
+---
+
+### GDB RSP stub
+
+Attach `mipsel-linux-gnu-gdb` to port 1234 and debug the running emulator with the full GDB experience — software breakpoints, single-step, register and memory inspection, and exception-triggered stop signals:
+
+```bash
+mipsel-linux-gnu-gdb hello
+(gdb) target remote localhost:1234
+(gdb) break _start
+(gdb) continue
+(gdb) info registers
+(gdb) stepi
+```
+
+The stub models 38 MIPS registers (r0–r31, Status, LO, HI, BadVAddr, Cause, PC). Exceptions translate to UNIX signals: `Bp`→SIGTRAP, `Sys`→SIGSYS, `RI`→SIGILL, `Ov`→SIGFPE, `AdEL/AdES`→SIGSEGV.
+
+The stub requires POSIX socket headers (Linux/macOS). On Windows or without sockets it is automatically disabled at CMake configure time. To disable explicitly:
+
+```bash
+cmake --preset debug -DBUILD_GDB_STUB=OFF
+```
+
+See [wiki/GDB-Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub) for the full command reference.
+
+---
+
 ## Roadmap
 
 - [x] **Stage 1** — Number converter core + MIPS decoder
@@ -319,6 +404,7 @@ terminal UI and a native desktop GUI over a shared simulation core.
 - [x] **Stage 2** — TUI execution visualizer: memory panel, hazard badges, speed controls, telemetry
 - [x] **Stage 2.5** — Qt6 GUI: datapath, registers, memory, pipeline trace, code editor with in-app assembler,
   statistics
+- [x] **Stage 2.6** — CP0 exception model, ELF loader, and GDB RSP stub
 - [ ] **Stage 3** — Two-pass assembler with full symbol table, label resolution, and pseudo-instruction expansion *(the
   Qt6 Code Editor covers labels and branches; pseudo-instructions are still outstanding)*
 - [ ] **Stage 4** — Per-stage TUI telemetry and CPI analysis to reach parity with the GUI's Pipeline Trace and
@@ -335,6 +421,9 @@ See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadm
 |--------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
 | [Getting Started](https://github.com/khenderson20/clearCore/wiki/Getting-Started)                | Beginners learning MIPS concepts through the TUI visualization |
 | [Architecture](https://github.com/khenderson20/clearCore/wiki/Architecture)                      | Design patterns, hardware abstractions, and academic grounding |
+| [CP0 and Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions)             | MIPS32r2 exception model, CP0 registers, ERET, MFC0/MTC0      |
+| [ELF Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader)                         | Loading compiled mipsel binaries; toolchain setup guide        |
+| [GDB Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub)                             | GDB RSP server — breakpoints, single-step, exception signals   |
 | [Qt6 GUI](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)                               | How `nsc_qt` and `SimulatorController` are structured          |
 | [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing)                      | Branching model, code style, and testing guidelines            |
 | [Roadmap](https://github.com/khenderson20/clearCore/wiki/Roadmap)                               | Staged feature plan and reference patterns                     |
