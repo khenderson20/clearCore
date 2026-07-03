@@ -130,6 +130,7 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 
 ### Regression / quality
 
+- [x] ClusterFuzzLite fuzzing harness (`tests/fuzz/fuzz_hex_loader.cpp`) — libFuzzer targets `mips::parse_hex_program`; runs 120 s on every PR via `cflite_pr.yml` (addresses OpenSSF Scorecard fuzzing signal)
 - [ ] UI smoke test guarding `Container::Tab` child count against `tab_labels.size()` (prevents reintroduction of the tab/focus aliasing bug)
 - [ ] Regression test for per-instruction-type telemetry breakout
 
