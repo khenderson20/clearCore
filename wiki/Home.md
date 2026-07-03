@@ -15,10 +15,12 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 - **Live hazard visualization** — stall, forward, and flush badges inline in the pipeline strip
 - **Telemetry** — running cycle count, CPI, stall/forward/flush tallies
 - **In-app MIPS assembler** — the Qt6 Code Editor assembles labeled assembly source directly into loadable instruction words (no external toolchain)
+- **MIPS syntax highlighting** — optional KSyntaxHighlighting integration gives the Code Editor Kate-quality MIPS highlighting with automatic light/dark theme tracking (no-op when the package is absent)
 - **Differential testing** — the `tests/golden/` suite cross-checks both CPU models against MARS, the classroom-standard MIPS simulator
 - **CP0 exception model** — SYSCALL, BREAK, overflow, address errors, and reserved-instruction faults raise MIPS32r2 exceptions; Status, Cause, EPC, and BadVAddr are fully modelled; ERET/MFC0/MTC0 are supported
 - **ELF loader** — load `mipsel` (little-endian) ELF32 executables compiled with `mipsel-linux-gnu-gcc` or `mipsel-linux-musl-gcc` directly into the emulated address space
 - **GDB RSP stub** — attach `mipsel-linux-gnu-gdb` to port 1234 for breakpoints, single-step, register/memory inspection, and exception-driven stop signals
+- **Continuous fuzzing** — a libFuzzer harness (`fuzz_hex_loader`) runs on every PR via ClusterFuzzLite, exercising `mips::parse_hex_program` against arbitrary input
 
 ---
 
@@ -42,9 +44,9 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 ## At a glance
 
 ```
-C++20 · CMake 3.20+ · MIT license
-FTXUI v7.0.0 (auto-fetched) · Qt6 (Widgets + Quick, both optional) · Nyxstone/LLVM (optional)
-Five core CTest suites + a Qt smoke-test suite + MARS differential tests
+C++20 · CMake 3.20+ · MIT license · v0.0.1
+FTXUI v7.0.0 (auto-fetched) · Qt6 (Widgets + Quick, both optional) · Nyxstone/LLVM (optional) · KSyntaxHighlighting (optional)
+Five core CTest suites + a Qt smoke-test suite + MARS differential tests + ClusterFuzzLite libFuzzer harness
 ```
 
 Build presets: `debug`, `release`, `asan`, `core-only` (TUI-only, no Qt/LLVM). See [Getting Started](Getting-Started).

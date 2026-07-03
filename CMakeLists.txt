@@ -85,6 +85,13 @@ FetchContent_Declare(GSL
 
 # spdlog — fast structured logging (MIT), https://github.com/gabime/spdlog
 # Used for instruction tracing, pipeline/hazard events, and memory access logs.
+# Uses spdlog's bundled fmt copy to avoid cross-version API mismatches.
+# The ClusterFuzzLite fuzz build overrides this with SPDLOG_USE_STD_FORMAT=ON
+# so Clang 22+ uses C++20 <format> instead, sidestepping fmt entirely.
+set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(spdlog
         GIT_REPOSITORY "https://github.com/gabime/spdlog.git"
         GIT_TAG "v1.14.1"
@@ -547,6 +554,22 @@ if (GOLDEN_TESTS)
     else ()
         message(STATUS "GOLDEN_TESTS: Java runtime or Python3 not found — skipping")
     endif ()
+endif ()
+
+# ============================================================================
+# FUZZ TARGETS  (ClusterFuzzLite / libFuzzer)
+# ============================================================================
+#
+# Pass -DFUZZING_ENGINE=<engine> at configure time to build fuzz harnesses.
+# The ClusterFuzzLite build.sh sets this from the $LIB_FUZZING_ENGINE env var
+# injected by the base-builder image (e.g. /usr/lib/libFuzzer.a or
+# -fsanitize=fuzzer). Not built in normal developer or CI builds.
+#
+if (FUZZING_ENGINE)
+    add_executable(fuzz_hex_loader tests/fuzz/fuzz_hex_loader.cpp)
+    target_link_libraries(fuzz_hex_loader PRIVATE mips_core clearcore_warnings ${FUZZING_ENGINE})
+    target_compile_features(fuzz_hex_loader PUBLIC cxx_std_20)
+    message(STATUS "Fuzz targets enabled (engine: ${FUZZING_ENGINE})")
 endif ()
 
 # ============================================================================

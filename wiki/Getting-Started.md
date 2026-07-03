@@ -2,31 +2,34 @@
 
 ## Dependencies
 
-| Dependency   | Version | Notes                                                                 |
-|--------------|---------|------------------------------------------------------------------------|
-| C++ compiler | C++20   | GCC 13+ or Clang 16+                                                    |
-| CMake        | 3.20+   | 3.25+ recommended — the preset workflow below is the recommended path  |
-| FTXUI        | v7.0.0  | Auto-fetched via `FetchContent` — no manual install needed             |
-| Qt6          | 6.x     | Optional — powers both `clearCore-gui` (Widgets) and `clearCore-quick` (QML); disable with `-DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF` |
-| LLVM         | 15+     | Optional — powers the Nyxstone assembler/disassembler bridge; disable with `-DBUILD_NYXSTONE=OFF` |
-| Java + Python 3 | any  | Optional — needed only for the MARS differential ("golden") test suite; skipped automatically if missing |
+| Dependency           | Version | Notes                                                                 |
+|----------------------|---------|------------------------------------------------------------------------|
+| C++ compiler         | C++20   | GCC 13+ or Clang 16+                                                    |
+| CMake                | 3.20+   | 3.25+ recommended — the preset workflow below is the recommended path  |
+| FTXUI                | v7.0.0  | Auto-fetched via `FetchContent` — no manual install needed             |
+| Qt6                  | 6.x     | Optional — powers both `clearCore-gui` (Widgets) and `clearCore-quick` (QML); disable with `-DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF` |
+| KSyntaxHighlighting  | KF6     | Optional — adds MIPS syntax highlighting to the Qt6 Code Editor; auto-detected at configure time (`kf6-syntax-highlighting-devel` / `libkf6syntaxhighlighting-dev`) |
+| LLVM                 | 15+     | Optional — powers the Nyxstone assembler/disassembler bridge; disable with `-DBUILD_NYXSTONE=OFF` |
+| Java + Python 3      | any     | Optional — needed only for the MARS differential ("golden") test suite; skipped automatically if missing |
 
 GSL and spdlog are also auto-fetched via `FetchContent` and need no manual install.
 
-### Installing Qt6 and LLVM
+### Installing Qt6, LLVM, and KSyntaxHighlighting
 
-Only needed if you want the desktop GUIs or the Nyxstone assembler bridge — skip this if you only want the terminal UI.
+Only needed if you want the desktop GUIs, the Nyxstone assembler bridge, or MIPS syntax highlighting — skip this if you only want the terminal UI.
 
 ```bash
 # Fedora / RHEL
-sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel llvm-devel
+sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel llvm-devel kf6-syntax-highlighting-devel
 
-# Ubuntu / Debian
-sudo apt install qt6-base-dev qt6-declarative-dev llvm-dev
+# Ubuntu / Debian (KSyntaxHighlighting requires Ubuntu 25.10+)
+sudo apt install qt6-base-dev qt6-declarative-dev llvm-dev libkf6syntaxhighlighting-dev
 
 # macOS
 brew install qt@6 llvm@15
 ```
+
+KSyntaxHighlighting is auto-detected — omitting it is fine, the Code Editor just stays plain text.
 
 ---
 
@@ -126,6 +129,10 @@ The suite covers:
 **MARS golden tests** (`golden_arith_single`, `golden_fib_pipelined`, etc.) run each program in `tests/golden/` through MARS — the classroom-standard reference MIPS simulator — and both clearCore CPU models, and assert the register files match exactly. These require a JRE and Python 3; CMake downloads MARS automatically and verifies its checksum, and quietly skips the suite if the runtime isn't available or the download fails.
 
 This project uses a lightweight, dependency-free `CHECK()`-macro test harness throughout — not GoogleTest or Catch2.
+
+### ClusterFuzzLite fuzzing (CI only)
+
+A libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targets `mips::parse_hex_program` — the hex text parser that accepts untrusted input. It is **not** built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs it for 120 seconds on every PR to `main` or `develop` via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer). To build it manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
 
 ---
 
