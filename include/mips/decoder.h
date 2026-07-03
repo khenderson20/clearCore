@@ -27,6 +27,7 @@ enum class Opcode : uint8_t {
     ORI     = 0x0D,
     XORI    = 0x0E,
     LUI     = 0x0F,
+    COP0    = 0x10,  // Coprocessor 0: MFC0 (rs=0) / MTC0 (rs=4) / ERET (rs=0x10,funct=0x18)
     LW      = 0x23,
     LBU     = 0x24,
     LHU     = 0x25,
@@ -34,25 +35,28 @@ enum class Opcode : uint8_t {
 };
 
 // ─── Funct field [5:0] ────────────────────────────────────────────────────────
-// Only meaningful when opcode == SPECIAL (0x00).
+// Only meaningful when opcode == SPECIAL (0x00) or COP0 CO-mode (rs == 0x10).
 enum class FunctCode : uint8_t {
-    SLL  = 0x00,
-    SRL  = 0x02,
-    SRA  = 0x03,
-    SLLV = 0x04,
-    SRLV = 0x06,
-    JR   = 0x08,
-    JALR = 0x09,
-    ADD  = 0x20,
-    ADDU = 0x21,
-    SUB  = 0x22,
-    SUBU = 0x23,
-    AND  = 0x24,
-    OR   = 0x25,
-    XOR  = 0x26,
-    NOR  = 0x27,
-    SLT  = 0x2A,
-    SLTU = 0x2B,
+    SLL     = 0x00,
+    SRL     = 0x02,
+    SRA     = 0x03,
+    SLLV    = 0x04,
+    SRLV    = 0x06,
+    JR      = 0x08,
+    JALR    = 0x09,
+    SYSCALL = 0x0C,  // System call — raises ExceptionCode::Sys
+    BREAK   = 0x0D,  // Breakpoint — raises ExceptionCode::Bp
+    ADD     = 0x20,
+    ADDU    = 0x21,
+    SUB     = 0x22,
+    SUBU    = 0x23,
+    AND     = 0x24,
+    OR      = 0x25,
+    XOR     = 0x26,
+    NOR     = 0x27,
+    SLT     = 0x2A,
+    SLTU    = 0x2B,
+    ERET    = 0x18,  // Return from exception (COP0 CO-mode only)
 };
 
 // ─── Per-format field structs (H&H Figure 6.10) ───────────────────────────────

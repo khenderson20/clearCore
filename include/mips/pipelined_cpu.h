@@ -24,6 +24,8 @@
 #include "mips/pipeline_regs.h"
 #include "mips/processor.h"
 
+#include <vector>
+
 namespace mips {
 
 class PipelinedCpu final : public IProcessor {
@@ -43,11 +45,20 @@ public:
     [[nodiscard]] const Control&       last_control() const noexcept override { return ctrl_; }
     [[nodiscard]] std::size_t          cycle_count() const noexcept override { return cycle_; }
     [[nodiscard]] const PipelineState& pipeline_state() const noexcept override { return ps_; }
+    [[nodiscard]] const Cp0&           cp0() const noexcept override { return cp0_; }
+    [[nodiscard]] Cp0&                 cp0() noexcept override { return cp0_; }
+    [[nodiscard]] uint32_t             hi() const noexcept override { return hi_; }
+    [[nodiscard]] uint32_t             lo() const noexcept override { return lo_; }
+    void                               set_hi(uint32_t v) noexcept override { hi_ = v; }
+    void                               set_lo(uint32_t v) noexcept override { lo_ = v; }
 
 private:
     RegisterFile  regs_;
     Memory        mem_;
+    Cp0           cp0_{};
     uint32_t      pc_ = 0;
+    uint32_t      hi_ = 0;
+    uint32_t      lo_ = 0;
     Control       ctrl_{};
     std::size_t   cycle_ = 0;
     PipelineState ps_{};

@@ -1,4 +1,7 @@
 #include "mips/pipelined_cpu.h"
+
+#include <vector>
+
 #include "mips/alu.h"
 #include "mips/decoder.h"
 
@@ -35,12 +38,12 @@ StepResult PipelinedCpu::step() {
 
     // Hazard / flush flags set by various stages.
     bool stall_load_use = false;
-    bool flush_from_ex  = false;  // 2-stage flush (branch, JR, JALR)
+    bool flush_from_ex  = false;  // 2-stage flush (branch, JR, JALR, exceptions)
     bool flush_from_id  = false;  // 1-stage flush (J, JAL)
     // Use SEPARATE target variables: EX and ID both run in the same step() call
     // and both may set a redirect.  flush_from_ex wins (higher priority), so we
     // must not let ID's write overwrite EX's target in a shared variable.
-    uint32_t   branch_pc = 0;  // target set by EX (branch / JR / JALR)
+    uint32_t   branch_pc = 0;  // target set by EX (branch / JR / JALR / exception)
     uint32_t   jump_pc   = 0;  // target set by ID (J / JAL)
     StepResult result    = StepResult::Ok;
 
@@ -69,25 +72,39 @@ StepResult PipelinedCpu::step() {
         new_mem.is_halt   = cur_ex.is_halt;
 
         if (cur_ex.ctrl.mem_read) {
+            const uint32_t          addr = cur_ex.alu.value;
             std::optional<uint32_t> loaded;
             switch (cur_ex.opcode) {
             case Opcode::LW:
-                loaded = mem_.read_word(cur_ex.alu.value);
+                loaded = mem_.read_word(addr);
                 break;
             case Opcode::LBU:
-                if (auto v = mem_.read_byte(cur_ex.alu.value)) loaded = *v;
+                if (auto v = mem_.read_byte(addr)) loaded = *v;
                 break;
             case Opcode::LHU:
-                if (auto v = mem_.read_half(cur_ex.alu.value)) loaded = *v;
+                if (auto v = mem_.read_half(addr)) loaded = *v;
                 break;
             default:
                 break;
             }
-            if (!loaded) return StepResult::Fault;
-            new_mem.mem_val = *loaded;
+            if (!loaded) {
+                // AdEL exception: flush EX, ID, IF and vector to exception handler.
+                branch_pc     = cp0_.raise(ExceptionCode::AdEL, cur_ex.pc, addr);
+                flush_from_ex = true;
+                new_mem       = {};
+                result        = StepResult::Exception;
+            } else {
+                new_mem.mem_val = *loaded;
+            }
         }
-        if (cur_ex.ctrl.mem_write) {
-            if (!mem_.write_word(cur_ex.alu.value, cur_ex.rt_val)) return StepResult::Fault;
+        if (cur_ex.ctrl.mem_write && result != StepResult::Exception) {
+            const uint32_t addr = cur_ex.alu.value;
+            if (!mem_.write_word(addr, cur_ex.rt_val)) {
+                branch_pc     = cp0_.raise(ExceptionCode::AdES, cur_ex.pc, addr);
+                flush_from_ex = true;
+                new_mem       = {};
+                result        = StepResult::Exception;
+            }
         }
     }
 
@@ -147,11 +164,9 @@ StepResult PipelinedCpu::step() {
                 new_ex.write_reg = 31;          // $ra
             }
             // J: ctrl.reg_write is already false; write_reg stays 0.
-        }
-
-        // ── BEQ / BNE: branch resolved in EX, 2-cycle flush ─────────────────
-        else if (dec.format == InstrFormat::I &&
-                 (dec.opcode == Opcode::BEQ || dec.opcode == Opcode::BNE)) {
+        } else if (dec.format == InstrFormat::I &&
+                   (dec.opcode == Opcode::BEQ || dec.opcode == Opcode::BNE)) {
+            // ── BEQ / BNE: branch resolved in EX, 2-cycle flush ───────────
             const AluResult cmp   = Alu::execute(AluOp::SUBU, fwd_a, fwd_b);
             const bool      taken = (dec.opcode == Opcode::BEQ) ? cmp.zero : !cmp.zero;
             if (taken) {
@@ -159,13 +174,10 @@ StepResult PipelinedCpu::step() {
                 branch_pc         = cur_id.pc4 + (static_cast<uint32_t>(off) << 2);
                 flush_from_ex     = true;
             }
-            // No writeback for branch instructions.
-            // new_ex stays invalid (default).
-        }
-
-        // ── JR / JALR: register jump resolved in EX, 2-cycle flush ──────────
-        else if (dec.format == InstrFormat::R &&
-                 (dec.r().funct == FunctCode::JR || dec.r().funct == FunctCode::JALR)) {
+            // No writeback for branch instructions; new_ex stays invalid.
+        } else if (dec.format == InstrFormat::R &&
+                   (dec.r().funct == FunctCode::JR || dec.r().funct == FunctCode::JALR)) {
+            // ── JR / JALR: register jump resolved in EX, 2-cycle flush ────
             branch_pc     = fwd_a;  // rs, potentially forwarded
             flush_from_ex = true;
             if (dec.r().funct == FunctCode::JALR) {
@@ -177,46 +189,99 @@ StepResult PipelinedCpu::step() {
                 new_ex.is_halt   = cur_id.is_halt;
             }
             // JR: no writeback; new_ex stays invalid.
-        }
-
-        // ── Regular ALU instruction ───────────────────────────────────────────
-        else {
+        } else if (dec.format == InstrFormat::R &&
+                   (dec.r().funct == FunctCode::SYSCALL || dec.r().funct == FunctCode::BREAK)) {
+            // ── SYSCALL / BREAK: raise CP0 exception, flush 2 stages ──────
+            const ExceptionCode code =
+                (dec.r().funct == FunctCode::SYSCALL) ? ExceptionCode::Sys : ExceptionCode::Bp;
+            branch_pc     = cp0_.raise(code, cur_id.pc);
+            flush_from_ex = true;
+            result        = StepResult::Exception;
+            // new_ex stays invalid — the exception handler gets a clean pipeline.
+        } else if (dec.opcode == Opcode::COP0) {
+            // ── COP0: MFC0 / MTC0 / ERET — execute in EX ─────────────────
+            const uint8_t sub = dec.r().rs;
+            if (sub == 0x00) {
+                // MFC0: read CP0 register, write to GPR in WB via alu_val path.
+                new_ex.valid          = true;
+                new_ex.pc             = cur_id.pc;
+                new_ex.ctrl           = cur_id.ctrl;
+                new_ex.ctrl.reg_write = true;
+                new_ex.alu.value      = cp0_.read(dec.r().rd);
+                new_ex.write_reg      = dec.r().rt;
+                new_ex.opcode         = dec.opcode;
+            } else if (sub == 0x04) {
+                // MTC0: write forwarded GPR value to CP0 register.
+                cp0_.write(dec.r().rd, fwd_b);
+                // No pipeline writeback needed.
+            } else if (sub == 0x10 && dec.r().funct == FunctCode::ERET) {
+                // ERET: clear EXL, jump to EPC — treated as a register jump.
+                branch_pc     = cp0_.eret();
+                flush_from_ex = true;
+            }
+            // Unknown COP0 sub-ops are silently ignored (EHB, etc.).
+        } else {
+            // ── Regular ALU instruction ────────────────────────────────────
             const auto aluop = Alu::control(dec);
-            if (!aluop) return StepResult::Fault;
+            if (!aluop) {
+                // Unrecognised instruction in EX: raise RI exception.
+                branch_pc     = cp0_.raise(ExceptionCode::RI, cur_id.pc);
+                flush_from_ex = true;
+                result        = StepResult::Exception;
+            } else {
+                uint8_t shamt = (dec.format == InstrFormat::R) ? dec.r().shamt : 0;
+                if (dec.format == InstrFormat::R) {
+                    const auto f = dec.r().funct;
+                    if (f == FunctCode::SLLV || f == FunctCode::SRLV)
+                        shamt = static_cast<uint8_t>(fwd_a & 0x1Fu);
+                }
 
-            uint8_t shamt = (dec.format == InstrFormat::R) ? dec.r().shamt : 0;
-            if (dec.format == InstrFormat::R) {
-                const auto f = dec.r().funct;
-                if (f == FunctCode::SLLV || f == FunctCode::SRLV)
-                    shamt = static_cast<uint8_t>(fwd_a & 0x1Fu);
+                // ALU B: register value or sign/zero-extended immediate.
+                uint32_t alu_b = fwd_b;
+                if (cur_id.ctrl.alu_src && dec.format == InstrFormat::I) {
+                    alu_b = (cur_id.ctrl.ext == Control::Ext::Sign)
+                                ? static_cast<uint32_t>(Decoder::sign_extend(dec.i().imm))
+                                : static_cast<uint32_t>(dec.i().imm);
+                }
+
+                const AluResult alu_res = Alu::execute(*aluop, fwd_a, alu_b, shamt);
+
+                // Signed overflow on ADD/SUB/ADDI raises Ov (ADDU/SUBU/ADDIU do not).
+                if (alu_res.overflow) {
+                    const auto funct =
+                        (dec.format == InstrFormat::R) ? dec.r().funct : FunctCode::SLL;
+                    const bool is_signed_op =
+                        (funct == FunctCode::ADD || funct == FunctCode::SUB) ||
+                        (dec.opcode == Opcode::ADDI);
+                    if (is_signed_op) {
+                        branch_pc     = cp0_.raise(ExceptionCode::Ov, cur_id.pc);
+                        flush_from_ex = true;
+                        result        = StepResult::Exception;
+                        // Skip normal writeback.
+                        goto ex_done;
+                    }
+                }
+
+                {
+                    // Destination register: rd (R-type), rt (I-type).
+                    uint8_t write_reg = 0;
+                    if (cur_id.ctrl.reg_dst && dec.format == InstrFormat::R)
+                        write_reg = dec.r().rd;
+                    else if (dec.format == InstrFormat::I)
+                        write_reg = dec.i().rt;
+
+                    new_ex.valid     = true;
+                    new_ex.pc        = cur_id.pc;
+                    new_ex.ctrl      = cur_id.ctrl;
+                    new_ex.alu       = alu_res;
+                    new_ex.rt_val    = fwd_b;  // forwarded rt for SW
+                    new_ex.write_reg = write_reg;
+                    new_ex.opcode    = dec.opcode;
+                    new_ex.is_halt   = cur_id.is_halt;
+                }
             }
-
-            // ALU B: register value or sign/zero-extended immediate.
-            uint32_t alu_b = fwd_b;
-            if (cur_id.ctrl.alu_src && dec.format == InstrFormat::I) {
-                alu_b = (cur_id.ctrl.ext == Control::Ext::Sign)
-                            ? static_cast<uint32_t>(Decoder::sign_extend(dec.i().imm))
-                            : static_cast<uint32_t>(dec.i().imm);
-            }
-
-            const AluResult alu_res = Alu::execute(*aluop, fwd_a, alu_b, shamt);
-
-            // Destination register: rd (R-type), rt (I-type).
-            uint8_t write_reg = 0;
-            if (cur_id.ctrl.reg_dst && dec.format == InstrFormat::R)
-                write_reg = dec.r().rd;
-            else if (dec.format == InstrFormat::I)
-                write_reg = dec.i().rt;
-
-            new_ex.valid     = true;
-            new_ex.pc        = cur_id.pc;
-            new_ex.ctrl      = cur_id.ctrl;
-            new_ex.alu       = alu_res;
-            new_ex.rt_val    = fwd_b;  // forwarded rt for SW
-            new_ex.write_reg = write_reg;
-            new_ex.opcode    = dec.opcode;
-            new_ex.is_halt   = cur_id.is_halt;
         }
+    ex_done: {}
     }
 
     // ── ID stage ─────────────────────────────────────────────────────────────
@@ -278,7 +343,13 @@ StepResult PipelinedCpu::step() {
 
     if (!stall_load_use && cur_if.valid) {
         const auto dec_opt = Decoder::decode(cur_if.instr);
-        if (!dec_opt) return StepResult::Fault;
+        if (!dec_opt) {
+            // Unrecognised instruction: raise Reserved Instruction exception.
+            branch_pc     = cp0_.raise(ExceptionCode::RI, cur_if.pc);
+            flush_from_ex = true;
+            result        = StepResult::Exception;
+            goto id_done;
+        }
         const DecodedInstr& dec = *dec_opt;
 
         // Register indices needed for hazard detection next cycle and for
@@ -311,6 +382,7 @@ StepResult PipelinedCpu::step() {
             flush_from_id = true;
         }
     }
+id_done: {}
 
     // ── IF stage ─────────────────────────────────────────────────────────────
     if (!stall_load_use) {
@@ -328,9 +400,12 @@ StepResult PipelinedCpu::step() {
                 const uint32_t jaddr = ((pc_ + 4) & 0xF000'0000u) | (tgt << 2);
                 if (jaddr == pc_) new_if.is_halt = true;
             }
+        } else {
+            // OOB or misaligned fetch → AdEL exception.
+            branch_pc     = cp0_.raise(ExceptionCode::AdEL, pc_, pc_);
+            flush_from_ex = true;
+            result        = StepResult::Exception;
         }
-        // OOB fetch → bubble.  The fault will surface if the processor tries
-        // to execute the invalid word (Decoder::decode will return nullopt).
     }
 
     // ── Determine next PC and apply flushes ──────────────────────────────────
@@ -390,7 +465,10 @@ bool PipelinedCpu::load_program(const std::vector<uint32_t>& words, uint32_t add
 
 void PipelinedCpu::reset(bool clear_memory) {
     regs_.reset();
+    cp0_.reset();
     pc_     = 0;
+    hi_     = 0;
+    lo_     = 0;
     ctrl_   = Control{};
     cycle_  = 0;
     ps_     = {};
