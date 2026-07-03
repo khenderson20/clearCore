@@ -113,7 +113,8 @@ If you add a new function that parses untrusted text or binary input, consider a
 
 - All new `.cpp` files must be added to the appropriate target in `CMakeLists.txt`. Forgetting this produces a linker error, not a compile error, so it can be confusing.
 - Qt's MOC requires that `Q_OBJECT` classes be listed explicitly in CMake — they are not discovered automatically.
-- FTXUI, GSL, spdlog, and (if enabled) Nyxstone are fetched by CMake at configure time (`FetchContent`). Do not vendor them manually.
+- FTXUI, GSL, spdlog, and (if enabled) Nyxstone are fetched by CMake at configure time (`FetchContent`). Do not vendor them manually. Nyxstone additionally needs a system LLVM+Clang in the **15–20** range; if your default LLVM is newer, point Nyxstone at an in-range install with the `NYXSTONE_LLVM_PREFIX` env var (see [Getting Started](Getting-Started#pinning-an-in-range-llvm-for-nyxstone)).
+- Core code (`mips_core`) must not leak third-party headers through its own public headers: `NyxstoneBackend` pimpls away all LLVM/Nyxstone types, and the spdlog logger is reached only through `include/mips/trace.h`. When adding tracing, guard hot-path formatting behind `mips::trace_enabled(level)`.
 - Prefer the CMake presets (`debug`, `release`, `asan`, `core-only`) over ad hoc configure invocations — they keep local builds, CI, and this wiki's instructions consistent.
 
 ---
