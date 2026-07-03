@@ -120,7 +120,7 @@ Programs are flat arrays of 32-bit instruction words. Load them via:
 
 - **TUI Program Loader tab** — paste hex words one per line
 - **Qt6 Code Editor** — write MIPS assembly with labels and branches; the in-app assembler (`nsc_qt::assemble()`) emits the word array. It supports the full instruction set above plus label resolution, but not pseudo-instructions or assembler directives (`.data`/`.text`/`.word`) yet — that's Stage 3, see [Roadmap](Roadmap).
-- **Nyxstone** (when `BUILD_NYXSTONE=ON` and LLVM 15+ is available) — an LLVM-based assembler/disassembler bridge used internally for test generation and text↔machine-code conversion
+- **`NyxstoneBackend`** (when `BUILD_NYXSTONE=ON` and LLVM 15–20 is available) — an LLVM-backed assemble/disassemble bridge for little-endian MIPS32. It is primarily a **ground-truth oracle**: the `nyxstone_test` suite re-encodes the Disassembler's output through LLVM and asserts bit-equality, differentially validating the hand-written decoder/disassembler. `NyxstoneBackend::assemble()` also returns a word array usable for loading.
 - **`IProcessor::load(std::vector<uint32_t>)`** — call directly from C++ for testing
 
 Memory is byte-addressable. The program is placed starting at address `0x00000000`. The stack conventionally grows down from `0xFFFFFFFF`.
