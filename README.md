@@ -22,6 +22,9 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/khenderson20/clearCore">
     <img src="https://api.scorecard.dev/projects/github.com/khenderson20/clearCore/badge" alt="OpenSSF Scorecard">
   </a>
+  <a href="https://github.com/khenderson20/clearCore/releases/latest">
+    <img src="https://img.shields.io/github/v/release/khenderson20/clearCore?style=flat-square&label=release&color=268BD2" alt="Latest Release">
+  </a>
 </p>
 
 <p align="center">
@@ -96,7 +99,8 @@ program's execution trace.
 <td width="50%">
 
 **Code Editor** — accepts MIPS assembly source with labels, branches, and loops; assembles and loads directly into the
-simulator. No external toolchain required.
+simulator. No external toolchain required. Optional MIPS syntax highlighting (light/dark theme aware) when
+KSyntaxHighlighting is installed (`kf6-syntax-highlighting-devel` on Fedora, `libkf6syntaxhighlighting-dev` on Ubuntu).
 
 <img src="assets/screenshots/tab-05-codeEditor.png" alt="Code Editor tab showing a MIPS sum-loop program assembled and loaded">
 
@@ -255,7 +259,10 @@ ctest --preset asan     # same suites under AddressSanitizer + UBSan
 ```
 
 CI (GitHub Actions) runs core suites in Debug and ASan/UBSan configurations on every push and pull request.
-Static-analysis config lives in `.clang-tidy`; code style in `.clang-format`.
+Static-analysis config lives in `.clang-tidy`; code style in `.clang-format`. Additional workflows run on every PR:
+`dependency-review.yml` blocks vulnerable dependency introductions; `codeql.yml` runs CodeQL static analysis;
+`scorecard.yml` tracks supply-chain posture; and `cflite_pr.yml` runs 120 seconds of libFuzzer fuzzing via
+ClusterFuzzLite, targeting `mips::parse_hex_program` with the `fuzz_hex_loader` harness (`tests/fuzz/`).
 
 ---
 
