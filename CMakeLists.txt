@@ -15,15 +15,19 @@
 #   ctest --preset debug
 #
 # Options (all default ON except sanitizers):
-#   -DBUILD_NYXSTONE=ON|OFF      Nyxstone assembler/disassembler (needs LLVM 15+)
+#   -DBUILD_NYXSTONE=ON|OFF      Nyxstone assembler/disassembler (needs LLVM 15-20 + clang)
 #   -DBUILD_QT6_UI=ON|OFF        Qt6 Widgets GUI
 #   -DBUILD_QT6_QUICK_UI=ON|OFF  Qt Quick (QML) GUI
 #   -DENABLE_SANITIZERS=ON|OFF   ASan + UBSan
 #
 # Dependencies (FTXUI, GSL, spdlog, Nyxstone are auto-downloaded; Qt/LLVM are not):
-#   Fedora/RHEL:   sudo dnf install cmake gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel llvm-devel
-#   Ubuntu/Debian: sudo apt install cmake build-essential qt6-base-dev qt6-declarative-dev llvm-dev
-#   macOS:         brew install cmake qt@6 llvm@15
+#   Fedora/RHEL:   sudo dnf install cmake gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel llvm19-devel clang19-devel
+#   Ubuntu/Debian: sudo apt install cmake build-essential qt6-base-dev qt6-declarative-dev llvm-19-dev libclang-19-dev
+#   macOS:         brew install cmake qt@6 llvm@19
+#
+# Nyxstone v0.1.8 supports LLVM 15-20 only. If your system default LLVM is newer
+# (21+), install an in-range one and point Nyxstone at it, e.g.:
+#   NYXSTONE_LLVM_PREFIX=/usr/lib64/llvm19 cmake --preset debug
 #
 # ============================================================================
 
@@ -116,12 +120,30 @@ option(BUILD_NYXSTONE "Enable Nyxstone assembler/disassembler (MIT License)" ON)
 if (BUILD_NYXSTONE)
     message(STATUS "Configuring Nyxstone assembler/disassembler framework...")
 
-    find_package(LLVM 15 QUIET CONFIG
+    # Nyxstone v0.1.8 supports LLVM 15–20 only: it relies on LLVM's internal MC
+    # headers, which shift every major version. Newer LLVM (21+) does not build.
+    set(NYXSTONE_LLVM_MIN 15)
+    set(NYXSTONE_LLVM_MAX 20)
+
+    # Note: find_package(LLVM <version>) demands an *exact* major.minor match
+    # (LLVM's config-version file is not "any newer"), so we must query
+    # unversioned and range-check the major ourselves. Honour Nyxstone's own
+    # NYXSTONE_LLVM_PREFIX convention so a pinned in-range install is found even
+    # when a newer system LLVM (e.g. 22) is the default.
+    set(_llvm_hints "")
+    if (DEFINED ENV{NYXSTONE_LLVM_PREFIX})
+        list(APPEND _llvm_hints
+                "$ENV{NYXSTONE_LLVM_PREFIX}/lib/cmake/llvm"
+                "$ENV{NYXSTONE_LLVM_PREFIX}/lib64/cmake/llvm")
+    endif ()
+
+    find_package(LLVM QUIET CONFIG
             NAMES LLVM llvm
-            HINTS ENV LLVM_DIR ENV NYXSTONE_LLVM_PREFIX
+            HINTS ${_llvm_hints} ENV LLVM_DIR
     )
 
-    if (LLVM_FOUND)
+    if (LLVM_FOUND AND LLVM_VERSION_MAJOR GREATER_EQUAL NYXSTONE_LLVM_MIN
+                   AND LLVM_VERSION_MAJOR LESS_EQUAL NYXSTONE_LLVM_MAX)
         message(STATUS "  ✓ Found LLVM ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR} at ${LLVM_DIR}")
 
         FetchContent_Declare(nyxstone
@@ -132,17 +154,36 @@ if (BUILD_NYXSTONE)
         FetchContent_MakeAvailable(nyxstone)
 
         if (TARGET nyxstone)
+            # Nyxstone v0.1.8's CMake hardcodes ${CMAKE_SOURCE_DIR}/include for
+            # its public headers, which only resolves correctly when Nyxstone is
+            # the top-level project. Under FetchContent ${CMAKE_SOURCE_DIR} is
+            # *our* tree, so nyxstone.h is not found. Re-point the target at the
+            # fetched source's real include/vendor directories.
+            target_include_directories(nyxstone PUBLIC
+                    $<BUILD_INTERFACE:${nyxstone_SOURCE_DIR}/include>
+                    $<BUILD_INTERFACE:${nyxstone_SOURCE_DIR}/vendor>)
             message(STATUS "  ✓ Built Nyxstone from source (CMake target found)")
             set(NYXSTONE_TARGET nyxstone)
         else ()
             message(WARNING "Nyxstone target not found. Build may have failed. Disabling.")
             set(BUILD_NYXSTONE OFF)
         endif ()
+    elseif (LLVM_FOUND)
+        message(WARNING
+                "Found LLVM ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}, but Nyxstone v0.1.8 "
+                "supports LLVM ${NYXSTONE_LLVM_MIN}-${NYXSTONE_LLVM_MAX} only. Disabling "
+                "Nyxstone. Install an in-range LLVM (e.g. 'sudo dnf install llvm19-devel "
+                "clang19-devel') and point Nyxstone at it with "
+                "-DCMAKE_PREFIX_PATH or the NYXSTONE_LLVM_PREFIX env var "
+                "(e.g. NYXSTONE_LLVM_PREFIX=/usr/lib64/llvm19)."
+        )
+        set(BUILD_NYXSTONE OFF)
     else ()
         message(WARNING
-                "LLVM 15+ not found; disabling Nyxstone. Install llvm-devel (Fedora), "
-                "llvm-dev (Debian/Ubuntu), or brew install llvm@15 (macOS), "
-                "or set -DLLVM_DIR=/path/to/llvm/cmake."
+                "LLVM not found; disabling Nyxstone. Install an in-range LLVM "
+                "(${NYXSTONE_LLVM_MIN}-${NYXSTONE_LLVM_MAX}): llvm19-devel + clang19-devel "
+                "(Fedora), llvm-19-dev (Debian/Ubuntu), or brew install llvm@19 (macOS), "
+                "then set NYXSTONE_LLVM_PREFIX or -DLLVM_DIR=/path/to/llvm/cmake."
         )
         set(BUILD_NYXSTONE OFF)
     endif ()
@@ -167,6 +208,8 @@ add_library(mips_core STATIC
         src/mips/disassembler.cpp     # Machine code back to assembly
         src/mips/cp0.cpp              # Coprocessor 0: exception model (Status/Cause/EPC)
         src/mips/elf_loader.cpp       # MIPS ELF32 (mipsel) binary loader
+        src/mips/trace.cpp            # Shared spdlog logger (instruction/hazard/exception tracing)
+        src/mips/nyxstone_backend.cpp # Nyxstone (LLVM MC) assemble/disassemble wrapper (guarded)
 )
 
 # ── GDB RSP stub (optional — requires POSIX sockets; excluded on non-POSIX) ──
@@ -470,6 +513,14 @@ clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassem
 clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
+
+# ---- nyxstone_test: differential Decoder/Disassembler vs LLVM (if enabled) ----
+# Only meaningful when Nyxstone was actually built; mips_core carries the
+# CLEARCORE_NYXSTONE_ENABLED definition either way, so the source also compiles
+# to a passing no-op when disabled.
+if (BUILD_NYXSTONE AND NYXSTONE_TARGET)
+    clearcore_add_test(nyxstone_test tests/mips/nyxstone_test.cpp mips_core)
+endif ()
 
 # ---- qt_ui_test: exercises assembler/controller/widgets (if Qt6 enabled) ----
 if (BUILD_QT6_UI)

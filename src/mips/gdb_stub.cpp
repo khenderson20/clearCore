@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <gsl/gsl>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -43,6 +44,21 @@ void GdbStub::listen() {
     server_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd_ < 0) return;
 
+    // Close and invalidate both sockets on *every* exit path — the bind-failure
+    // and accept-failure early returns included. gsl::finally keeps that
+    // guarantee in one place; the previous accept-failure return leaked the
+    // listening socket until the GdbStub was destroyed.
+    auto sockets = gsl::finally([this] {
+        if (client_fd_ >= 0) {
+            ::close(client_fd_);
+            client_fd_ = -1;
+        }
+        if (server_fd_ >= 0) {
+            ::close(server_fd_);
+            server_fd_ = -1;
+        }
+    });
+
     const int yes = 1;
     ::setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
@@ -51,11 +67,7 @@ void GdbStub::listen() {
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port        = htons(port_);
 
-    if (::bind(server_fd_, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) {
-        ::close(server_fd_);
-        server_fd_ = -1;
-        return;
-    }
+    if (::bind(server_fd_, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) return;
     ::listen(server_fd_, 1);
 
     sockaddr_in peer{};
@@ -72,11 +84,6 @@ void GdbStub::listen() {
     while (recv_packet(pkt)) {
         dispatch(pkt);
     }
-
-    ::close(client_fd_);
-    client_fd_ = -1;
-    ::close(server_fd_);
-    server_fd_ = -1;
 }
 
 // ─── Packet I/O ──────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <gsl/gsl>
+#include <vector>
 
 namespace mips {
 
@@ -52,6 +53,11 @@ bool Memory::write_byte(uint32_t addr, uint8_t value) noexcept {
 }
 
 bool Memory::load_words(uint32_t addr, const std::vector<uint32_t>& words) noexcept {
+    // Word alignment is a precondition, not a runtime-recoverable error: a
+    // misaligned base would make every write_word below silently fail while we
+    // still returned success, loading nothing. Program/data images always load
+    // at word-aligned bases, so a violation is a caller bug — fail loudly.
+    Expects((addr & 0x3u) == 0);
     if (!in_bounds(addr, words.size() * 4)) return false;
     for (std::size_t i = 0; i < words.size(); ++i) {
         write_word(addr + gsl::narrow_cast<uint32_t>(i * 4), words[i]);
