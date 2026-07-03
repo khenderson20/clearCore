@@ -182,13 +182,13 @@ static void test_zero_hardwired(IProcessor& cpu, std::string_view label) {
 static void test_fault_oob(IProcessor& cpu, std::string_view label) {
     using namespace enc;
     // A word with opcode 0x3F has no defined MIPS instruction — Decoder::decode
-    // returns nullopt and the CPU must return Fault.  Single-cycle faults on
-    // step 1 (decode happens in the same step as fetch).  Pipelined faults on
-    // step 2 (instruction reaches ID where decode happens).  run() stops on the
-    // first non-Ok result, so both implementations converge here.
+    // returns nullopt and the CPU raises a Reserved Instruction (RI) exception.
+    // Single-cycle raises on step 1 (decode + execute in same step).  Pipelined
+    // raises on step 2 (instruction reaches ID stage where decode happens).
+    // run() stops on the first non-Ok result, so both implementations converge.
     cpu.reset(true);
     CHECK(cpu.load_program({0xFC00'0000u}));
-    CHECK(cpu.run(10) == StepResult::Fault);
+    CHECK(cpu.run(10) == StepResult::Exception);
     (void)label;
 }
 

@@ -6,6 +6,7 @@ namespace mips {
 InstrFormat Decoder::format_of(Opcode op) {
     switch (op) {
     case Opcode::SPECIAL:
+    case Opcode::COP0:
         return InstrFormat::R;
 
     case Opcode::J:
@@ -49,9 +50,21 @@ std::optional<DecodedInstr> Decoder::decode(uint32_t instr) {
     case InstrFormat::R: {
         const auto funct = static_cast<FunctCode>(bits(instr, 5, 0));
 
-        // Validate funct — reject reserved encodings rather than passing
-        // garbage to the ALU. Unknown funct codes become a decode stall
-        // once the pipeline is in place.
+        // COP0 (MFC0 / MTC0 / ERET): the rs field selects the sub-operation.
+        // Decode unconditionally as R-type; the CPU dispatches on rs/funct.
+        if (raw_op == Opcode::COP0) {
+            result.fields = RFields{
+                .rs    = static_cast<uint8_t>(bits(instr, 25, 21)),
+                .rt    = static_cast<uint8_t>(bits(instr, 20, 16)),
+                .rd    = static_cast<uint8_t>(bits(instr, 15, 11)),
+                .shamt = 0,
+                .funct = funct,
+            };
+            break;
+        }
+
+        // Validate SPECIAL funct — reject reserved encodings rather than
+        // passing garbage to the ALU.
         switch (funct) {
         case FunctCode::SLL:
         case FunctCode::SRL:
@@ -60,6 +73,8 @@ std::optional<DecodedInstr> Decoder::decode(uint32_t instr) {
         case FunctCode::SRLV:
         case FunctCode::JR:
         case FunctCode::JALR:
+        case FunctCode::SYSCALL:
+        case FunctCode::BREAK:
         case FunctCode::ADD:
         case FunctCode::ADDU:
         case FunctCode::SUB:
@@ -100,7 +115,8 @@ std::optional<DecodedInstr> Decoder::decode(uint32_t instr) {
         };
         break;
     }
-    default:;
+    default: {
+    }
     }
 
     return result;
@@ -144,9 +160,21 @@ std::string_view Decoder::mnemonic(const DecodedInstr& instr) {
             return "JR";
         case FunctCode::JALR:
             return "JALR";
+        case FunctCode::SYSCALL:
+            return "SYSCALL";
+        case FunctCode::BREAK:
+            return "BREAK";
         default:
             return "???";
         }
+    }
+
+    if (instr.opcode == Opcode::COP0) {
+        const uint8_t rs = instr.r().rs;
+        if (rs == 0x00) return "MFC0";
+        if (rs == 0x04) return "MTC0";
+        if (rs == 0x10 && instr.r().funct == FunctCode::ERET) return "ERET";
+        return "COP0";
     }
 
     switch (instr.opcode) {

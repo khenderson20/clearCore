@@ -15,6 +15,7 @@
 //   4. Forwarding and stall flags are first-class so the Stage 5 TUI can draw
 //      bypass wires and bubble indicators (Arches, Haydel et al. 2025).
 
+#include "mips/cp0.h"
 #include "mips/decoder.h"
 #include "mips/memory.h"
 #include "mips/registers.h"
@@ -47,9 +48,10 @@ struct Control {
 
 // ─── StepResult ───────────────────────────────────────────────────────────────
 enum class StepResult : uint8_t {
-    Ok,     // instruction executed; PC advanced
-    Fault,  // undecodable instruction or bad/misaligned memory access
-    Halt,   // self-targeting jump retired from WB (spin-in-place idiom)
+    Ok,         // instruction executed; PC advanced normally
+    Exception,  // CP0 exception raised; EPC/Cause/Status updated; PC = kExceptionVector
+    Fault,      // unrecoverable internal error (should not occur in correct programs)
+    Halt,       // self-targeting jump retired from WB (spin-in-place idiom)
 };
 
 // ─── Pipeline visualisation state ─────────────────────────────────────────────
@@ -112,8 +114,8 @@ public:
 
     // ── Accessors ──────────────────────────────────────────────────────────────
 
-    [[nodiscard]] virtual uint32_t pc() const noexcept       = 0;
-    virtual void                   set_pc(uint32_t) noexcept = 0;
+    [[nodiscard]] virtual uint32_t pc() const noexcept            = 0;
+    virtual void                   set_pc(uint32_t addr) noexcept = 0;
 
     [[nodiscard]] virtual const RegisterFile& regs() const noexcept = 0;
     [[nodiscard]] virtual RegisterFile&       regs() noexcept       = 0;
@@ -130,6 +132,19 @@ public:
     // Snapshot of all five pipeline stages from the most recent step().
     // SingleCycleCpu only populates stages[2] (EX); PipelinedCpu fills all five.
     [[nodiscard]] virtual const PipelineState& pipeline_state() const noexcept = 0;
+
+    // ── Coprocessor 0 ─────────────────────────────────────────────────────────
+    // Access to Status, Cause, EPC, BadVAddr, and the last exception code.
+    // Valid to read after any step() returns StepResult::Exception.
+    [[nodiscard]] virtual const Cp0& cp0() const noexcept = 0;
+    [[nodiscard]] virtual Cp0&       cp0() noexcept       = 0;
+
+    // HI and LO registers (destination for MULT/DIV; exposed for GDB register
+    // layout even before those instructions are implemented).
+    [[nodiscard]] virtual uint32_t hi() const noexcept         = 0;
+    [[nodiscard]] virtual uint32_t lo() const noexcept         = 0;
+    virtual void                   set_hi(uint32_t v) noexcept = 0;
+    virtual void                   set_lo(uint32_t v) noexcept = 0;
 };
 
 }  // namespace mips
