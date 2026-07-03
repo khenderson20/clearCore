@@ -1,9 +1,12 @@
 #include "mips/pipelined_cpu.h"
 
+#include <string>
 #include <vector>
 
 #include "mips/alu.h"
 #include "mips/decoder.h"
+#include "mips/disassembler.h"
+#include "mips/trace.h"
 
 // ─── pipelined_cpu.cpp ───────────────────────────────────────────────────────
 // Each step() models one clock cycle.  The five stages are processed in the
@@ -428,6 +431,24 @@ id_done: {}
         next_pc = pc_;     // do not advance
         new_if  = cur_if;  // hold (overwrite the bubble we may have computed)
         new_id  = {};      // bubble
+    }
+
+    // ── Trace: hazard/stall/flush events and the instruction entering ID ──────
+    if (trace_enabled(spdlog::level::trace)) {
+        if (stall_load_use)
+            trace_log().trace("pl  cyc={:<6} load-use hazard: stall, bubble into ID/EX", cycle_);
+        if (flush_from_ex)
+            trace_log().trace("pl  cyc={:<6} flush 2 (branch/jump/exception) -> pc={:#010x}",
+                              cycle_, branch_pc);
+        else if (flush_from_id)
+            trace_log().trace("pl  cyc={:<6} flush 1 (j/jal) -> pc={:#010x}", cycle_, jump_pc);
+        if (new_if.valid) {
+            const auto        if_dec = Decoder::decode(new_if.instr);
+            const std::string asm_text =
+                if_dec ? Disassembler::to_string(*if_dec, new_if.pc) : "<undecodable>";
+            trace_log().trace("pl  cyc={:<6} IF pc={:#010x}  {:#010x}  {}", cycle_, new_if.pc,
+                              new_if.instr, asm_text);
+        }
     }
 
     // ── Commit ───────────────────────────────────────────────────────────────
