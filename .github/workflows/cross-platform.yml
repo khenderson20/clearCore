@@ -42,6 +42,12 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history + tags: the Qt Advanced Docking System's CMake runs
+          # `git describe --tags` in this repo to stamp its Windows version
+          # resource. A shallow, tagless checkout yields an empty version and a
+          # malformed FILEVERSION that the resource compiler rejects (RC2127).
+          fetch-depth: 0
 
       - name: Install Qt 6
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
