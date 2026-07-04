@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: step-security/harden-runner@ec9f2d5744a09e4fc2bb41ae8fb3f8a3c5f2e5e3 # v2.13.0
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
@@ -35,50 +35,27 @@ jobs:
           import os, re
 
           tag_raw = os.environ["RELEASE_TAG"]
-          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw
-          date    = os.environ["RELEASE_DATE"][:10]   # YYYY-MM-DD
+          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw  # v0.1.0 -> 0.1.0
+          date    = os.environ["RELEASE_DATE"][:10]                     # YYYY-MM-DD
 
-          with open("CHANGELOG.md", "r") as f:
+          with open("CHANGELOG.md") as f:
               content = f.read()
 
-          # Insert a fresh empty [Unreleased] section, then the released version heading.
-          # The existing Unreleased contents remain in-place and therefore become the body
-          # of the released entry.
+          # Rename the current [Unreleased] heading to the released version and add a
+          # fresh, empty [Unreleased] above it. The existing Unreleased content stays
+          # in place and becomes the body of the released entry.
           new_section = (
               "## [Unreleased]\n\n"
               "---\n\n"
-              f"## [{tag}] - {date}\n\n"
+              f"## [{tag}] - {date}"
           )
-          python3 - <<'EOF'
-          import os, re, textwrap
-
-          tag   = os.environ["RELEASE_TAG"]
-          date  = os.environ["RELEASE_DATE"][:10]   # YYYY-MM-DD
-          body  = os.environ["RELEASE_BODY"].strip()
-
-          with open("CHANGELOG.md", "r") as f:
-              content = f.read()
-
-          # Replace the [Unreleased] heading with the new versioned heading.
-          # Also insert a blank [Unreleased] section above it for the next cycle.
-          new_section = (
-              "## [Unreleased]\n\n"
-              "---\n\n"
-              f"## [{tag}] - {date}\n\n"
-              f"{body}\n"
-          )
-
-          updated = re.sub(
-              r"## \[Unreleased\]",
-              new_section,
-              content,
-              count=1,
-          )
+          updated, n = re.subn(r"## \[Unreleased\]", new_section, content, count=1)
+          if n == 0:
+              raise SystemExit("error: no '## [Unreleased]' section found in CHANGELOG.md")
 
           with open("CHANGELOG.md", "w") as f:
               f.write(updated)
-
-          print(f"CHANGELOG.md promoted [Unreleased] → [{tag}] - {date}")
+          print(f"Promoted [Unreleased] -> [{tag}] - {date}")
           EOF
 
       - name: Commit and push to develop
