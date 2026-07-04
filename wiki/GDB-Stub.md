@@ -62,13 +62,15 @@ GDB addresses 38 registers by number in the `g`/`G`/`p`/`P` commands:
 
 | GDB register | MIPS name | Source |
 |---|---|---|
-| 0–31 | $zero, $at, $v0–$v1, $a0–$a3, $t0–$t9, $s0–$s7, $k0, $k1, $gp, $sp, $fp, $ra | `IProcessor::regs()` |
-| 32 | CP0 Status | `IProcessor::cp0().status()` |
-| 33 | LO | `IProcessor::lo()` |
-| 34 | HI | `IProcessor::hi()` |
-| 35 | CP0 BadVAddr | `IProcessor::cp0().bad_vaddr()` |
-| 36 | CP0 Cause | `IProcessor::cp0().cause()` |
-| 37 | PC | `IProcessor::pc()` |
+| 0–31 | $zero, $at, $v0–$v1, $a0–$a3, $t0–$t9, $s0–$s7, $k0, $k1, $gp, $sp, $fp, $ra | `isa::IProcessor::regs()` |
+| 32 | CP0 Status | `IMipsProcessor::cp0().status()` |
+| 33 | LO | `IMipsProcessor::lo()` |
+| 34 | HI | `IMipsProcessor::hi()` |
+| 35 | CP0 BadVAddr | `IMipsProcessor::cp0().bad_vaddr()` |
+| 36 | CP0 Cause | `IMipsProcessor::cp0().cause()` |
+| 37 | PC | `isa::IProcessor::pc()` |
+
+The stub holds a `mips::IMipsProcessor&` — the MIPS-specific interface — since it reads CP0, HI, and LO. The general-purpose registers, PC, and memory come from the ISA-agnostic `isa::IProcessor` base.
 
 ## Software breakpoints
 

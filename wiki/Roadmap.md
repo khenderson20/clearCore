@@ -63,6 +63,15 @@ The project follows a staged development plan. Each stage builds on the previous
 - **Instruction/pipeline trace logging** (`mips::trace`, spdlog) — fetch/decode, stall/flush/hazard events, exception raises, and memory faults; quiet by default, enable at runtime with `CLEARCORE_LOG_LEVEL`
 - **MARS differential ("golden") test suite** (`tests/golden/`) — cross-checks both CPU models against MARS, the classroom-standard reference MIPS simulator, on seven corpus programs
 
+### Stage 2.6 — ISA-agnostic core (RISC-V groundwork) · `v0.1.1`
+
+Refactor-only step (no user-facing change) that carves the ISA-neutral parts of the emulator out of the `mips` namespace so a second ISA backend can reuse them. See [Architecture § Pluggable-backend pattern](Architecture#2-pluggable-backend-pattern).
+
+- New `isa::` core in `include/isa/`: `Memory`, `RegisterFile`, and `IProcessor` (with `PipelineState` / `StepResult` / `StageSnapshot`) — everything common to MIPS and RV32I
+- `IProcessor` split into agnostic `isa::IProcessor` + `mips::IMipsProcessor` (the latter adds CP0, HI/LO, and the MIPS `Control` word); both CPU models now derive from `IMipsProcessor`
+- `mips::Memory` / `mips::RegisterFile` / `mips::IProcessor` retained as `using`-shims, so all existing callers and the three UIs are untouched
+- Verified: full debug build (TUI + Qt Widgets + QML) and all tests green
+
 ---
 
 ## In progress / upcoming
@@ -111,7 +120,13 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 
 ### Core extensibility
 
-- [ ] RISC-V backend (implements `IProcessor`; reuses all existing visualizers)
+- [~] **RISC-V (RV32I) backend** — derives from `isa::IProcessor`, reuses `isa::Memory` / `RegisterFile` / `PipelineState`, so all existing visualizers work unchanged. Groundwork (the `isa::` core split, Stage 2.6) shipped in `v0.1.1`. Remaining phased plan:
+  - [x] ISA-agnostic core extraction + `IProcessor` split (`v0.1.1`)
+  - [ ] RV32I decoder + disassembler (`include/riscv/decoder.h`) — pure, unit-testable
+  - [ ] `RiscvSingleCycleCpu` implementing `isa::IProcessor`
+  - [ ] `RiscvPipelinedCpu` (5-stage; populates the shared `PipelineState`)
+  - [ ] ELF loader for `EM_RISCV` (`riscv32` binaries)
+  - [ ] GDB stub register map + CSR/trap model
 - [ ] Configurable datapath — load processor config from JSON/YAML to swap components
 - [ ] Cache simulator — configurable L1/L2, replacement policies, coherence (EduMIPS64 + Dinero pattern)
 - [ ] Extend the ISA subset — `SRAV`, `LB`/`SB`/`LH`/`SH`, `BGTZ`/`BLEZ`/`BGEZ`/`BLTZ` are not yet decoded (see [MIPS CPU Simulator](MIPS-CPU-Emulator#supported-isa-subset))
