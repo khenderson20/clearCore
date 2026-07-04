@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=clearCore
+GenericName=MIPS CPU Simulator
+Comment=Educational MIPS CPU simulator with live pipeline visualization
+Exec=clearCore-gui
+Icon=clearCore
+Terminal=false
+Categories=Education;ComputerScience;
+Keywords=MIPS;CPU;simulator;assembly;pipeline;computer architecture;

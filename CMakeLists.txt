@@ -660,6 +660,16 @@ if (BUILD_QT6_UI)
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             BUNDLE  DESTINATION .
     )
+
+    # Desktop-entry and icon for the Widgets GUI. These give DEB/RPM packages a
+    # menu entry, and are what linuxdeploy reads to build the AppImage (its
+    # Exec= names the binary, Icon= names the 256x256 PNG below).
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/clearCore.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+    )
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/clearCore.png"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+    )
 endif ()
 
 if (BUILD_QT6_QUICK_UI)
