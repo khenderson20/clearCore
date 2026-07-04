@@ -38,7 +38,4 @@ keywords:
 license: MIT
 version: 0.1.0
 date-released: '2026-07-04'
-# After enabling the GitHub–Zenodo integration and publishing a
-# release, add the minted DOI here so the "Cite this repository"
-# export includes it, e.g.:
-# doi: 10.5281/zenodo.XXXXXXX
+doi: 10.5281/zenodo.21194876
