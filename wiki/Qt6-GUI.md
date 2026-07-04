@@ -116,4 +116,4 @@ cmake --build cmake-build-debug --target clearCore-quick
 ./cmake-build-debug/clearCore-quick
 ```
 
-This interface isn't yet documented in the top-level README — treat it as available but less battle-tested than the Widgets GUI until that's reconciled.
+Treat it as available but less battle-tested than the Widgets GUI; the README's [Qt Quick / QML GUI](../README.md#qt-quick--qml-gui) section covers the comparison.
