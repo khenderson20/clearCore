@@ -51,16 +51,16 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of clearCore is affected?
+      description: Which part of clearCore is affected? (Note the engine — single-cycle or pipeline — in the repro steps if relevant.)
       options:
-        - Core / simulation engine (single-cycle)
-        - Core / simulation engine (5-stage pipeline)
+        - Core / simulation engine
         - Terminal UI (FTXUI)
         - Qt6 Widgets GUI
         - Qt Quick / QML GUI
         - GDB remote stub / debugging
         - Number-system converter
-        - Build system / CI (CMake, presets, workflows)
+        - Build system / CI
+        - Documentation
         - Other / not sure
     validations:
       required: true

@@ -46,13 +46,13 @@ assignees: ''
 
 <!-- Delete the ones that don't apply. -->
 
-- [ ] Core / simulation engine (single-cycle or 5-stage pipeline)
+- [ ] Core / simulation engine
 - [ ] Terminal UI (FTXUI)
 - [ ] Qt6 Widgets GUI
 - [ ] Qt Quick / QML GUI
 - [ ] GDB remote stub / debugging
 - [ ] Number-system converter
-- [ ] Build system / CI (CMake, presets, workflows)
+- [ ] Build system / CI
 - [ ] Documentation
 - [ ] Other / not sure
 
@@ -72,5 +72,9 @@ assignees: ''
 
 ---
 
-- [ ] I searched existing issues and this is not a duplicate.
-- [ ] I read the README and relevant docs.
+<!--
+  Optional guidance (not enforced) — the Bug report and Feature request
+  forms enforce these checks; this catch-all template does not. Please still:
+    - Search existing issues to avoid duplicates.
+    - Skim the README and relevant docs.
+-->
