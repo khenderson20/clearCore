@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+title: >-
+  clearCore: An educational MIPS CPU simulator with
+  live 5-stage pipeline visualization
+message: >-
+  If you use clearCore in your research, teaching, or a
+  derivative project, please cite it using the metadata
+  in this file.
+type: software
+authors:
+  - given-names: Kevin
+    family-names: Henderson
+    email: kevin.d.hende@gmail.com
+    alias: khenderson20
+repository-code: 'https://github.com/khenderson20/clearCore'
+url: 'https://github.com/khenderson20/clearCore'
+abstract: >-
+  clearCore is a C++20 MIPS CPU simulator built for seeing
+  how a processor works. It provides two interchangeable
+  execution engines — a single-cycle datapath and a 5-stage
+  pipeline sharing one IProcessor interface — and three
+  front ends (a terminal UI, a Qt6 Widgets GUI, and a Qt
+  Quick/QML GUI) that render pipeline state, hazards,
+  stalls, forwarding paths, CP0 exceptions, and an ELF
+  loader. A built-in GDB remote stub lets real GDB attach
+  to the running emulator.
+keywords:
+  - computer-architecture
+  - mips
+  - cpu-simulator
+  - pipeline
+  - hazard-detection
+  - data-forwarding
+  - educational
+  - cpp20
+  - qt6
+  - terminal-ui
+license: MIT
+version: 0.0.1
+date-released: '2026-07-02'
+# After enabling the GitHub–Zenodo integration and publishing a
+# release, add the minted DOI here so the "Cite this repository"
+# export includes it, e.g.:
+# doi: 10.5281/zenodo.XXXXXXX
