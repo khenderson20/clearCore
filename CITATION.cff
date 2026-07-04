@@ -36,7 +36,7 @@ keywords:
   - qt6
   - terminal-ui
 license: MIT
-version: 0.0.2
+version: 0.1.0
 date-released: '2026-07-04'
 # After enabling the GitHub–Zenodo integration and publishing a
 # release, add the minted DOI here so the "Cite this repository"
