@@ -27,9 +27,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: windows-x64, os: windows-latest, arch: x86_64 }
-          - { name: macos-intel, os: macos-13,       arch: x86_64 }
-          - { name: macos-arm64, os: macos-14,       arch: arm64  }
+          - { name: windows-x64, os: windows-latest }
+          # One universal (arm64 + x86_64) macOS build on Apple Silicon. Qt's
+          # official macOS binaries are universal (since 6.2), so a single Qt
+          # install covers both slices — no scarce Intel (macos-13) runner needed.
+          - { name: macos-universal, os: macos-14 }
     env:
       # macOS minimum: std::format's to_chars backend is only available in
       # libc++ from macOS 13.3 onward. CMake reads this to seed the deployment
@@ -65,8 +67,16 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja
 
-      - name: Configure
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
         run: cmake --preset release -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+
+      - name: Configure (macOS, universal)
+        if: runner.os == 'macOS'
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
         run: cmake --build --preset release
