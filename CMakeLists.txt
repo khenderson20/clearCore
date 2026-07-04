@@ -33,7 +33,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 project(clearCore
-        VERSION 0.0.1
+        VERSION 0.0.2
         LANGUAGES CXX C  # C may be needed by some dependencies
         DESCRIPTION "Educational MIPS CPU emulator with pipeline visualization"
 )
@@ -107,6 +107,14 @@ FetchContent_Declare(spdlog
         GIT_TAG "v1.14.1"
         GIT_SHALLOW ON
 )
+
+# These are private, statically-linked build dependencies — their headers,
+# static libs, and CMake config files must not leak into our install tree or
+# CPack packages. Disable each project's own install() rules before it is
+# added, so `cmake --install` / CPack ship only clearCore's binaries and docs.
+set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(GSL_INSTALL OFF CACHE BOOL "" FORCE)
+set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(ftxui GSL spdlog)
 
@@ -628,6 +636,112 @@ if (FUZZING_ENGINE)
     target_compile_features(fuzz_hex_loader PUBLIC cxx_std_20)
     message(STATUS "Fuzz targets enabled (engine: ${FUZZING_ENGINE})")
 endif ()
+
+# ============================================================================
+# INSTALL RULES
+# ============================================================================
+#
+# Define where `cmake --install` (and therefore CPack and AppImage tooling)
+# places each artifact. GNUInstallDirs gives portable, platform-correct
+# destinations (bin/, share/doc/, etc.). Only the runnable applications are
+# installed — the static core libraries are internal build artifacts, not a
+# public dev package.
+#
+include(GNUInstallDirs)
+
+# The terminal UI is always built.
+install(TARGETS number_system_converter
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        BUNDLE  DESTINATION .
+)
+
+if (BUILD_QT6_UI)
+    install(TARGETS clearCore-gui
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            BUNDLE  DESTINATION .
+    )
+
+    # Desktop-entry and icon for the Widgets GUI. These give DEB/RPM packages a
+    # menu entry, and are what linuxdeploy reads to build the AppImage (its
+    # Exec= names the binary, Icon= names the 256x256 PNG below).
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/clearCore.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+    )
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/clearCore.png"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+    )
+endif ()
+
+if (BUILD_QT6_QUICK_UI)
+    install(TARGETS clearCore-quick
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            BUNDLE  DESTINATION .
+    )
+endif ()
+
+# Ship the license and top-level docs alongside the binaries.
+install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
+# ============================================================================
+# PACKAGING (CPack)
+# ============================================================================
+#
+# Build installable packages from the install tree:
+#   cmake --build --preset release
+#   cpack --config build/release/CPackConfig.cmake            # -> .tar.gz (default)
+#   cpack --config build/release/CPackConfig.cmake -G DEB     # -> .deb   (needs dpkg)
+#   cpack --config build/release/CPackConfig.cmake -G RPM     # -> .rpm   (needs rpmbuild)
+#
+# NOTE: these packages contain the clearCore binaries but NOT bundled Qt or the
+# Qt Advanced Docking System shared library — DEB/RPM record those as
+# dependencies (resolved by apt/dnf), while the plain .tar.gz assumes Qt6 is
+# already present. A self-contained, dependency-free artifact (AppImage) is a
+# separate deployment step layered on top of these install rules.
+#
+set(CPACK_PACKAGE_NAME "clearCore")
+set(CPACK_PACKAGE_VENDOR "Kevin Henderson")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/khenderson20/clearCore")
+set(CPACK_PACKAGE_CONTACT "Kevin Henderson <kevin.d.hende@gmail.com>")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+
+# Portable compressed archive by default; DEB/RPM are opt-in via `cpack -G`.
+if (NOT CPACK_GENERATOR)
+    set(CPACK_GENERATOR "TGZ")
+endif ()
+
+# Source packages (`cpack --config CPackSourceConfig.cmake`) exclude build
+# output, VCS, and IDE metadata.
+set(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_SOURCE_IGNORE_FILES
+        "/\\.git/"
+        "/build/"
+        "/cmake-build-.*/"
+        "/\\.idea/"
+        "\\.user$"
+)
+
+# Debian-specific fields (used only with -G DEB). SHLIBDEPS auto-detects the
+# Qt / QADS shared-library dependencies from the linked binaries.
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Kevin Henderson <kevin.d.hende@gmail.com>")
+set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+# RPM-specific fields (used only with -G RPM). AUTOREQ auto-detects deps.
+set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+set(CPACK_RPM_PACKAGE_GROUP "Development/Tools")
+set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+
+include(CPack)
 
 # ============================================================================
 # BUILD SUMMARY
