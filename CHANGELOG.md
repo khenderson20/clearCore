@@ -24,19 +24,47 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### CI / Internal
+- Fixed `update-changelog.yml`: corrected the `harden-runner` commit SHA (previously unresolvable, which failed the
+  job at startup) and rewrote the malformed promote step so the CHANGELOG auto-promotes on each published release.
+
+---
+
+## [0.1.0] - 2026-07-04
+
+First feature release since v0.0.1 — clearCore becomes citable and downloadable. Adds packaging (CPack,
+`.deb`/`.rpm`), a self-contained AppImage of the Qt6 GUI, release automation, and full citation/community metadata.
+
 ### Added
+- Self-contained **AppImage** of the Qt6 Widgets GUI — bundles Qt6 and the Qt Advanced Docking System so it runs
+  with no toolchain or Qt install; built and Xvfb-smoke-tested via `.github/workflows/appimage.yml`. (#43)
+- Release workflow (`.github/workflows/release.yml`): on a published release, builds, tests, and attaches a
+  `clearCore-<version>-Linux-x86_64.tar.gz`. (#42)
+- `install()` rules and CPack packaging (`.tar.gz`/`.deb`/`.rpm`) with a clean install tree that excludes
+  dependency headers and CMake files. (#41)
+- `CITATION.cff` enabling GitHub's "Cite this repository" button, with a slot for a Zenodo DOI. (#39)
+- JOSS paper draft under `paper/`. (#40)
+- `CODE_OF_CONDUCT.md`, a root `CONTRIBUTING.md`, and a pull-request template — community health to 100%. (#39)
+- Issue templates (bug report / feature request / custom) and a Sponsor button (`FUNDING.yml`). (#35, #36, #38)
 - ClusterFuzzLite libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targeting `mips::parse_hex_program`;
   runs 120 s on every PR via `.github/workflows/cflite_pr.yml`. Addresses OpenSSF Scorecard fuzzing signal.
-  `fuzz_hex_loader` CMake target is gated on `-DFUZZING_ENGINE=<engine>` — normal builds are unaffected.
-  ClusterFuzzLite config lives in `.clusterfuzzlite/` (project.yaml, Dockerfile, build.sh). (#8, #9)
+  `fuzz_hex_loader` CMake target is gated on `-DFUZZING_ENGINE=<engine>` — normal builds are unaffected. (#8, #9)
+
+### Changed
+- Version set to `0.1.0` across `CMakeLists.txt`, `CITATION.cff`, and the wiki. (#47)
 
 ### Fixed
 - Qt GUI: set each dock widget's `objectName` to its title for improved panel identification and debugging. (#7)
 
 ### Documentation
-- Full README and wiki pass covering all changes introduced in PRs #2–#9: KSyntaxHighlighting, ClusterFuzzLite,
-  security hardening, v0.0.1 release, and CI workflow table. Added release badge, CHANGELOG, and
-  release-drafter automation.
+- Restructured the README for new-developer readability. (#25)
+- Documented the Qt Quick/QML GUI and Nyxstone; corrected the test-suite count. (#21)
+- Full README and wiki pass covering PRs #2–#9 (KSyntaxHighlighting, ClusterFuzzLite, security hardening, the
+  v0.0.1 release, and the CI workflow table); added the release badge and release-drafter automation.
+
+### CI / Internal
+- Reduced PR job count with path filters and conditional jobs. (#23)
+- Tightened the changelog workflow's top-level token permissions to `read-all`. (#27)
 
 ---
 
