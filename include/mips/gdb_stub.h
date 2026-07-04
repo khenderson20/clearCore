@@ -50,7 +50,7 @@ class GdbStub {
 public:
     // Construct a stub attached to `cpu`, listening on TCP `port`.
     // The stub does NOT take ownership of the processor.
-    explicit GdbStub(IProcessor& cpu, uint16_t port = 1234);
+    explicit GdbStub(IMipsProcessor& cpu, uint16_t port = 1234);
     ~GdbStub();
 
     GdbStub(const GdbStub&)            = delete;
@@ -109,10 +109,10 @@ private:
     // Signal number to send for a given StepResult / exception code.
     int stop_signal() const;
 
-    IProcessor& cpu_;
-    uint16_t    port_;
-    int         server_fd_ = -1;
-    int         client_fd_ = -1;
+    IMipsProcessor& cpu_;
+    uint16_t        port_;
+    int             server_fd_ = -1;
+    int             client_fd_ = -1;
 
     std::vector<Breakpoint> breakpoints_;
     bool                    running_     = false;  // true while inside handle_continue

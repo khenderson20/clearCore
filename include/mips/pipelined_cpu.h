@@ -28,7 +28,7 @@
 
 namespace mips {
 
-class PipelinedCpu final : public IProcessor {
+class PipelinedCpu final : public IMipsProcessor {
 public:
     explicit PipelinedCpu(std::size_t mem_bytes = 1u << 16);
 

@@ -5,7 +5,7 @@
 // fetch → decode → control → execute → memory → writeback chain before
 // returning.  This is the straightforward H&H Chapter 7 design.
 //
-// It implements IProcessor so the TUI and tests can treat it identically to
+// It implements IMipsProcessor so the TUI and tests can treat it identically to
 // PipelinedCpu.  The PipelineState it exposes only populates the EX snapshot
 // (the only stage that "exists" in a single-cycle design), matching the DrMIPS
 // "unicycle" display mode.
@@ -16,7 +16,7 @@
 
 namespace mips {
 
-class SingleCycleCpu final : public IProcessor {
+class SingleCycleCpu final : public IMipsProcessor {
 public:
     explicit SingleCycleCpu(std::size_t mem_bytes = 1u << 16);
 
