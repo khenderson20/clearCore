@@ -1,0 +1,81 @@
+name: Cross-platform build
+
+# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon), the
+# groundwork for shipping Windows/macOS release assets. Nyxstone (LLVM) and the
+# golden tests (JRE) are disabled — they are Linux-oriented dev/test tooling, not
+# user-facing, and painful to provision off-Linux.
+#
+# Triggers: pushes to the packaging branch (for iteration) and manual dispatch.
+# Packaging + release-asset upload are layered on in later steps.
+on:
+  push:
+    branches: [ci/windows-macos-packaging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64,    os: windows-latest, arch: x86_64 }
+          - { name: macos-intel,    os: macos-13,       arch: x86_64 }
+          - { name: macos-arm64,    os: macos-14,       arch: arm64  }
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: '6.8.*'
+          cache: true
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # ── Configure ──────────────────────────────────────────────────────────
+      - name: Configure (Windows / MSVC)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -S . -B build/release -G "Visual Studio 17 2022" -A x64
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --build build/release --config Release
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build --preset release
+
+      # ── Test ───────────────────────────────────────────────────────────────
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: ctest --test-dir build/release -C Release --output-on-failure
+
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        run: ctest --test-dir build/release --output-on-failure
