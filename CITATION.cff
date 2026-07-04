@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: >-
-  clearCore: An educational MIPS CPU simulator with
+  clearCore: An educational CPU-architecture simulator with
   live 5-stage pipeline visualization
 message: >-
   If you use clearCore in your research, teaching, or a
@@ -15,15 +15,17 @@ authors:
 repository-code: 'https://github.com/khenderson20/clearCore'
 url: 'https://github.com/khenderson20/clearCore'
 abstract: >-
-  clearCore is a C++20 MIPS CPU simulator built for seeing
-  how a processor works. It provides two interchangeable
-  execution engines — a single-cycle datapath and a 5-stage
-  pipeline sharing one IProcessor interface — and three
-  front ends (a terminal UI, a Qt6 Widgets GUI, and a Qt
-  Quick/QML GUI) that render pipeline state, hazards,
-  stalls, forwarding paths, CP0 exceptions, and an ELF
-  loader. A built-in GDB remote stub lets real GDB attach
-  to the running emulator.
+  clearCore is a C++20 CPU-architecture simulator built for
+  seeing how a processor works. It currently implements MIPS
+  on an ISA-agnostic core designed to host additional
+  instruction sets (RISC-V planned). It provides two
+  interchangeable execution engines — a single-cycle datapath
+  and a 5-stage pipeline sharing one processor interface — and
+  three front ends (a terminal UI, a Qt6 Widgets GUI, and a Qt
+  Quick/QML GUI) that render pipeline state, hazards, stalls,
+  forwarding paths, CP0 exceptions, and an ELF loader. A
+  built-in GDB remote stub lets real GDB attach to the running
+  emulator.
 keywords:
   - computer-architecture
   - mips

@@ -6,7 +6,8 @@
 
 <p align="center">
   Write MIPS assembly, watch it flow through a 5-stage pipeline cycle by cycle,<br>
-  and attach real GDB to the running emulator — in your terminal or a Qt6 desktop GUI.
+  and attach real GDB to the running emulator — in your terminal or a Qt6 desktop GUI.<br>
+  <b>MIPS today, RISC-V next</b> — on one shared, ISA-agnostic core.
 </p>
 
 <p align="center">
@@ -40,16 +41,23 @@
 
 ## What is clearCore?
 
-clearCore is a C++20 MIPS CPU simulator built for *seeing* how a processor works. Type assembly into the built-in
-editor, step the CPU, and watch every instruction move through IF/ID/EX/MEM/WB — stalls, flushes, and forwarding
-paths highlighted as they happen. When you outgrow hand-typed programs, load a real `mipsel` ELF binary and debug
-it with actual GDB through the built-in remote stub.
+clearCore is a C++20 CPU-architecture simulator built for *seeing* how a processor works. Today it speaks MIPS:
+type assembly into the built-in editor, step the CPU, and watch every instruction move through IF/ID/EX/MEM/WB —
+stalls, flushes, and forwarding paths highlighted as they happen. When you outgrow hand-typed programs, load a real
+`mipsel` ELF binary and debug it with actual GDB through the built-in remote stub.
 
-Two execution engines — a single-cycle datapath and a 5-stage pipeline — implement the same `IProcessor` interface
+Two execution engines — a single-cycle datapath and a 5-stage pipeline — implement the same processor interface
 and swap at runtime, no rebuild required (the pluggable-backend pattern from Ripes/DrMIPS). Three front ends — a
 keyboard-driven terminal UI, a Qt6 Widgets GUI, and a Qt Quick/QML GUI — drive the same core libraries, so pipeline
 behavior is identical everywhere. The design follows Harris & Harris (*Digital Design and Computer Architecture*)
 and Patterson & Hennessy (*Computer Organization and Design*).
+
+**Why the name — and why not just MIPS.** MIPS originally stood for *Microprocessor without Interlocked Pipeline
+Stages*: the hardware dropped the interlocks and left the compiler to schedule around hazards. clearCore puts them
+back and lights them up, so you can watch every stall, forward, and flush the real silicon hid. And it isn't
+MIPS-only by design — the simulation core was recently split into an ISA-agnostic `isa::` layer (shared memory,
+register file, pipeline state, and processor interface), so a **RISC-V (RV32I) backend is next**, reusing all three
+front ends and every visualizer unchanged.
 
 *(clearCore began life as a live number-system converter — that converter is still the first tab of the terminal UI.)*
 
@@ -205,14 +213,16 @@ the same interfaces directly. Module-by-module breakdown, design pillars, and ac
 |------------------|-----------------------|--------------------|-----------------|------------------|-------------------|
 | **Language**     | C++20                 | C++/Qt             | Java            | Java             | C++/Qt            |
 | **UI**           | TUI + Qt6 GUI         | Qt GUI             | Swing GUI       | Swing GUI        | Qt GUI            |
-| **ISA**          | MIPS                  | RISC-V             | MIPS            | MIPS64           | MIPS              |
+| **ISA**          | MIPS (RISC-V planned) | RISC-V             | MIPS            | MIPS64           | MIPS              |
 | **Backends**     | 2 (SC / 5-stage)      | 5+ models          | ~2              | ~1               | ~1                |
 | **Pipeline viz** | Stage state + hazards | Datapath schematic | Visual datapath | Registers/memory | Datapath + memory |
 
 ## Roadmap
 
-Stages 1–2.6 (converter core → pipelined CPU → Qt6 GUIs → CP0/ELF/GDB) are complete. Up next:
+Stages 1–2.6 (converter core → pipelined CPU → Qt6 GUIs → CP0/ELF/GDB) are complete — including the recent split
+into an **ISA-agnostic core** that clears the way for a second instruction set. Up next:
 
+- [ ] **RISC-V (RV32I)** — a second ISA backend on the shared `isa::` core: decoder → single-cycle → 5-stage pipeline → ELF → GDB, reusing every existing front end and visualizer
 - [ ] **Stage 3** — Two-pass assembler with full symbol table and pseudo-instruction expansion
 - [ ] **Stage 4** — Per-stage TUI telemetry and CPI analysis, matching the GUI's Pipeline Trace and Statistics tabs
 - [ ] **Stage 5** — Branch prediction and speculative execution
@@ -244,7 +254,7 @@ GitHub's **"Cite this repository"** button (top-right sidebar) generates APA and
 ```bibtex
 @software{henderson_clearcore,
   author  = {Henderson, Kevin},
-  title   = {{clearCore}: An educational {MIPS} {CPU} simulator with live pipeline visualization},
+  title   = {{clearCore}: An educational {CPU}-architecture simulator with live 5-stage pipeline visualization},
   year    = {2026},
   version = {0.1.0},
   doi     = {10.5281/zenodo.21194876},
