@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
@@ -58,11 +59,28 @@ jobs:
           print(f"Promoted [Unreleased] -> [{tag}] - {date}")
           EOF
 
-      - name: Commit and push to develop
+      - name: Open a pull request with the CHANGELOG promotion
+        # The develop branch ruleset forbids direct pushes ("changes must be made
+        # through a pull request"), so open a PR instead of pushing to develop.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "No CHANGELOG changes to commit"; exit 0
+          fi
+          branch="chore/changelog-${RELEASE_TAG}"
+          git switch -c "$branch"
           git add CHANGELOG.md
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: promote [Unreleased] to ${{ github.event.release.tag_name }} in CHANGELOG"
-          git push origin develop
+          git commit -m "chore: promote [Unreleased] to ${RELEASE_TAG} in CHANGELOG"
+          git push --force-with-lease origin "$branch"
+          # skip-changelog: this promotion PR should not appear in the next release's notes.
+          gh pr create \
+            --base develop \
+            --head "$branch" \
+            --title "chore: promote CHANGELOG for ${RELEASE_TAG}" \
+            --body "Automated CHANGELOG promotion for the ${RELEASE_TAG} release, opened by \`update-changelog.yml\` (direct pushes to \`develop\` are blocked by the branch ruleset). Review and merge to record the release in CHANGELOG.md." \
+            --label skip-changelog \
+            || echo "PR already exists for $branch"

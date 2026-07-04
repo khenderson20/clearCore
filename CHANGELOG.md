@@ -24,9 +24,36 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+- README and `CITATION.cff` reframed as a multi-ISA CPU-architecture simulator that foreshadows the RISC-V
+  backend (was described as MIPS-only). (#61)
+
+### CI / Internal
+- `update-changelog.yml` now opens a pull request into `develop` instead of pushing directly, so the CHANGELOG
+  promotion is no longer rejected by the `develop` branch ruleset (`GH013: Changes must be made through a pull
+  request`).
+- Added `release-pr.yml`: keeps a standing `develop → main` release-promotion PR open automatically on each push
+  to `develop`, so cutting a release is a single merge.
+
+---
+
+## [0.1.1] - 2026-07-04
+
+Internal refactor release: carves the ISA-agnostic `isa::` core out of the MIPS backend so a future RISC-V (RV32I)
+backend can reuse the memory, register file, pipeline state, and processor interface. No user-facing behavior change.
+
+### Changed
+- Split the simulation core into an ISA-agnostic `isa::` layer: `Memory`, `RegisterFile`, and `IProcessor` (with
+  `PipelineState`/`StepResult`/`StageSnapshot`) moved to `include/isa/`; `IProcessor` split into `isa::IProcessor`
+  (agnostic) + `mips::IMipsProcessor` (adds CP0, HI/LO, and the MIPS `Control` word). `mips::` `using`-shims keep
+  every existing caller and all three UIs unchanged. (#57)
+
+### Documentation
+- Wiki (Architecture, Roadmap, GDB-Stub) documents the `isa::` core split and the phased RISC-V roadmap. (#59)
+
 ### CI / Internal
 - Fixed `update-changelog.yml`: corrected the `harden-runner` commit SHA (previously unresolvable, which failed the
-  job at startup) and rewrote the malformed promote step so the CHANGELOG auto-promotes on each published release.
+  job at startup) and rewrote the malformed promote step.
 
 ---
 
