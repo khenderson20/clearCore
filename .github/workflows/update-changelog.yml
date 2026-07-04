@@ -8,8 +8,7 @@ on:
   release:
     types: [published]
 
-permissions:
-  contents: read
+permissions: read-all
 
 jobs:
   update-changelog:
