@@ -1,10 +1,10 @@
-#include "mips/memory.h"
+#include "isa/memory.h"
 
 #include <algorithm>
 #include <gsl/gsl>
 #include <vector>
 
-namespace mips {
+namespace isa {
 
 Memory::Memory(std::size_t size_bytes) : data_(size_bytes, 0u) {}
 
@@ -69,4 +69,4 @@ void Memory::reset() noexcept {
     std::ranges::fill(data_, uint8_t{0});
 }
 
-}  // namespace mips
+}  // namespace isa

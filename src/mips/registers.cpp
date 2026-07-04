@@ -2,7 +2,7 @@
 
 #include <gsl/gsl>
 
-namespace mips {
+namespace isa {
 
 uint32_t RegisterFile::read(uint8_t idx) const noexcept {
     // $zero is hardwired to 0. Mask keeps a malformed index in range.
@@ -19,6 +19,10 @@ void RegisterFile::reset() noexcept {
     regs_.fill(0u);
     last_written_ = -1;
 }
+
+}  // namespace isa
+
+namespace mips {
 
 // ─── ABI register names ───────────────────────────────────────────────────────
 std::string_view register_abi_name(uint8_t idx) noexcept {
