@@ -32,6 +32,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `update-changelog.yml` now opens a pull request into `develop` instead of pushing directly, so the CHANGELOG
   promotion is no longer rejected by the `develop` branch ruleset (`GH013: Changes must be made through a pull
   request`).
+- Added `release-pr.yml`: keeps a standing `develop → main` release-promotion PR open automatically on each push
+  to `develop`, so cutting a release is a single merge.
 
 ---
 
