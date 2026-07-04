@@ -31,7 +31,7 @@ static constexpr int kSIGSYS  = 12;
 
 // ─── Constructor / destructor ─────────────────────────────────────────────────
 
-GdbStub::GdbStub(IProcessor& cpu, uint16_t port) : cpu_(cpu), port_(port) {}
+GdbStub::GdbStub(IMipsProcessor& cpu, uint16_t port) : cpu_(cpu), port_(port) {}
 
 GdbStub::~GdbStub() {
     if (client_fd_ >= 0) ::close(client_fd_);

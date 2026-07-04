@@ -956,9 +956,9 @@ int runApp() {
     int  global_mouse_y      = 0;
     bool global_mouse_active = false;
     // ── Core state ────────────────────────────────────────────────────────────
-    Converter                         converter;
-    CpuMode                           cpu_mode = CpuMode::SingleCycle;
-    std::unique_ptr<mips::IProcessor> cpu      = std::make_unique<mips::SingleCycleCpu>();
+    Converter                             converter;
+    CpuMode                               cpu_mode = CpuMode::SingleCycle;
+    std::unique_ptr<mips::IMipsProcessor> cpu      = std::make_unique<mips::SingleCycleCpu>();
 
     // Auto-run: background thread posts Event::Custom; step runs on UI thread
     std::atomic<bool> auto_run{false};
