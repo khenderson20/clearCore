@@ -14,8 +14,11 @@ clearCore is organized into independent libraries and interface layers that shar
            ▼                        ▼                        ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │                               mips_core                               │
-│   IProcessor ◄── SingleCycleCpu / PipelinedCpu                        │
-│   Decoder · ALU · RegisterFile · Memory · Disassembler · trace (spdlog)│
+│  ┌─────────────────────────── isa:: (ISA-agnostic core) ────────────┐ │
+│  │  IProcessor · Memory · RegisterFile · PipelineState · StepResult │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+│   mips::IMipsProcessor ◄── SingleCycleCpu / PipelinedCpu (adds CP0/HI/LO)│
+│   Decoder · ALU · Control · CP0 · Disassembler · trace (spdlog)        │
 │   (optional) NyxstoneBackend (LLVM-based assembler/disassembler)      │
 └──────────────────────────────┬────────────────────────────────────────┘
                                 │
@@ -30,7 +33,7 @@ clearCore is organized into independent libraries and interface layers that shar
 | Library / target | Responsibility                                                                     |
 |-------------------|-------------------------------------------------------------------------------------|
 | `nsc_core`        | Real-time binary/hex/decimal conversion around a `uint64_t` value                   |
-| `mips_core`       | CPU simulation: decoder, ALU, register file, memory, disassembler, both CPU backends |
+| `mips_core`       | CPU simulation: the ISA-agnostic `isa::` core (`IProcessor`, `Memory`, `RegisterFile`, `PipelineState`) plus the MIPS backend — decoder, ALU, disassembler, both CPU models |
 | `nsc_ui`          | FTXUI terminal interface (`number_system_converter` binary) — depends only on public `mips_core` headers |
 | `nsc_qt`          | Qt6 Widgets layer (`clearCore-gui` binary) — `SimulatorController` bridges CPU state to Qt signals, plus an in-app MIPS assembler |
 | `nsc_quick`       | Qt Quick / QML layer (`clearCore-quick` binary) — same `IProcessor` backend, declarative UI in `qml/ClearCore/` |
@@ -49,21 +52,37 @@ Each library is independently unit-testable. You can run the decoder, ALU, and b
 
 ### 2. Pluggable-backend pattern
 
+The processor contract is split in two so a second ISA can reuse the whole stack. `isa::IProcessor` is the **ISA-agnostic** contract every backend implements; `mips::IMipsProcessor` layers the MIPS-only architectural state (coprocessor 0, HI/LO, the MIPS `Control` word) on top.
+
 ```cpp
+namespace isa {
+// ISA-agnostic — any backend (MIPS today, RISC-V next) implements this.
 class IProcessor {
 public:
-    virtual StepResult step() = 0;
-    virtual void       load(std::vector<uint32_t> program) = 0;
-    virtual void       reset() = 0;
-    virtual PipelineState pipeline_state() const = 0;
-    // ...
+    virtual StepResult step()                                            = 0;
+    virtual bool       load_program(const std::vector<uint32_t>&,
+                                    uint32_t addr = 0)                    = 0;
+    virtual void       reset(bool clear_memory = false)                  = 0;
+    virtual const PipelineState& pipeline_state() const noexcept         = 0;
+    // pc(), regs(), mem(), cycle_count() ...
+};
+}  // namespace isa
+
+namespace mips {
+// MIPS adds coprocessor 0, HI/LO, and the last committed Control word.
+class IMipsProcessor : public isa::IProcessor {
+public:
+    virtual const Control& last_control() const noexcept = 0;
+    virtual Cp0&           cp0() noexcept                 = 0;
+    virtual uint32_t       hi() const noexcept            = 0;  // ... lo(), set_hi/lo()
 };
 
-class SingleCycleCpu : public IProcessor { /* ... */ };
-class PipelinedCpu   : public IProcessor { /* ... */ };
+class SingleCycleCpu : public IMipsProcessor { /* ... */ };
+class PipelinedCpu   : public IMipsProcessor { /* ... */ };
+}  // namespace mips
 ```
 
-Every UI holds an `IProcessor*`. Switching between single-cycle and pipelined mode at runtime is a pointer swap — no UI changes. This pattern is inspired by [Ripes](https://github.com/mortbopet/Ripes) and [DrMIPS](https://brunonova.github.io/drmips/).
+Every UI holds an `isa::IProcessor*` (re-exported as `mips::IProcessor` for existing callers). Switching between single-cycle and pipelined mode at runtime is a pointer swap — no UI changes. A future RISC-V core derives straight from `isa::IProcessor` (plus its own CSR sub-interface) and reuses `isa::Memory`, `isa::RegisterFile`, and `isa::PipelineState`, so all three visualizers work unchanged. This pattern is inspired by [Ripes](https://github.com/mortbopet/Ripes) and [DrMIPS](https://brunonova.github.io/drmips/).
 
 ### 3. Observable pipeline state
 
@@ -77,14 +96,24 @@ A single `derive_control()` free function maps an opcode/funct pair to the full 
 
 ---
 
+## ISA-agnostic core (`isa::`)
+
+These types carry nothing MIPS-specific and live in `include/isa/`, ready to be shared by a second ISA backend (RISC-V). The `mips` headers re-export them with `using`-shims (`mips::Memory`, `mips::RegisterFile`, `mips::IProcessor`, …) so existing callers compile unchanged.
+
+| Component        | File(s)                   | Role                                                        |
+|-------------------|----------------------------|---------------------------------------------------------------|
+| `isa::IProcessor`  | `include/isa/processor.h` | ISA-agnostic processor contract + `PipelineState` / `StepResult` / `StageSnapshot` |
+| `isa::RegisterFile`| `include/isa/registers.h` | 32 × `uint32_t`, register 0 hardwired                         |
+| `isa::Memory`      | `include/isa/memory.h`    | Byte-addressable, word/half/byte access, alignment checks     |
+
 ## `mips_core` internals
 
-| Component        | File(s)                          | Role                                                        |
-|-------------------|-----------------------------------|---------------------------------------------------------------|
-| `Decoder`         | `include/mips/decoder.h`         | 32-bit word → instruction fields + mnemonic                   |
-| `ALU`             | `include/mips/alu.h`             | Arithmetic, logic, shifts, overflow flags                     |
-| `RegisterFile`    | `include/mips/registers.h`       | 32 × `uint32_t`, `$zero` hardwired                             |
-| `Memory`          | `include/mips/memory.h`          | Byte-addressable, word/half/byte access, alignment checks     |
+| Component            | File(s)                     | Role                                                        |
+|-----------------------|------------------------------|---------------------------------------------------------------|
+| `mips::IMipsProcessor`| `include/mips/processor.h`  | Extends `isa::IProcessor` with CP0, HI/LO, and the MIPS `Control` word |
+| `Decoder`             | `include/mips/decoder.h`    | 32-bit word → instruction fields + mnemonic                   |
+| `ALU`                 | `include/mips/alu.h`        | Arithmetic, logic, shifts, overflow flags                     |
+| `register_abi_name`   | `include/mips/registers.h`  | MIPS O32 ABI mnemonic table (the ISA-specific part left in `mips`) |
 | `Disassembler`    | `include/mips/disassembler.h`    | Machine code → assembly text; hex program loader              |
 | `SingleCycleCpu`  | `src/mips/single_cycle_cpu.cpp`  | Simulates all five stages in one `step()` call                |
 | `PipelinedCpu`    | `src/mips/pipelined_cpu.cpp`     | Concurrent pipeline with five pipeline registers               |
