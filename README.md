@@ -5,8 +5,8 @@
 <h1 align="center">clearCore</h1>
 
 <p align="center">
-  A C++20 MIPS CPU simulator with interchangeable single-cycle and 5-stage pipelined datapaths,<br>
-  available as both a keyboard-driven terminal UI and a native Qt6 desktop GUI.
+  Write MIPS assembly, watch it flow through a 5-stage pipeline cycle by cycle,<br>
+  and attach real GDB to the running emulator — in your terminal or a Qt6 desktop GUI.
 </p>
 
 <p align="center">
@@ -25,14 +25,7 @@
   <a href="https://github.com/khenderson20/clearCore/releases/latest">
     <img src="https://img.shields.io/github/v/release/khenderson20/clearCore?style=flat-square&label=release&color=268BD2" alt="Latest Release">
   </a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++20">
-  <img src="https://img.shields.io/badge/TUI-FTXUI%20v7.0.0-2AA198?style=flat-square" alt="FTXUI">
-  <img src="https://img.shields.io/badge/GUI-Qt6-41CD52?style=flat-square&logo=qt&logoColor=white" alt="Qt6">
-  <img src="https://img.shields.io/badge/build-CMake%20%2B%20FetchContent-657B83?style=flat-square" alt="CMake">
-  <img src="https://img.shields.io/badge/platform-Linux-073642?style=flat-square" alt="Linux">
   <img src="https://img.shields.io/badge/license-MIT-268BD2?style=flat-square" alt="MIT">
 </p>
 
@@ -42,309 +35,168 @@
 
 ---
 
-- [Overview](#overview)
-- [Qt6 Desktop GUI](#qt6-desktop-gui)
-- [Qt Quick / QML GUI](#qt-quick--qml-gui)
-- [Terminal UI](#terminal-ui)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Ecosystem](#ecosystem)
-- [CP0 / Exceptions, ELF Loader, and GDB Stub](#cp0--exceptions-elf-loader-and-gdb-stub)
-- [Roadmap](#roadmap)
-- [Documentation](#documentation)
-- [License](#license)
+## What is clearCore?
 
----
+clearCore is a C++20 MIPS CPU simulator built for *seeing* how a processor works. Type assembly into the built-in
+editor, step the CPU, and watch every instruction move through IF/ID/EX/MEM/WB — stalls, flushes, and forwarding
+paths highlighted as they happen. When you outgrow hand-typed programs, load a real `mipsel` ELF binary and debug
+it with actual GDB through the built-in remote stub.
 
-## Overview
+Two execution engines — a single-cycle datapath and a 5-stage pipeline — implement the same `IProcessor` interface
+and swap at runtime, no rebuild required (the pluggable-backend pattern from Ripes/DrMIPS). Three front ends — a
+keyboard-driven terminal UI, a Qt6 Widgets GUI, and a Qt Quick/QML GUI — drive the same core libraries, so pipeline
+behavior is identical everywhere. The design follows Harris & Harris (*Digital Design and Computer Architecture*)
+and Patterson & Hennessy (*Computer Organization and Design*).
 
-clearCore started as a live number system converter — accepting values in decimal, binary, or hexadecimal and
-propagating changes across all three representations simultaneously — and grew into a full MIPS CPU simulator. Both
-front ends drive the same `mips_core` and `nsc_core` libraries, so every feature (pipeline state, hazard resolution,
-telemetry) behaves identically regardless of which UI you run.
+*(clearCore began life as a live number-system converter — that converter is still the first tab of the terminal UI.)*
 
-The processor model follows the **Ripes/DrMIPS pluggable-backend pattern**: the abstract `IProcessor` interface
-decouples execution engines from rendering. `SingleCycleCpu` and `PipelinedCpu` swap in and out at runtime — no rebuild,
-no UI change required. Both expose the same `PipelineState`, so IF/ID/EX/MEM/WB render identically across the TUI and
-the Qt6 GUI.
+## Quick Start
 
-Reference texts: **Harris & Harris** *Digital Design and Computer Architecture* (single-cycle datapath, control signal
-generation) and **Patterson & Hennessy** *Computer Organization and Design* (pipelining, hazards, forwarding).
+You need a **C++20 compiler** (GCC 13+ / Clang 16+) and **CMake 3.25+**. The terminal UI's FTXUI library is fetched
+automatically. For the desktop GUIs, install Qt6 (`qt6-qtbase-devel` on Fedora, `qt6-base-dev` on Ubuntu,
+`qt@6` via Homebrew) — or skip Qt entirely with the `core-only` preset.
 
----
+```bash
+cmake --preset debug
+cmake --build --preset debug
 
-## Qt6 Desktop GUI
+./cmake-build-debug/clearCore-gui              # Qt6 Widgets desktop GUI
+./cmake-build-debug/number_system_converter   # terminal UI (needs an ANSI terminal)
+./cmake-build-debug/clearCore-quick            # Qt Quick / QML desktop GUI
+```
 
-The Widgets GUI provides a tabbed interface with a cycle-accurate pipeline datapath view, an integrated MIPS assembler and code
-editor, and a hex memory inspector — all driven by the same `mips_core` and `nsc_core` libraries as the terminal UI.
-A second, declarative QML interface (`clearCore-quick`) covers the same tab structure with a lighter dependency footprint;
-see [Qt Quick / QML GUI](#qt-quick--qml-gui) below for the comparison.
+| Preset      | What it builds                                                      |
+|-------------|----------------------------------------------------------------------|
+| `debug`     | Debug symbols, TUI + Widgets GUI + QML GUI                          |
+| `release`   | Optimized release build                                             |
+| `asan`      | AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`)      |
+| `core-only` | Simulator core + TUI only — skips Qt6 (both GUIs) and LLVM entirely |
 
-<table>
-<tr>
-<td width="50%">
+### Your first program
 
-**Datapath** — the 5-stage pipeline rendered cycle-by-cycle. Double-click a stage to inspect the instruction inside it;
-right-click to set or clear a breakpoint.
+Launch `clearCore-gui`, open the **Code Editor** tab, and load one of the built-in examples — or paste this:
+
+```asm
+# Each instruction needs the result of the one before it.
+addi $t0, $zero, 1
+add  $t1, $t0, $t0
+add  $t2, $t1, $t0
+add  $t3, $t2, $t1
+```
+
+Assemble it, switch to the **Datapath** tab, and step. You'll see the data hazards resolved live: the EX/MEM → EX
+forwarding paths light up each cycle as results are bypassed back before they ever reach the register file.
+
+### Tests
+
+```bash
+ctest --preset debug    # all suites
+ctest --preset asan     # same suites under ASan + UBSan
+```
+
+Six CTest suites cover the decoder, disassembler, loader, both CPU backends, and the converter core; when LLVM 15–20
+is present, a differential suite validates the disassembler against LLVM's assembler. CI runs Debug and ASan/UBSan
+builds plus CodeQL, dependency review, and libFuzzer fuzzing on every PR — see
+[Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing).
+
+## Interfaces
+
+| Interface       | Binary                    | Built with      | Highlights                                                              |
+|-----------------|---------------------------|-----------------|--------------------------------------------------------------------------|
+| **Desktop GUI** | `clearCore-gui`           | Qt6 Widgets     | Dockable panels, code editor with syntax highlighting, hex memory viewer |
+| **QML GUI**     | `clearCore-quick`         | Qt Quick / QML  | Same tabs, lighter dependency footprint (Qt6 Quick only), newer          |
+| **Terminal UI** | `number_system_converter` | FTXUI           | Fully keyboard-driven (`Tab` panels, `F10` step), runs over SSH          |
+
+All three show the same pipeline state, driven by the same `mips_core` library. The Widgets GUI is the most
+feature-complete; the QML GUI mirrors its tab structure declaratively (comparison in the
+[Qt6 GUI wiki page](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)). To trim the build, turn either off
+with `-DBUILD_QT6_UI=OFF` / `-DBUILD_QT6_QUICK_UI=OFF`.
 
 <img src="assets/screenshots/tab-01-datapath.png" alt="Datapath tab showing IF/ID/EX/MEM/WB stages during execution">
 
-</td>
-<td width="50%">
+<details>
+<summary><b>More desktop GUI screenshots</b> — pipeline trace, code editor, memory, registers, statistics</summary>
+<br>
 
-**Pipeline Trace** — the classic instruction × cycle grid from Patterson & Hennessy, derived automatically from the
-program's execution trace.
+**Pipeline Trace** — the classic instruction × cycle grid from Patterson & Hennessy, derived from the execution trace.
 
 <img src="assets/screenshots/tab-04-pipeline.png" alt="Pipeline Trace showing an instruction×cycle grid with color-coded stages">
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Code Editor** — accepts MIPS assembly source with labels, branches, and loops; assembles and loads directly into the
-simulator. No external toolchain required. Optional MIPS syntax highlighting (light/dark theme aware) when
-KSyntaxHighlighting is installed (`kf6-syntax-highlighting-devel` on Fedora, `libkf6syntaxhighlighting-dev` on Ubuntu).
+**Code Editor** — assembles MIPS source with labels, branches, and loops directly into the simulator; no external
+toolchain. Optional MIPS syntax highlighting when KSyntaxHighlighting is installed (`kf6-syntax-highlighting-devel`
+on Fedora, `libkf6syntaxhighlighting-dev` on Ubuntu).
 
 <img src="assets/screenshots/tab-05-codeEditor.png" alt="Code Editor tab showing a MIPS sum-loop program assembled and loaded">
 
-</td>
-<td width="50%">
-
-**Memory** — scrollable hex dump (16 bytes/row with ASCII column), navigable from any base address.
+**Memory** — scrollable hex dump, 16 bytes/row with ASCII column, navigable from any base address.
 
 <img src="assets/screenshots/tab-03-memory.png" alt="Memory tab showing a hex dump with ASCII column">
-
-</td>
-</tr>
-<tr>
-<td width="50%">
 
 **Registers** — all 32 MIPS registers with ABI aliases (`$t0`, `$sp`, …), updated every cycle.
 
 <img src="assets/screenshots/tab-02-registers.png" alt="Registers tab showing all 32 MIPS registers with ABI aliases">
 
-</td>
-<td width="50%">
-
-**Statistics** — cycles executed, instructions retired, CPI, and per-category hazard, forwarding, stall, and flush
-counts.
+**Statistics** — cycles, instructions retired, CPI, and per-category hazard/forwarding/stall/flush counts.
 
 <img src="assets/screenshots/tab-06-stats.png" alt="Statistics tab showing CPI, hazard, and forwarding counters">
 
-</td>
-</tr>
-</table>
+</details>
 
-### Building the Widgets GUI
+<details>
+<summary><b>Terminal UI screenshots</b> — converter, CPU dashboard, Core Pulse</summary>
+<br>
 
-```bash
-# Install Qt6
-sudo dnf install qt6-qtbase-devel qt6-qtbase-gui   # Fedora / RHEL
-sudo apt install qt6-base-dev                       # Ubuntu / Debian
-brew install qt@6                                   # macOS
-
-cmake -S . -B cmake-build-debug
-cmake --build cmake-build-debug --target clearCore-gui
-./cmake-build-debug/clearCore-gui
-```
-
-> Both `BUILD_QT6_UI` and `BUILD_QT6_QUICK_UI` default to `ON`. To build the TUI only (no Qt at all), add
-> `-DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF` to the configure step, or use the `core-only` preset.
-
----
-
-## Qt Quick / QML GUI
-
-`clearCore-quick` is a second desktop interface built with **Qt Quick and QML** (`src/nsc_quick`,
-`qml/ClearCore/`). It targets the same `mips_core` backend and mirrors the Widgets GUI's tab structure —
-datapath strip, registers, memory, pipeline trace, code editor, and statistics — but the entire UI is
-defined declaratively in QML rather than in C++ widget code.
-
-```bash
-cmake --build cmake-build-debug --target clearCore-quick
-./cmake-build-debug/clearCore-quick
-```
-
-### Widgets vs. QML — what's different
-
-| | Qt6 Widgets (`clearCore-gui`) | Qt Quick / QML (`clearCore-quick`) |
-|---|---|---|
-| **UI language** | C++ (`QWidget` subclasses) | Declarative QML with reactive property bindings |
-| **Panel layout** | Dockable, resizable panels via Qt-Advanced-Docking-System | Fixed tab layout |
-| **Memory viewer** | QHexView hex dump widget | Custom QML `MemoryPane` |
-| **Syntax highlighting** | Optional KSyntaxHighlighting (MIPS/Kate grammar) | Not yet wired |
-| **Assembler** | `assembler.h`/`.cpp` in `nsc_qt` | Shared — `nsc_quick` reuses `nsc_qt`'s assembler directly |
-| **Dependencies** | Qt6 Widgets + QADS + QHexView | Qt6 Quick only |
-| **Maturity** | Feature-complete, battle-tested | Available, less battle-tested |
-
-Both UIs hold an `IProcessor*` and are driven by the same `SimulatorController` signal/slot bridge, so
-pipeline state, hazard resolution, and telemetry behave identically in both.
-
-> To skip the QML GUI without skipping the Widgets GUI, add `-DBUILD_QT6_QUICK_UI=OFF` to the configure step.
-
----
-
-## Terminal UI
-
-Fully keyboard-driven — `Tab` moves between panels, `F10` steps the CPU, `Esc` quits. Runs in any ANSI terminal.
-
-<table>
-<tr>
-<td width="50%">
-
-**Splash screen** — animated CPU circuit on startup.
-
-<img src="assets/screenshots/01_splash_screen.png" alt="Animated splash screen showing a CPU circuit diagram">
-
-</td>
-<td width="50%">
-
-**Converter** — live three-way number conversion with R-format bit breakdown, field decode, and control signal display.
+**Converter** — live three-way DEC/HEX/BIN conversion with R-format bit breakdown and control signal decode.
 
 <img src="assets/screenshots/02_nsc_converter.png" alt="Converter tab showing DEC/HEX/BIN fields and MIPS bit breakdown">
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**CPU Dashboard** — registers, instruction decode, execution trace, memory panel, telemetry bar, and step/auto/run
-controls.
+**CPU Dashboard** — registers, instruction decode, execution trace, memory panel, telemetry bar, step/auto/run controls.
 
 <img src="assets/screenshots/03_tab2.png" alt="CPU Dashboard tab showing registers, pipeline state, instruction decode, and telemetry">
-
-</td>
-<td width="50%">
 
 **Core Pulse** — ambient oscilloscope animation with per-stage IF/ID/EX/MEM/WB instruction and signal breakdown.
 
 <img src="assets/screenshots/06_tab5_corepulse.png" alt="Core Pulse tab showing signal monitor waveform and pipeline stage details">
 
-</td>
-</tr>
-</table>
+Other tabs: **CPU Config** (swap single-cycle ↔ pipelined at runtime), **Program Loader** (flat `.hex` programs),
+and **Utility** (diagnostics). See the [Terminal UI wiki page](https://github.com/khenderson20/clearCore/wiki/Terminal-UI).
 
-| Tab                | Purpose                                                                               |
-|--------------------|---------------------------------------------------------------------------------------|
-| **Converter**      | Live binary/hex/decimal conversion + R-format bit breakdown and control signal decode |
-| **CPU Dashboard**  | Registers, pipeline stages, hazard badges, instruction trace, memory, telemetry       |
-| **CPU Config**     | Toggle between single-cycle and 5-stage pipelined backends at runtime                 |
-| **Program Loader** | Load a flat `.hex` program (one 32-bit word per line) into memory                     |
-| **Core Pulse**     | Oscilloscope animation + per-stage IF/ID/EX/MEM/WB instruction and signal panel       |
-| **Utility**        | Developer tools and diagnostics                                                       |
+</details>
 
----
+## Beyond the basics
 
-## Quick Start
+**CP0 and hardware exceptions** — `mips_core` implements Coprocessor 0 per the MIPS32r2 spec (`Status`, `Cause`,
+`EPC`, `BadVAddr`), so bad opcodes, unaligned accesses, `SYSCALL`, and `BREAK` raise real exceptions that vector to
+`0x8000_0180` instead of halting the simulator — the same behavior as physical MIPS hardware.
+→ [CP0 & Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions)
 
-### Prerequisites
+**ELF loader** — `mips::load_elf_file_into_processor()` maps a static little-endian MIPS ELF32 binary into the
+processor's address space exactly as a kernel exec would, so programs built with `mipsel-linux-gnu-as` or
+`mipsel-linux-musl-gcc -static` run unmodified.
+→ [ELF Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader) (includes toolchain setup)
 
-- **C++20 compiler** — GCC 13+ or Clang 16+
-- **CMake 3.25+**
-- **Qt6** for the desktop GUI (optional — omit with `-DBUILD_QT6_UI=OFF`)
-
-FTXUI v7.0.0 is fetched automatically via CMake FetchContent — no system install required.
-
-### Build
-
-The recommended path uses CMake presets:
+**GDB remote stub** — attach real GDB to the running emulator and get breakpoints, single-step, register and memory
+inspection, and exception-to-signal mapping (`Bp`→SIGTRAP, `RI`→SIGILL, …):
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug
+mipsel-linux-gnu-gdb hello
+(gdb) target remote localhost:1234
+(gdb) break _start
+(gdb) continue
 ```
 
-Manual configure works too:
-
-```bash
-cmake -S . -B cmake-build-debug
-cmake --build cmake-build-debug
-```
-
-Available presets:
-
-| Preset      | What it builds                                                        |
-|-------------|-----------------------------------------------------------------------|
-| `debug`     | Debug symbols, TUI + Widgets GUI + QML GUI                            |
-| `release`   | Optimized release build                                               |
-| `asan`      | AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`)        |
-| `core-only` | Simulator core + TUI only — skips Qt6 (both GUIs) and LLVM entirely   |
-
-### Run
-
-```bash
-# Terminal UI
-./cmake-build-debug/number_system_converter
-
-# Qt6 Widgets desktop GUI
-./cmake-build-debug/clearCore-gui
-
-# Qt Quick / QML desktop GUI
-./cmake-build-debug/clearCore-quick
-```
-
-> **Terminal note:** FTXUI requires an ANSI-capable terminal. If running from an IDE, enable *Emulate terminal in output
-console* or launch from the shell.
-
-### Test
-
-Six CTest suites cover the decoder, disassembler, program loader, both CPU backends via the shared `IProcessor`
-contract harness, the converter core, and — when an in-range LLVM (15–20) is found — a `nyxstone_test` suite that
-differentially validates the disassembler by round-tripping machine words through LLVM's assembler. The Widgets GUI
-adds a smoke-test suite (`qt_ui_test`) when `BUILD_QT6_UI=ON`.
-
-```bash
-ctest --preset debug    # run all suites
-ctest --preset asan     # same suites under AddressSanitizer + UBSan
-```
-
-CI (GitHub Actions) runs core suites in Debug and ASan/UBSan configurations on every push and pull request.
-Static-analysis config lives in `.clang-tidy`; code style in `.clang-format`. Additional workflows run on every PR:
-`dependency-review.yml` blocks vulnerable dependency introductions; `codeql.yml` runs CodeQL static analysis;
-`scorecard.yml` tracks supply-chain posture; and `cflite_pr.yml` runs 120 seconds of libFuzzer fuzzing via
-ClusterFuzzLite, targeting `mips::parse_hex_program` with the `fuzz_hex_loader` harness (`tests/fuzz/`).
-
----
+→ [GDB Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub) (full command reference; POSIX-only, disable with `-DBUILD_GDB_STUB=OFF`)
 
 ## Architecture
 
-The system is structured as two independent core libraries and three UI layers, linked via CMake:
-
 ![how-it-works.svg](assets/how-it-works.svg)
 
-`nsc_qt` (the Qt6 Widgets layer) and `nsc_quick` (the Qt Quick/QML layer) both own a `SimulatorController` that wraps
-an `IProcessor` and re-emits its state as Qt signals for their respective views to render. The TUI's `nsc_ui` layer
-talks to the same interfaces directly.
+Two pure-logic core libraries (`mips_core`, `nsc_core` — no UI dependencies, tested independently) sit under three
+UI layers. The Qt layers bridge CPU state to their views through a shared `SimulatorController`; the TUI talks to
+the same interfaces directly. Module-by-module breakdown, design pillars, and academic references are on the
+[Architecture wiki page](https://github.com/khenderson20/clearCore/wiki/Architecture).
 
-### Module Reference
-
-| Module                 | Library     | Responsibility                                                                          |
-|------------------------|-------------|-----------------------------------------------------------------------------------------|
-| `Converter`            | `nsc_core`  | `uint64_t` state, base-N views                                                          |
-| `Parser` / `Formatter` | `nsc_core`  | String validation and serialization                                                     |
-| `IProcessor`           | `mips_core` | Abstract contract for all execution engines                                             |
-| `SingleCycleCpu`       | `mips_core` | Non-pipelined datapath — CPI = 1 (H&H §7)                                               |
-| `PipelinedCpu`         | `mips_core` | 5-stage pipeline with load-use stalls, EX/MEM→EX forwarding, branch/jump flush (H&H §8) |
-| `Decoder` / `ALU`      | `mips_core` | Format detection, control signal generation, arithmetic                                 |
-| `NyxstoneBackend`      | `mips_core` | Optional LLVM-backed assembler/disassembler oracle; built when LLVM 15–20 is found      |
-| `SimulatorController`  | `nsc_qt`    | Owns an `IProcessor`; re-emits its state as Qt signals for both Qt GUI layers           |
-| In-app assembler       | `nsc_qt`    | Parses MIPS assembly with labels into instruction words; shared by both Qt GUIs         |
-| QML components         | `nsc_quick` | Declarative Qt Quick UI in `qml/ClearCore/`; reuses `nsc_qt`'s assembler               |
-
-### Design Conventions
-
-- `mips_core` and `nsc_core` contain pure logic with no UI dependency — tested independently.
-- Polymorphism via `IProcessor` keeps backends swappable at runtime.
-- `enum class` for all hardware fields; `[[nodiscard]]` on all pure queries.
-- C++20 throughout: `std::format`, `std::optional`, ranges.
-
----
-
-## Ecosystem
-
-clearCore applies the Ripes pluggable-backend pattern to the MIPS ISA. It is distinct among this set in providing both a
-terminal UI and a native desktop GUI over a shared simulation core.
+### How it compares
 
 |                  | clearCore             | Ripes              | DrMIPS          | EduMIPS64        | QtMips            |
 |------------------|-----------------------|--------------------|-----------------|------------------|-------------------|
@@ -354,124 +206,28 @@ terminal UI and a native desktop GUI over a shared simulation core.
 | **Backends**     | 2 (SC / 5-stage)      | 5+ models          | ~2              | ~1               | ~1                |
 | **Pipeline viz** | Stage state + hazards | Datapath schematic | Visual datapath | Registers/memory | Datapath + memory |
 
----
-
-## CP0 / Exceptions, ELF Loader, and GDB Stub
-
-These three subsystems extend the simulator from a pure teaching tool into a self-contained MIPS debugging environment.
-
-### CP0 and the exception model
-
-The `mips_core` library now implements **Coprocessor 0 (CP0)** following the MIPS32r2 specification. Both `SingleCycleCpu` and `PipelinedCpu` raise proper hardware exceptions rather than halting on bad instructions or memory accesses.
-
-| What happened before | What happens now |
-|---|---|
-| Bad opcode → `StepResult::Fault` (stop cold) | Bad opcode → Reserved Instruction (RI) exception, EPC saved, PC = `0x8000_0180` |
-| Out-of-bounds memory → `StepResult::Fault` | OOB load/store → AdEL / AdES exception with BadVAddr set |
-| No `SYSCALL`/`BREAK` support | SYSCALL and BREAK raise Sys/Bp exceptions; GDB stub intercepts them as signals |
-
-New instructions: `SYSCALL`, `BREAK`, `MFC0`, `MTC0`, `ERET`.
-
-CP0 registers: `Status` (bit 1 = EXL), `Cause` (ExcCode in [6:2]), `EPC`, `BadVAddr`. The exception vector is `0x8000_0180` — the same address real MIPS hardware uses.
-
-```cpp
-if (cpu.step() == StepResult::Exception) {
-    auto& cp0 = cpu.cp0();
-    // cp0.last_exception(), cp0.epc(), cp0.bad_vaddr() are all valid
-}
-```
-
-See [wiki/CP0-Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions) for the full reference.
-
----
-
-### ELF loader
-
-The `mips::load_elf_file_into_processor()` function parses a MIPS ELF32 binary, maps each `PT_LOAD` segment into the processor's address space (zero-filling BSS), and sets the PC to the entry point — exactly what a kernel exec does for a static binary.
-
-Only **little-endian MIPS** (`mipsel`, `ELFDATA2LSB`) is supported. Compile with:
-
-```bash
-mipsel-linux-gnu-as -mips32r2 -EL -o hello.o hello.s
-mipsel-linux-gnu-ld -e _start -Ttext=0x0000 -o hello hello.o
-```
-
-Or with musl libc for C programs:
-
-```bash
-mipsel-linux-musl-gcc -static -O2 -o hello hello.c
-```
-
-Then load it at runtime:
-
-```cpp
-mips::SingleCycleCpu cpu(4u << 20);  // 4 MB
-std::string err;
-if (!mips::load_elf_file_into_processor(cpu, "hello", err))
-    std::cerr << err << "\n";
-```
-
-See [wiki/ELF-Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader) for toolchain setup and the full API.
-
----
-
-### GDB RSP stub
-
-Attach `mipsel-linux-gnu-gdb` to port 1234 and debug the running emulator with the full GDB experience — software breakpoints, single-step, register and memory inspection, and exception-triggered stop signals:
-
-```bash
-mipsel-linux-gnu-gdb hello
-(gdb) target remote localhost:1234
-(gdb) break _start
-(gdb) continue
-(gdb) info registers
-(gdb) stepi
-```
-
-The stub models 38 MIPS registers (r0–r31, Status, LO, HI, BadVAddr, Cause, PC). Exceptions translate to UNIX signals: `Bp`→SIGTRAP, `Sys`→SIGSYS, `RI`→SIGILL, `Ov`→SIGFPE, `AdEL/AdES`→SIGSEGV.
-
-The stub requires POSIX socket headers (Linux/macOS). On Windows or without sockets it is automatically disabled at CMake configure time. To disable explicitly:
-
-```bash
-cmake --preset debug -DBUILD_GDB_STUB=OFF
-```
-
-See [wiki/GDB-Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub) for the full command reference.
-
----
-
 ## Roadmap
 
-- [x] **Stage 1** — Number converter core + MIPS decoder
-- [x] **Stage 1.5** — `IProcessor` refactor; single-cycle and pipelined backends
-- [x] **Stage 2** — TUI execution visualizer: memory panel, hazard badges, speed controls, telemetry
-- [x] **Stage 2.5** — Qt6 GUI: datapath, registers, memory, pipeline trace, code editor with in-app assembler,
-  statistics
-- [x] **Stage 2.6** — CP0 exception model, ELF loader, and GDB RSP stub
-- [ ] **Stage 3** — Two-pass assembler with full symbol table, label resolution, and pseudo-instruction expansion *(the
-  Qt6 Code Editor covers labels and branches; pseudo-instructions are still outstanding)*
-- [ ] **Stage 4** — Per-stage TUI telemetry and CPI analysis to reach parity with the GUI's Pipeline Trace and
-  Statistics tabs
+Stages 1–2.6 (converter core → pipelined CPU → Qt6 GUIs → CP0/ELF/GDB) are complete. Up next:
+
+- [ ] **Stage 3** — Two-pass assembler with full symbol table and pseudo-instruction expansion
+- [ ] **Stage 4** — Per-stage TUI telemetry and CPI analysis, matching the GUI's Pipeline Trace and Statistics tabs
 - [ ] **Stage 5** — Branch prediction and speculative execution
 
-See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
-
----
+Full breakdown on the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap).
 
 ## Documentation
 
-| Doc                                                                                              | Audience                                                       |
-|--------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
-| [Getting Started](https://github.com/khenderson20/clearCore/wiki/Getting-Started)                | Beginners learning MIPS concepts through the TUI visualization |
-| [Architecture](https://github.com/khenderson20/clearCore/wiki/Architecture)                      | Design patterns, hardware abstractions, and academic grounding |
-| [CP0 and Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions)             | MIPS32r2 exception model, CP0 registers, ERET, MFC0/MTC0      |
-| [ELF Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader)                         | Loading compiled mipsel binaries; toolchain setup guide        |
-| [GDB Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub)                             | GDB RSP server — breakpoints, single-step, exception signals   |
-| [Qt6 GUI](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)                               | How `nsc_qt` and `SimulatorController` are structured          |
-| [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing)                      | Branching model, code style, and testing guidelines            |
-| [Roadmap](https://github.com/khenderson20/clearCore/wiki/Roadmap)                               | Staged feature plan and reference patterns                     |
-
----
+| Doc                                                                                    | Audience                                                       |
+|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| [Getting Started](https://github.com/khenderson20/clearCore/wiki/Getting-Started)      | Beginners learning MIPS concepts through the TUI visualization |
+| [Architecture](https://github.com/khenderson20/clearCore/wiki/Architecture)            | Design patterns, hardware abstractions, and academic grounding |
+| [CP0 and Exceptions](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions)    | MIPS32r2 exception model, CP0 registers, ERET, MFC0/MTC0       |
+| [ELF Loader](https://github.com/khenderson20/clearCore/wiki/ELF-Loader)                | Loading compiled mipsel binaries; toolchain setup guide        |
+| [GDB Stub](https://github.com/khenderson20/clearCore/wiki/GDB-Stub)                    | GDB RSP server — breakpoints, single-step, exception signals   |
+| [Qt6 GUI](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)                      | How `nsc_qt` and `SimulatorController` are structured          |
+| [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing)            | Branching model, code style, and testing guidelines            |
+| [Roadmap](https://github.com/khenderson20/clearCore/wiki/Roadmap)                      | Staged feature plan and reference patterns                     |
 
 ## License
 

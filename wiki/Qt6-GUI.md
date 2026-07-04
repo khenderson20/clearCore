@@ -116,4 +116,18 @@ cmake --build cmake-build-debug --target clearCore-quick
 ./cmake-build-debug/clearCore-quick
 ```
 
-Treat it as available but less battle-tested than the Widgets GUI; the README's [Qt Quick / QML GUI](../README.md#qt-quick--qml-gui) section covers the comparison.
+Treat it as available but less battle-tested than the Widgets GUI. To skip it without skipping the Widgets GUI, add `-DBUILD_QT6_QUICK_UI=OFF` at configure time.
+
+### Widgets vs. QML — what's different
+
+| | Qt6 Widgets (`clearCore-gui`) | Qt Quick / QML (`clearCore-quick`) |
+|---|---|---|
+| **UI language** | C++ (`QWidget` subclasses) | Declarative QML with reactive property bindings |
+| **Panel layout** | Dockable, resizable panels via Qt-Advanced-Docking-System | Fixed tab layout |
+| **Memory viewer** | QHexView hex dump widget | Custom QML `MemoryPane` |
+| **Syntax highlighting** | Optional KSyntaxHighlighting (MIPS/Kate grammar) | Not yet wired |
+| **Assembler** | `assembler.h`/`.cpp` in `nsc_qt` | Shared — `nsc_quick` reuses `nsc_qt`'s assembler directly |
+| **Dependencies** | Qt6 Widgets + QADS + QHexView | Qt6 Quick only |
+| **Maturity** | Feature-complete, battle-tested | Available, less battle-tested |
+
+Both UIs hold an `IProcessor*` and are driven by the same `SimulatorController` signal/slot bridge, so pipeline state, hazard resolution, and telemetry behave identically in both.
