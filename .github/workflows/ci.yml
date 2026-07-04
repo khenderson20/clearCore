@@ -20,6 +20,15 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'tests/**'
+      - 'qml/**'
+      - '**/CMakeLists.txt'
+      - 'cmake/**'
+      - 'CMakePresets.json'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
@@ -54,6 +63,7 @@ jobs:
         run: exit 1
 
   coverage:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -130,6 +140,7 @@ jobs:
         run: ctest --preset ${{ matrix.preset }}
 
   full-build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
