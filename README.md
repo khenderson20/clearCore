@@ -25,6 +25,9 @@
   <a href="https://github.com/khenderson20/clearCore/releases/latest">
     <img src="https://img.shields.io/github/v/release/khenderson20/clearCore?style=flat-square&label=release&color=268BD2" alt="Latest Release">
   </a>
+  <a href="https://doi.org/10.5281/zenodo.21194876">
+    <img src="https://zenodo.org/badge/1282874868.svg" alt="DOI">
+  </a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/license-MIT-268BD2?style=flat-square" alt="MIT">
 </p>
@@ -228,6 +231,29 @@ Full breakdown on the [Roadmap wiki page](https://github.com/khenderson20/clearC
 | [Qt6 GUI](https://github.com/khenderson20/clearCore/wiki/Qt6-GUI)                      | How `nsc_qt` and `SimulatorController` are structured          |
 | [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing)            | Branching model, code style, and testing guidelines            |
 | [Roadmap](https://github.com/khenderson20/clearCore/wiki/Roadmap)                      | Staged feature plan and reference patterns                     |
+
+## Citation
+
+If you use clearCore in research or teaching, please cite it. Each release is archived on Zenodo with a DOI:
+
+[![DOI](https://zenodo.org/badge/1282874868.svg)](https://doi.org/10.5281/zenodo.21194876)
+
+GitHub's **"Cite this repository"** button (top-right sidebar) generates APA and BibTeX from
+[`CITATION.cff`](CITATION.cff). For convenience:
+
+```bibtex
+@software{henderson_clearcore,
+  author  = {Henderson, Kevin},
+  title   = {{clearCore}: An educational {MIPS} {CPU} simulator with live pipeline visualization},
+  year    = {2026},
+  version = {0.1.0},
+  doi     = {10.5281/zenodo.21194876},
+  url     = {https://github.com/khenderson20/clearCore}
+}
+```
+
+> The DOI above is the *concept* DOI — it always resolves to the latest release. Zenodo also mints a
+> version-specific DOI for each release if you need to cite an exact version.
 
 ## License
 
