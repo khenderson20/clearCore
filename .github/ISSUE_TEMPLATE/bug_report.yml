@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for reporting a bug! Please fill out the sections below so we can
         reproduce and fix it quickly. For questions or ideas, use the **Custom
-        issue** template or [Discussions](../../discussions) instead.
+        issue** template or [Discussions](https://github.com/khenderson20/clearCore/discussions) instead.
 
   - type: checkboxes
     id: preflight
@@ -70,7 +70,7 @@ body:
     attributes:
       label: Environment
       description: Run `cmake --version` and note your compiler/OS. Qt version only if using a GUI.
-      value: |
+      placeholder: |
         - clearCore version / commit:
         - OS:
         - Compiler (GCC/Clang + version):
