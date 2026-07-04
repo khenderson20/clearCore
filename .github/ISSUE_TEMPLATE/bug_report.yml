@@ -1,0 +1,89 @@
+name: Bug report
+description: Report a reproducible defect in clearCore
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below so we can
+        reproduce and fix it quickly. For questions or ideas, use the **Custom
+        issue** template or [Discussions](../../discussions) instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues (open and closed) and this is not a duplicate.
+          required: true
+        - label: I am running the latest release or `develop`, or I've noted my version below.
+          required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug and what you expected instead.
+      placeholder: |
+        When I ..., clearCore does X. I expected it to do Y.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, exact steps. Include an assembly snippet or ELF if relevant.
+      placeholder: |
+        1. Start clearCore with `...`
+        2. Load / type this program:
+           ```mips
+           addi $t0, $zero, 5
+           ...
+           ```
+        3. Step / run to ...
+        4. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of clearCore is affected?
+      options:
+        - Core / simulation engine (single-cycle)
+        - Core / simulation engine (5-stage pipeline)
+        - Terminal UI (FTXUI)
+        - Qt6 Widgets GUI
+        - Qt Quick / QML GUI
+        - GDB remote stub / debugging
+        - Number-system converter
+        - Build system / CI (CMake, presets, workflows)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Run `cmake --version` and note your compiler/OS. Qt version only if using a GUI.
+      value: |
+        - clearCore version / commit:
+        - OS:
+        - Compiler (GCC/Clang + version):
+        - CMake version:
+        - Qt version (if applicable):
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, backtrace, or screenshots
+      description: Paste relevant output. Terminal logs are automatically formatted, no backticks needed.
+      render: shell
+    validations:
+      required: false
