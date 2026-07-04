@@ -24,10 +24,11 @@ on:
       - 'src/**'
       - 'include/**'
       - 'tests/**'
-      - 'CMakeLists.txt'
+      - 'qml/**'
+      - '**/CMakeLists.txt'
       - 'cmake/**'
       - 'CMakePresets.json'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
@@ -139,7 +140,7 @@ jobs:
         run: ctest --preset ${{ matrix.preset }}
 
   full-build:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
