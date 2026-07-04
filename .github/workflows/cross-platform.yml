@@ -27,9 +27,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: windows-x64,    os: windows-latest, arch: x86_64 }
-          - { name: macos-intel,    os: macos-13,       arch: x86_64 }
-          - { name: macos-arm64,    os: macos-14,       arch: arm64  }
+          - { name: windows-x64, os: windows-latest, arch: x86_64 }
+          - { name: macos-intel, os: macos-13,       arch: x86_64 }
+          - { name: macos-arm64, os: macos-14,       arch: arm64  }
+    env:
+      # macOS minimum: std::format's to_chars backend is only available in
+      # libc++ from macOS 13.3 onward. CMake reads this to seed the deployment
+      # target; it is ignored on Windows.
+      MACOSX_DEPLOYMENT_TARGET: '13.3'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -44,38 +49,21 @@ jobs:
           version: '6.8.*'
           cache: true
 
+      # Puts cl.exe / the MSVC toolchain on PATH so the Ninja-based preset works
+      # on Windows without relying on the Visual Studio generator's discovery.
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
       - name: Install Ninja (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
 
-      # ── Configure ──────────────────────────────────────────────────────────
-      - name: Configure (Windows / MSVC)
-        if: runner.os == 'Windows'
-        run: >
-          cmake -S . -B build/release -G "Visual Studio 17 2022" -A x64
-          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+      - name: Configure
+        run: cmake --preset release -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
 
-      - name: Configure (macOS)
-        if: runner.os == 'macOS'
-        run: >
-          cmake --preset release
-          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
-          -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
-
-      # ── Build ──────────────────────────────────────────────────────────────
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build build/release --config Release
-
-      - name: Build (macOS)
-        if: runner.os == 'macOS'
+      - name: Build
         run: cmake --build --preset release
 
-      # ── Test ───────────────────────────────────────────────────────────────
-      - name: Test (Windows)
-        if: runner.os == 'Windows'
-        run: ctest --test-dir build/release -C Release --output-on-failure
-
-      - name: Test (macOS)
-        if: runner.os == 'macOS'
+      - name: Test
         run: ctest --test-dir build/release --output-on-failure
