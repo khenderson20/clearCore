@@ -44,6 +44,7 @@
 
 - [Overview](#overview)
 - [Qt6 Desktop GUI](#qt6-desktop-gui)
+- [Qt Quick / QML GUI](#qt-quick--qml-gui)
 - [Terminal UI](#terminal-ui)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
@@ -74,8 +75,10 @@ generation) and **Patterson & Hennessy** *Computer Organization and Design* (pip
 
 ## Qt6 Desktop GUI
 
-The GUI provides a tabbed interface with a cycle-accurate pipeline datapath view, an integrated MIPS assembler and code
+The Widgets GUI provides a tabbed interface with a cycle-accurate pipeline datapath view, an integrated MIPS assembler and code
 editor, and a hex memory inspector — all driven by the same `mips_core` and `nsc_core` libraries as the terminal UI.
+A second, declarative QML interface (`clearCore-quick`) covers the same tab structure with a lighter dependency footprint;
+see [Qt Quick / QML GUI](#qt-quick--qml-gui) below for the comparison.
 
 <table>
 <tr>
@@ -133,7 +136,7 @@ counts.
 </tr>
 </table>
 
-### Building the GUI
+### Building the Widgets GUI
 
 ```bash
 # Install Qt6
@@ -146,7 +149,39 @@ cmake --build cmake-build-debug --target clearCore-gui
 ./cmake-build-debug/clearCore-gui
 ```
 
-> `BUILD_QT6_UI` defaults to `ON`. To build the TUI only, add `-DBUILD_QT6_UI=OFF` to the configure step.
+> Both `BUILD_QT6_UI` and `BUILD_QT6_QUICK_UI` default to `ON`. To build the TUI only (no Qt at all), add
+> `-DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF` to the configure step, or use the `core-only` preset.
+
+---
+
+## Qt Quick / QML GUI
+
+`clearCore-quick` is a second desktop interface built with **Qt Quick and QML** (`src/nsc_quick`,
+`qml/ClearCore/`). It targets the same `mips_core` backend and mirrors the Widgets GUI's tab structure —
+datapath strip, registers, memory, pipeline trace, code editor, and statistics — but the entire UI is
+defined declaratively in QML rather than in C++ widget code.
+
+```bash
+cmake --build cmake-build-debug --target clearCore-quick
+./cmake-build-debug/clearCore-quick
+```
+
+### Widgets vs. QML — what's different
+
+| | Qt6 Widgets (`clearCore-gui`) | Qt Quick / QML (`clearCore-quick`) |
+|---|---|---|
+| **UI language** | C++ (`QWidget` subclasses) | Declarative QML with reactive property bindings |
+| **Panel layout** | Dockable, resizable panels via Qt-Advanced-Docking-System | Fixed tab layout |
+| **Memory viewer** | QHexView hex dump widget | Custom QML `MemoryPane` |
+| **Syntax highlighting** | Optional KSyntaxHighlighting (MIPS/Kate grammar) | Not yet wired |
+| **Assembler** | `assembler.h`/`.cpp` in `nsc_qt` | Shared — `nsc_quick` reuses `nsc_qt`'s assembler directly |
+| **Dependencies** | Qt6 Widgets + QADS + QHexView | Qt6 Quick only |
+| **Maturity** | Feature-complete, battle-tested | Available, less battle-tested |
+
+Both UIs hold an `IProcessor*` and are driven by the same `SimulatorController` signal/slot bridge, so
+pipeline state, hazard resolution, and telemetry behave identically in both.
+
+> To skip the QML GUI without skipping the Widgets GUI, add `-DBUILD_QT6_QUICK_UI=OFF` to the configure step.
 
 ---
 
@@ -229,12 +264,12 @@ cmake --build cmake-build-debug
 
 Available presets:
 
-| Preset      | What it builds                                                 |
-|-------------|----------------------------------------------------------------|
-| `debug`     | Debug symbols, TUI + GUI                                       |
-| `release`   | Optimized release build                                        |
-| `asan`      | AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`) |
-| `core-only` | Simulator core + TUI only — skips Qt6 and LLVM entirely        |
+| Preset      | What it builds                                                        |
+|-------------|-----------------------------------------------------------------------|
+| `debug`     | Debug symbols, TUI + Widgets GUI + QML GUI                            |
+| `release`   | Optimized release build                                               |
+| `asan`      | AddressSanitizer + UBSanitizer (requires `libasan`/`libubsan`)        |
+| `core-only` | Simulator core + TUI only — skips Qt6 (both GUIs) and LLVM entirely   |
 
 ### Run
 
@@ -242,8 +277,11 @@ Available presets:
 # Terminal UI
 ./cmake-build-debug/number_system_converter
 
-# Qt6 desktop GUI
+# Qt6 Widgets desktop GUI
 ./cmake-build-debug/clearCore-gui
+
+# Qt Quick / QML desktop GUI
+./cmake-build-debug/clearCore-quick
 ```
 
 > **Terminal note:** FTXUI requires an ANSI-capable terminal. If running from an IDE, enable *Emulate terminal in output
@@ -251,8 +289,10 @@ console* or launch from the shell.
 
 ### Test
 
-Five CTest suites cover the decoder, disassembler, program loader, both CPU backends via the shared `IProcessor`
-contract harness, and the converter core. The GUI adds a smoke-test suite (`qt_ui_test`) when `BUILD_QT6_UI=ON`.
+Six CTest suites cover the decoder, disassembler, program loader, both CPU backends via the shared `IProcessor`
+contract harness, the converter core, and — when an in-range LLVM (15–20) is found — a `nyxstone_test` suite that
+differentially validates the disassembler by round-tripping machine words through LLVM's assembler. The Widgets GUI
+adds a smoke-test suite (`qt_ui_test`) when `BUILD_QT6_UI=ON`.
 
 ```bash
 ctest --preset debug    # run all suites
@@ -269,12 +309,13 @@ ClusterFuzzLite, targeting `mips::parse_hex_program` with the `fuzz_hex_loader` 
 
 ## Architecture
 
-The system is structured as two independent core libraries and two UI layers, linked via CMake:
+The system is structured as two independent core libraries and three UI layers, linked via CMake:
 
 ![how-it-works.svg](assets/how-it-works.svg)
 
-`nsc_qt` (the Qt6 layer) owns a `SimulatorController` that wraps an `IProcessor` and re-emits its state as Qt signals
-for the tab widgets to render. The TUI's `nsc_ui` layer talks to the same interfaces directly.
+`nsc_qt` (the Qt6 Widgets layer) and `nsc_quick` (the Qt Quick/QML layer) both own a `SimulatorController` that wraps
+an `IProcessor` and re-emits its state as Qt signals for their respective views to render. The TUI's `nsc_ui` layer
+talks to the same interfaces directly.
 
 ### Module Reference
 
@@ -286,8 +327,10 @@ for the tab widgets to render. The TUI's `nsc_ui` layer talks to the same interf
 | `SingleCycleCpu`       | `mips_core` | Non-pipelined datapath — CPI = 1 (H&H §7)                                               |
 | `PipelinedCpu`         | `mips_core` | 5-stage pipeline with load-use stalls, EX/MEM→EX forwarding, branch/jump flush (H&H §8) |
 | `Decoder` / `ALU`      | `mips_core` | Format detection, control signal generation, arithmetic                                 |
-| `SimulatorController`  | `nsc_qt`    | Owns an `IProcessor`; re-emits its state as Qt signals                                  |
-| In-app assembler       | `nsc_qt`    | Parses MIPS assembly with labels into instruction words                                 |
+| `NyxstoneBackend`      | `mips_core` | Optional LLVM-backed assembler/disassembler oracle; built when LLVM 15–20 is found      |
+| `SimulatorController`  | `nsc_qt`    | Owns an `IProcessor`; re-emits its state as Qt signals for both Qt GUI layers           |
+| In-app assembler       | `nsc_qt`    | Parses MIPS assembly with labels into instruction words; shared by both Qt GUIs         |
+| QML components         | `nsc_quick` | Declarative Qt Quick UI in `qml/ClearCore/`; reuses `nsc_qt`'s assembler               |
 
 ### Design Conventions
 
