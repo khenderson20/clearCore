@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/cpu-logo.png" alt="clearCore" width="2048"/>
+  <img src="assets/clearcore_social_preview.png" alt="clearCore" width="100%"/>
 </p>
 
 <h1 align="center">clearCore</h1>
