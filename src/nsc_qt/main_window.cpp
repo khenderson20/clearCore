@@ -7,6 +7,7 @@
 #include "nsc_qt/preferences_dialog.h"
 #include "nsc_qt/widgets/code_editor.h"
 #include "nsc_qt/widgets/memory_widget.h"
+#include "nsc_qt/widgets/pipeline_events_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
 #include "nsc_qt/widgets/register_widget.h"
 #include "nsc_qt/widgets/schematic_datapath_widget.h"
@@ -33,6 +34,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSize>
+#include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
@@ -54,7 +56,8 @@ namespace {
 // different version, so stale/incompatible layouts are cleanly discarded.
 // v1: all panels in one central tabbed area.
 // v2: 2-column split — Code Editor left, Datapath center-top, inspector tabs bottom.
-constexpr int kLayoutVersion = 2;
+// v3: adds the Pipeline Events panel to the bottom inspector row.
+constexpr int kLayoutVersion = 3;
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
@@ -132,7 +135,8 @@ void MainWindow::setupMenuBar() {
                                 "Datapath panel (click or Tab to focus):\n"
                                 "Left/Right  – Select a pipeline stage\n"
                                 "Enter       – Show stage detail\n"
-                                "Space       – Toggle breakpoint on selected stage");
+                                "Space       – Toggle breakpoint on selected stage\n"
+                                "Ctrl+Wheel  – Zoom schematic (right-click to fit/export)");
         QMessageBox::information(this, tr("Keyboard Shortcuts"), text);
     });
 }
@@ -150,6 +154,28 @@ void MainWindow::setupToolBar() {
     tb->addAction(act_reset_);
     tb->addSeparator();
     tb->addAction(act_open_);
+    tb->addSeparator();
+
+    // Execution-speed slider, in the toolbar where runs are started rather
+    // than buried in Preferences. Left = slow (long cycle interval, good for
+    // watching the datapath), right = fast. Mirrors the Preferences setting.
+    auto* speed_lbl = new QLabel(tr(" Speed: "), tb);
+    tb->addWidget(speed_lbl);
+    speed_slider_ = new QSlider(Qt::Horizontal, tb);
+    speed_slider_->setRange(10, 1000);  // cycle interval in ms
+    speed_slider_->setInvertedAppearance(true);
+    speed_slider_->setFixedWidth(140);
+    const QSettings s("nsc-qt", "clearCore-gui");
+    speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
+    speed_slider_->setToolTip(
+        tr("Run speed — one pipeline cycle every %1 ms").arg(speed_slider_->value()));
+    connect(speed_slider_, &QSlider::valueChanged, this, [this](int ms) {
+        controller_->setExecutionSpeed(ms);
+        speed_slider_->setToolTip(tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+        QSettings settings("nsc-qt", "clearCore-gui");
+        settings.setValue("executionSpeed", ms);
+    });
+    tb->addWidget(speed_slider_);
 }
 
 // ── Central widget ────────────────────────────────────────────────────────────
@@ -163,6 +189,7 @@ void MainWindow::setupCentralWidget() {
     register_widget_ = new RegisterWidget(this);
     memory_widget_   = new MemoryWidget(this);
     trace_widget_    = new PipelineTraceWidget(this);
+    events_widget_   = new PipelineEventsWidget(this);
 
     // Helper: create a named dock and register its View > Panels toggle.
     auto make_dock = [&](const QString& title, QWidget* contents) -> ads::CDockWidget* {
@@ -208,6 +235,8 @@ void MainWindow::setupCentralWidget() {
     dock_manager_->addDockWidgetTabToArea(trace_dock, bottom_area);
     auto* stats_dock = make_dock(tr("Statistics"), createStatisticsTab());
     dock_manager_->addDockWidgetTabToArea(stats_dock, bottom_area);
+    auto* events_dock = make_dock(tr("Pipeline Events"), events_widget_);
+    dock_manager_->addDockWidgetTabToArea(events_dock, bottom_area);
     bottom_area->setCurrentIndex(0);  // Registers in front
 
     // Snapshot the default arrangement so resetLayout() and the fallback
@@ -447,6 +476,8 @@ void MainWindow::setupConnections() {
     connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
     connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
+        events_widget_->logEvent(PipelineEventsWidget::Kind::Info, controller_->cycleCount(),
+                                 tr("breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')));
         setRunState(false);
     });
 
@@ -480,6 +511,7 @@ void MainWindow::onReset() {
     controller_->reset();
     register_widget_->clear();
     trace_widget_->clear();
+    events_widget_->clear();
     statusBar()->showMessage(tr("Reset."), 2000);
 }
 
@@ -515,6 +547,9 @@ void MainWindow::onOpenFile() {
     }
     statusBar()->showMessage(tr("Loaded %1 instructions from %2").arg(prog.words.size()).arg(path),
                              4000);
+    events_widget_->logEvent(
+        PipelineEventsWidget::Kind::Info, 0,
+        tr("program loaded from file (%1 instructions)").arg(prog.words.size()));
 }
 
 void MainWindow::onSaveTrace() {
@@ -572,6 +607,8 @@ void MainWindow::onLoad() {
     }
     asm_status_lbl_->setStyleSheet("color: green;");
     asm_status_lbl_->setText(tr("✓ %1 instructions loaded").arg(assembled_words_.size()));
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Info, 0,
+                             tr("program loaded (%1 instructions)").arg(assembled_words_.size()));
 }
 
 void MainWindow::onShowPreferences() {
@@ -579,6 +616,8 @@ void MainWindow::onShowPreferences() {
     connect(&dlg, &PreferencesDialog::colorSchemeChanged, this, &MainWindow::applyColorScheme);
     connect(&dlg, &PreferencesDialog::executionSpeedChanged, controller_.get(),
             &SimulatorController::setExecutionSpeed);
+    // Keep the toolbar slider in step with the Preferences control.
+    connect(&dlg, &PreferencesDialog::executionSpeedChanged, speed_slider_, &QSlider::setValue);
     connect(&dlg, &PreferencesDialog::showRegisterAliasesChanged, register_widget_,
             &RegisterWidget::setShowAliases);
     connect(&dlg, &PreferencesDialog::fontSizeChanged, this, [this](int sz) {
@@ -594,6 +633,7 @@ void MainWindow::onCycleExecuted(uint64_t count) {
 void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     datapath_widget_->setPipelineState(state);
     trace_widget_->updateCycle(state);
+    events_widget_->updateCycle(state);
 
     // Gather register values once, then push state + values to RegisterWidget
     // together so it refreshes each of its 32 cells exactly once per cycle.
@@ -601,6 +641,7 @@ void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     for (int i = 0; i < 32; ++i)
         reg_vals[i] = controller_->registerValue(static_cast<uint8_t>(i));
     register_widget_->updateCycle(state, reg_vals);
+    datapath_widget_->setRegisterValues(reg_vals);  // live operand tooltips
 
     // Refresh memory
     memory_widget_->updateDisplay(controller_->memory());
@@ -658,12 +699,16 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
 void MainWindow::onHalted() {
     controller_->stop();
     setRunState(false);
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Success, controller_->cycleCount(),
+                             tr("program halted (spin-loop detected)"));
     flashStatusBanner(true, tr("✓ Program halted (spin-loop detected)."));
 }
 
 void MainWindow::onFaulted() {
     controller_->stop();
     setRunState(false);
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
+                             tr("processor fault"));
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
 }
 
@@ -949,6 +994,9 @@ QWidget#codeEditorBtnBar {
     border-top: 1px solid #3C3C3C;
 }
 
+QListWidget { background: #1E1E1E; color: #CCCCCC; border: none; }
+QListWidget::item { padding: 1px 6px; }
+
 QFrame#statCard {
     background: #2D2D2D;
     border: 1px solid #3C3C3C;
@@ -1100,6 +1148,9 @@ QWidget#codeEditorBtnBar {
     border-top: 1px solid #DDDDDD;
 }
 
+QListWidget { background: white; color: #333333; border: none; }
+QListWidget::item { padding: 1px 6px; }
+
 QFrame#statCard {
     background: white;
     border: 1px solid #E0E0E0;
@@ -1168,6 +1219,7 @@ QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
     register_widget_->setDarkMode(dark);
     memory_widget_->setDarkMode(dark);
     trace_widget_->setDarkMode(dark);
+    events_widget_->setDarkMode(dark);
     code_editor_->setDarkMode(dark);
 }
 

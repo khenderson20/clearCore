@@ -13,6 +13,7 @@ class QAction;
 class QToolBar;
 class QMenu;
 class QCloseEvent;
+class QSlider;
 
 namespace ads {
 class CDockManager;
@@ -24,6 +25,7 @@ class SchematicDatapathWidget;
 class RegisterWidget;
 class MemoryWidget;
 class PipelineTraceWidget;
+class PipelineEventsWidget;
 class CodeEditor;
 
 class MainWindow : public QMainWindow {
@@ -96,6 +98,7 @@ private:
     RegisterWidget*          register_widget_ = nullptr;
     MemoryWidget*            memory_widget_   = nullptr;
     PipelineTraceWidget*     trace_widget_    = nullptr;
+    PipelineEventsWidget*    events_widget_   = nullptr;
     CodeEditor*              code_editor_     = nullptr;
     QComboBox*               examples_combo_  = nullptr;
     QLabel*                  asm_status_lbl_  = nullptr;
@@ -115,6 +118,9 @@ private:
     QLabel* status_cycles_lbl_ = nullptr;
     QLabel* status_instrs_lbl_ = nullptr;
     QLabel* status_cpi_lbl_    = nullptr;
+
+    // Toolbar execution-speed slider (mirrors the Preferences setting)
+    QSlider* speed_slider_ = nullptr;
 
     // Actions
     QAction* act_step_      = nullptr;

@@ -25,10 +25,14 @@
 #include <utility>
 #include <vector>
 
+class QAbstractGraphicsShapeItem;
 class QGraphicsScene;
 class QGraphicsEllipseItem;
+class QGraphicsLineItem;
 class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
+class QToolButton;
+class QVariantAnimation;
 
 namespace nsc::qt {
 
@@ -43,6 +47,9 @@ public:
     void setPipelineState(const mips::PipelineState& state);
     void setBreakpoints(const std::unordered_set<uint32_t>& bps);
     void setDarkMode(bool dark);
+    // Live register-file contents, used to enrich component tooltips with the
+    // actual operand values of the instructions in flight.
+    void setRegisterValues(const std::array<uint32_t, 32>& regs);
 
 signals:
     void breakpointToggleRequested(uint32_t pc);
@@ -69,6 +76,15 @@ private:
     int stageAtViewPos(const QPoint& pos) const;
     // Zoom-to-fit while the user hasn't zoomed manually.
     void fitSchematic();
+    // Refresh the live parts of the educational component tooltips.
+    void updateTooltips();
+    // Multiply the current view scale by `factor`, clamped; marks user zoom.
+    void zoomBy(qreal factor);
+    // Render the scene to a 2x PNG chosen via a save dialog (lab reports).
+    void exportImage();
+    // Slide a token from each stage column to the next for instructions that
+    // advanced between `old_state` and the current state_ (one clock edge).
+    void startTokenAnimation(const mips::PipelineState& old_state);
 
     QGraphicsScene* scene_ = nullptr;
 
@@ -87,8 +103,46 @@ private:
     // Per-stage breakpoint bullseye (outer ring, punched-out centre).
     std::array<std::pair<QGraphicsEllipseItem*, QGraphicsEllipseItem*>, 5> bp_markers_{};
 
+    // Components with live tooltips / control-signal accents.
+    QAbstractGraphicsShapeItem* pc_box_      = nullptr;
+    QAbstractGraphicsShapeItem* imem_box_    = nullptr;
+    QAbstractGraphicsShapeItem* control_box_ = nullptr;
+    QAbstractGraphicsShapeItem* regs_box_    = nullptr;
+    QAbstractGraphicsShapeItem* alu_item_    = nullptr;
+    QAbstractGraphicsShapeItem* dmem_box_    = nullptr;
+
+    QGraphicsSimpleTextItem*                cycle_text_ = nullptr;  // in-scene cycle counter
+    std::array<QGraphicsSimpleTextItem*, 5> stage_pc_labels_{};     // PCs under the mnemonics
+    std::vector<QGraphicsLineItem*>         legend_swatches_;       // wire-colour legend
+    std::vector<QGraphicsSimpleTextItem*>   legend_texts_;
+
+    // Mux select-input markers: a dot on the input port each mux is passing
+    // through this cycle. Index: 0 = PC-source, 1 = fwd A, 2 = fwd B, 3 = WB.
+    std::array<QGraphicsEllipseItem*, 4> mux_markers_{};
+
+    // Live value labels pinned to wires whose values are known exactly:
+    // the fetch PC, the ID-stage immediate, and the WB write-back result.
+    QGraphicsSimpleTextItem* val_pc_  = nullptr;
+    QGraphicsSimpleTextItem* val_imm_ = nullptr;
+    QGraphicsSimpleTextItem* val_wb_  = nullptr;
+
+    // Step-animation tokens gliding between stage columns on each clock edge.
+    std::array<QGraphicsRectItem*, 5> tokens_{};
+    QVariantAnimation*                token_anim_ = nullptr;
+
+    // Hazard explainer chip: names and explains the stall/flush the moment
+    // it happens, in the hazard's colour.
+    QGraphicsRectItem*       hazard_chip_ = nullptr;
+    QGraphicsSimpleTextItem* hazard_text_ = nullptr;
+
+    // Zoom controls overlaid on the view (discoverable alternative to Ctrl+wheel).
+    QToolButton* btn_zoom_in_  = nullptr;
+    QToolButton* btn_zoom_out_ = nullptr;
+    QToolButton* btn_zoom_fit_ = nullptr;
+
     mips::PipelineState          state_{};
     std::unordered_set<uint32_t> breakpoints_{};
+    std::array<uint32_t, 32>     reg_values_{};
     bool                         dark_mode_      = false;
     bool                         user_zoomed_    = false;
     int                          selected_stage_ = 0;

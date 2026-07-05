@@ -366,6 +366,7 @@ if (BUILD_QT6_UI)
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
+            src/nsc_qt/widgets/pipeline_events_widget.cpp
 
             # Headers listed so AUTOMOC picks up Q_OBJECT classes
             include/nsc_qt/simulator_controller.h
@@ -379,6 +380,7 @@ if (BUILD_QT6_UI)
             include/nsc_qt/widgets/register_widget.h
             include/nsc_qt/widgets/memory_widget.h
             include/nsc_qt/widgets/pipeline_trace_widget.h
+            include/nsc_qt/widgets/pipeline_events_widget.h
     )
 
     set_target_properties(clearCore-gui PROPERTIES
@@ -583,10 +585,12 @@ if (BUILD_QT6_UI)
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
+            src/nsc_qt/widgets/pipeline_events_widget.cpp
             include/nsc_qt/simulator_controller.h            # (moc)
             include/nsc_qt/widgets/register_widget.h         # (moc)
             include/nsc_qt/widgets/memory_widget.h           # (moc)
             include/nsc_qt/widgets/pipeline_trace_widget.h   # (moc)
+            include/nsc_qt/widgets/pipeline_events_widget.h  # (moc)
     )
     set_target_properties(qt_ui_test PROPERTIES AUTOMOC ON)
     target_include_directories(qt_ui_test PRIVATE include)
