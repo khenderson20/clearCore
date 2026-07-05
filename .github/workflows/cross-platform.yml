@@ -11,6 +11,8 @@ on:
   push:
     branches: [ci/windows-macos-packaging]
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -23,6 +25,9 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write  # attach installers to the release
+
     strategy:
       fail-fast: false
       matrix:
@@ -91,17 +96,31 @@ jobs:
         run: ctest --test-dir build/release --output-on-failure
 
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
-      - name: Package installer (Windows / NSIS)
-        if: runner.os == 'Windows'
+      # Versioned, arch-labelled filenames; version comes from the release tag
+      # (published release) or a dev placeholder (push / manual dispatch).
+      - name: Package installer
+        id: package
+        shell: bash
         working-directory: build/release
-        run: cpack -G NSIS -V
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            version="${{ github.event.release.tag_name }}"; version="${version#v}"
+          else
+            version="0.0.0-dev"
+          fi
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            generator="NSIS";      name="clearCore-${version}-windows-x64"
+          else
+            generator="DragNDrop"; name="clearCore-${version}-macOS-universal"
+          fi
+          cpack -G "$generator" \
+                -D CPACK_PACKAGE_VERSION="$version" \
+                -D CPACK_PACKAGE_FILE_NAME="$name" -V
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          ls -la "$name".* || true
 
-      - name: Package installer (macOS / .dmg)
-        if: runner.os == 'macOS'
-        working-directory: build/release
-        run: cpack -G DragNDrop -V
-
-      - name: Upload installer
+      - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: clearCore-${{ matrix.name }}
@@ -109,3 +128,13 @@ jobs:
             build/release/*.exe
             build/release/*.dmg
           if-no-files-found: error
+
+      - name: Attach installer to the release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "build/release/${{ steps.package.outputs.name }}".* \
+            --clobber --repo "${{ github.repository }}"
