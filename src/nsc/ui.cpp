@@ -552,8 +552,19 @@ static void runSplash() {
 
     // Small deterministic hash used to vary trace geometry per pin without
     // pulling in <random> or reseeding anything.
+    //
+    // The multiplies MUST be unsigned: `a * 374761393` overflows int for any
+    // a ≥ 6, which is undefined behaviour. GCC's -O3 exploited that UB to
+    // miscompile the trace-generator loops below into an infinite spin, so
+    // the packaged Release binary hung on a blank screen at launch while
+    // -O0/-O2 builds (which happen to wrap) ran fine. Casting the operands
+    // first makes the wraparound defined and the hash identical to what the
+    // lower optimisation levels always produced. (UBSan-trap pinpointed the
+    // overflow; the index guard in put() below was an earlier, incomplete
+    // attempt at fixing this same launch failure.)
     auto hashf = [](int a, int b) -> uint32_t {
-        uint32_t h = static_cast<uint32_t>(a * 374761393 + b * 668265263 + 0x9E3779B9u);
+        uint32_t h = static_cast<uint32_t>(a) * 374761393u + static_cast<uint32_t>(b) * 668265263u +
+                     0x9E3779B9u;
         h          = (h ^ (h >> 13)) * 1274126177u;
         return h ^ (h >> 16);
     };
