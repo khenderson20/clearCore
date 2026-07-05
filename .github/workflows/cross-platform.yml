@@ -74,7 +74,20 @@ jobs:
 
       - name: Ensure NSIS (Windows)
         if: runner.os == 'Windows'
-        run: choco install nsis --no-progress -y
+        shell: bash
+        run: |
+          # choco can return exit 0 even when the community feed is down (503),
+          # leaving NSIS uninstalled and cpack unable to find makensis. Retry
+          # until makensis actually exists on disk.
+          makensis="/c/Program Files (x86)/NSIS/makensis.exe"
+          for attempt in 1 2 3 4 5; do
+            [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
+            echo "Installing NSIS (attempt $attempt)…"
+            choco install nsis --no-progress -y || true
+            [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
+            sleep 20
+          done
+          echo "::error::NSIS could not be installed"; exit 1
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
