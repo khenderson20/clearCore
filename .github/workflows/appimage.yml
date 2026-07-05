@@ -122,6 +122,29 @@ jobs:
             exit 1
           fi
 
+      # The AppImage's default entry point is the GUI, but the TUI
+      # (number_system_converter) ships inside it too — and it was the binary
+      # hit by the -O3 startup crash. Extract the AppImage and launch the bundled
+      # TUI directly so that class of bug is caught on this artifact as well. It
+      # needs no display; feed EOF on stdin and treat a timeout (still running)
+      # or a clean exit as healthy, any crash signal as failure.
+      - name: Smoke test the bundled TUI
+        run: |
+          APPIMAGE="clearCore-${{ steps.ver.outputs.version }}-x86_64.AppImage"
+          "./$APPIMAGE" --appimage-extract >/dev/null
+          tui="squashfs-root/usr/bin/number_system_converter"
+          [ -x "$tui" ] || { echo "::error::number_system_converter not bundled in the AppImage"; exit 1; }
+          set +e
+          timeout 20 "$tui" </dev/null >tui.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ge 128 ] && [ "$rc" -ne 124 ]; then
+            echo "::error::number_system_converter crashed on launch (signal $((rc - 128)))"
+            cat tui.log || true
+            exit 1
+          fi
+          echo "✓ number_system_converter launched without crashing (exit $rc)"
+
       - name: Upload workflow artifact (always)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
