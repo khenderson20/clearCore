@@ -2,6 +2,7 @@
 #include "nsc_qt/ui_scale.h"
 
 #include "nsc_qt/assembler.h"
+#include "nsc_qt/dock_panels.h"
 #include "nsc_qt/examples.h"
 #include "nsc_qt/preferences_dialog.h"
 #include "nsc_qt/widgets/code_editor.h"
@@ -44,6 +45,14 @@
 #include <DockWidget.h>
 
 namespace nsc::qt {
+
+namespace {
+// Schema version for the persisted dock layout. Bump this whenever the set of
+// docks or the default arrangement changes: ADS restoreState() rejects a saved
+// state tagged with a different version, so stale/incompatible layouts are
+// dropped instead of being rebuilt into a broken window.
+constexpr int kLayoutVersion = 1;
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -93,6 +102,7 @@ void MainWindow::setupMenuBar() {
     // Filled with per-dock toggle actions once the docks exist
     // (setupCentralWidget runs after this).
     panels_menu_ = view_menu->addMenu(tr("P&anels"));
+    view_menu->addAction(tr("&Reset Layout"), this, &MainWindow::resetLayout);
     view_menu->addSeparator();
     view_menu->addAction(tr("&Preferences…"), QKeySequence("Ctrl+,"), this,
                          &MainWindow::onShowPreferences);
@@ -143,12 +153,7 @@ void MainWindow::setupCentralWidget() {
 
     ads::CDockAreaWidget* area      = nullptr;
     const auto            add_panel = [&](const QString& title, QWidget* contents) {
-        auto* dock = new ads::CDockWidget(dock_manager_, title);
-        dock->setObjectName(title);
-        if (area == nullptr)
-            area = dock_manager_->addDockWidget(ads::CenterDockWidgetArea, dock);
-        else
-            dock_manager_->addDockWidgetTabToArea(dock, area);
+        auto* dock = addDockPanel(dock_manager_, area, title, contents);
         panels_menu_->addAction(dock->toggleViewAction());
     };
 
@@ -160,12 +165,20 @@ void MainWindow::setupCentralWidget() {
     add_panel(tr("Statistics"), createStatisticsTab());
     area->setCurrentIndex(0);  // Datapath in front, as before
 
-    // Restore the dock arrangement from the previous session, if any.
-    // restoreState() only touches docks it can match by objectName, so a
-    // stale entry from an older version is ignored harmlessly.
+    // Snapshot the freshly-built default arrangement so we can fall back to it
+    // (and power View > Reset Layout) without reconstructing the docks.
+    default_layout_ = dock_manager_->saveState(kLayoutVersion);
+
+    // Restore the previous session's arrangement — defensively. ADS applies a
+    // saved state wholesale, so a stale (different kLayoutVersion) or corrupt
+    // one must not be trusted: version-gate it, and if the restore still leaves
+    // no panel open (e.g. every dock Closed with a zero-size central area — an
+    // empty window), discard it and reinstate the default.
     const QSettings s("nsc-qt", "clearCore-gui");
-    if (const auto state = s.value("dockLayout").toByteArray(); !state.isEmpty())
-        dock_manager_->restoreState(state);
+    if (const auto state = s.value("dockLayout").toByteArray(); !state.isEmpty()) {
+        if (!dock_manager_->restoreState(state, kLayoutVersion) || !hasOpenPanel())
+            dock_manager_->restoreState(default_layout_, kLayoutVersion);
+    }
 
     // Status bar
     status_cycles_lbl_ = new QLabel(tr("Cycles: 0"));
@@ -180,8 +193,20 @@ void MainWindow::setupCentralWidget() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     QSettings s("nsc-qt", "clearCore-gui");
-    s.setValue("dockLayout", dock_manager_->saveState());
+    s.setValue("dockLayout", dock_manager_->saveState(kLayoutVersion));
     QMainWindow::closeEvent(event);
+}
+
+// View > Reset Layout: restore the default arrangement captured on first build.
+void MainWindow::resetLayout() {
+    if (!default_layout_.isEmpty()) dock_manager_->restoreState(default_layout_, kLayoutVersion);
+}
+
+bool MainWindow::hasOpenPanel() const {
+    const auto docks = dock_manager_->dockWidgetsMap();
+    for (auto* dock : docks)
+        if (dock != nullptr && !dock->isClosed()) return true;
+    return false;
 }
 
 QWidget* MainWindow::createCodeEditorTab() {

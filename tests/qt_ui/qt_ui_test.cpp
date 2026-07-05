@@ -1,4 +1,5 @@
 #include "nsc_qt/assembler.h"
+#include "nsc_qt/dock_panels.h"
 #include "nsc_qt/simulator_controller.h"
 #include "nsc_qt/widgets/memory_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
@@ -6,10 +7,17 @@
 
 #include "mips/pipelined_cpu.h"
 
+#include <DockAreaWidget.h>
+#include <DockManager.h>
+#include <DockWidget.h>
 #include <QApplication>
+#include <QLabel>
+#include <QMainWindow>
 #include <cassert>
 #include <cstdio>
 #include <memory>
+#include <string>
+#include <utility>
 
 // ── Minimal test harness ──────────────────────────────────────────────────────
 
@@ -195,6 +203,33 @@ static void test_trace_widget_clear() {
     CHECK(true);
 }
 
+// ── Dock panels ───────────────────────────────────────────────────────────────
+
+// Regression guard: every panel added via addDockPanel() must actually carry
+// its content widget. A dropped setWidget() once shipped a GUI where all panels
+// rendered empty (the content widgets were orphaned in the QMainWindow), and
+// nothing caught it because the smoke test only checked that the app launched.
+static void test_dock_panels_carry_content() {
+    using namespace nsc::qt;
+
+    auto  main_window = std::make_unique<QMainWindow>();
+    auto* manager     = new ads::CDockManager(main_window.get());
+
+    ads::CDockAreaWidget* area  = nullptr;
+    auto*                 first = new QLabel("first");
+    auto*                 tab   = new QLabel("tab");
+
+    auto* dock_a = addDockPanel(manager, area, "First", first);
+    auto* dock_b = addDockPanel(manager, area, "Tabbed", tab);
+
+    // The content must be inside the dock, not orphaned.
+    CHECK(dock_a->widget() == first);
+    CHECK(dock_b->widget() == tab);
+    // First call opens a central area; the second tabs into the same one.
+    CHECK(area != nullptr);
+    CHECK(manager->dockWidgetsMap().size() == 2);
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[]) {
@@ -209,6 +244,7 @@ int main(int argc, char* argv[]) {
     test_register_widget_clear();
     test_memory_widget_construct();
     test_trace_widget_clear();
+    test_dock_panels_carry_content();
 
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;

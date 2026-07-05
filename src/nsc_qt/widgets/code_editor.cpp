@@ -3,6 +3,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QTextBlock>
+#include <algorithm>
 
 #ifdef HAVE_KSYNTAXHIGHLIGHTING
 #include <KSyntaxHighlighting/Definition>
@@ -44,7 +45,7 @@ CodeEditor::CodeEditor(QWidget* parent) : QPlainTextEdit(parent) {
 
 int CodeEditor::lineNumberAreaWidth() const {
     int digits    = 1;
-    int max_block = qMax(1, blockCount());
+    int max_block = (std::max)(1, blockCount());
     while (max_block >= 10) {
         max_block /= 10;
         ++digits;
