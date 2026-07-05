@@ -606,8 +606,11 @@ if (BUILD_QT6_UI)
 
     # QApplication needs a windowing platform; Qt's offscreen backend lets the
     # test run on headless machines and CI runners without a display.
+    # TIMEOUT: Qt plugin discovery failures on Windows produce a WER dialog
+    # (no stdout, blocks forever) rather than a clean process exit — cap it.
     set_tests_properties(qt_ui_test PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            TIMEOUT 120
     )
 endif ()
 
