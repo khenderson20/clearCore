@@ -24,6 +24,7 @@
 #include <QPen>
 #include <QPolygonF>
 #include <QStringList>
+#include <QVariantAnimation>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
@@ -59,6 +60,13 @@ constexpr qreal kColTop = 44.0, kColBot = 500.0;
 
 const char* const kStageNames[5]   = {"IF", "ID", "EX", "MEM", "WB"};
 const char* const kPipeRegNames[4] = {"IF/ID", "ID/EX", "EX/MEM", "MEM/WB"};
+
+// Input-port scene positions for the four muxes, in select order. The select
+// markers snap to these; they must match the wire endpoints in buildScene().
+const QPointF kPcMuxPorts[2]   = {{16, 262}, {16, 298}};                // PC+4, branch target
+const QPointF kFwdAMuxPorts[3] = {{600, 222}, {600, 238}, {600, 254}};  // reg, EX/MEM, MEM/WB
+const QPointF kFwdBMuxPorts[3] = {{600, 292}, {600, 308}, {600, 324}};
+const QPointF kWbMuxPorts[2]   = {{1180, 272}, {1180, 298}};  // mem data, ALU result
 
 // Stage tint hues (shared with the old widget's palette).
 const QColor kStageLight[5] = {QColor("#E3F2FD"), QColor("#E0F7FA"), QColor("#E8F5E9"),
@@ -308,7 +316,8 @@ void SchematicDatapathWidget::buildScene() {
         auto* name = scene_->addSimpleText(QString::fromLatin1(kStageNames[i]),
                                            scale::monoFont(scale::kFontSizeBody, true));
         name->setData(0, QStringLiteral("stage-name"));
-        name->setPos((c.x0 + c.x1) / 2 - name->boundingRect().width() / 2, kColBot + 8);
+        // +14 keeps the row clear of the write-back wire's bottom run (y 510).
+        name->setPos((c.x0 + c.x1) / 2 - name->boundingRect().width() / 2, kColBot + 14);
 
         stage_labels_[static_cast<std::size_t>(i)] =
             scene_->addSimpleText(QString(), scale::monoFont(scale::kFontSizeDense));
@@ -321,10 +330,11 @@ void SchematicDatapathWidget::buildScene() {
         stage_pc_labels_[static_cast<std::size_t>(i)]->setPos((c.x0 + c.x1) / 2, 30);
     }
 
-    // In-scene cycle counter (top-right, mirrors the status bar for exports).
+    // In-scene cycle counter (bottom-right, opposite the legend; the top row
+    // belongs to the per-stage mnemonics and must stay clear).
     cycle_text_ = scene_->addSimpleText(QStringLiteral("Cycle 0"),
                                         scale::monoFont(scale::kFontSizeBody, true));
-    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 16, 12);
+    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 20, kSceneH - 28);
 
     // Wire-colour legend along the bottom: the special wires communicate by
     // colour, so they need a permanent key (never rely on colour alone).
@@ -512,6 +522,43 @@ void SchematicDatapathWidget::buildScene() {
         bp_markers_[static_cast<std::size_t>(i)] = {outer, inner};
     }
 
+    // ── Mux select-input markers ─────────────────────────────────────────────
+    // A dot parked on the input port each mux is currently passing through.
+    for (auto& marker : mux_markers_) {
+        marker = scene_->addEllipse(QRectF(-4, -4, 8, 8));
+        marker->setZValue(6);
+        marker->setToolTip(tr("Selected mux input — the dot marks which input "
+                              "this mux is passing through this cycle."));
+    }
+
+    // ── Pinned wire value labels ─────────────────────────────────────────────
+    // Only values the snapshot actually carries: fetch PC, ID immediate, and
+    // the WB result read back from the register file after the cycle.
+    auto mk_val = [&]() {
+        auto* v = scene_->addSimpleText(QString(), scale::monoFont(scale::kFontSizeDense - 3));
+        v->setZValue(7);
+        return v;
+    };
+    val_pc_  = mk_val();
+    val_imm_ = mk_val();
+    val_wb_  = mk_val();
+
+    // ── Step-animation tokens ────────────────────────────────────────────────
+    // Small pills that glide along the top of the stage bands on each clock
+    // edge, one per instruction that advanced a stage.
+    for (auto& tok : tokens_) {
+        tok = scene_->addRect(QRectF(0, 0, 26, 12));
+        tok->setZValue(9);
+        tok->setVisible(false);
+    }
+    token_anim_ = new QVariantAnimation(this);
+    token_anim_->setDuration(240);
+    token_anim_->setEasingCurve(QEasingCurve::OutCubic);
+    connect(token_anim_, &QVariantAnimation::finished, this, [this] {
+        for (auto* tok : tokens_)
+            tok->setVisible(false);
+    });
+
     // ── Keyboard focus ring ──────────────────────────────────────────────────
     focus_ring_ = scene_->addRect(QRectF());
     focus_ring_->setZValue(10);
@@ -609,7 +656,7 @@ void SchematicDatapathWidget::applyState() {
     }
 
     cycle_text_->setText(tr("Cycle %1").arg(static_cast<qulonglong>(state_.cycle)));
-    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 16, 12);
+    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 20, kSceneH - 28);
 
     // Pipeline-register bars: red = flushing, amber = stalled, else neutral.
     for (int i = 0; i < 4; ++i) {
@@ -643,6 +690,66 @@ void SchematicDatapathWidget::applyState() {
     dmem_box_->setPen((mem_ctl.mem_read || mem_ctl.mem_write) ? QPen(t.label, 2.4) : base_pen);
     regs_box_->setPen(wb_ctl.reg_write ? QPen(t.wb, 2.4) : base_pen);
     writeback_wire_->setActive(wb_ctl.reg_write);
+
+    // ── Mux select markers ───────────────────────────────────────────────────
+    // Selects are derived from the same signals that light the wires, so the
+    // dot and the lit wire always agree.
+    auto place_marker = [&](int idx, const QPointF& port, const QColor& color) {
+        auto* m = mux_markers_[static_cast<std::size_t>(idx)];
+        m->setPos(port);
+        m->setBrush(color);
+        m->setPen(QPen(t.comp_border, 0.8));
+    };
+    place_marker(0, kPcMuxPorts[state_.branch_flush ? 1 : 0],
+                 state_.branch_flush ? t.flush : t.wire);
+    const int sel_a = state_.fwd_ex_to_ex_a ? 1 : state_.fwd_mem_to_ex_a ? 2 : 0;
+    const int sel_b = state_.fwd_ex_to_ex_b ? 1 : state_.fwd_mem_to_ex_b ? 2 : 0;
+    place_marker(1, kFwdAMuxPorts[sel_a], sel_a == 1 ? t.fwd_ex : sel_a == 2 ? t.fwd_mem : t.wire);
+    place_marker(2, kFwdBMuxPorts[sel_b], sel_b == 1 ? t.fwd_ex : sel_b == 2 ? t.fwd_mem : t.wire);
+    place_marker(3, kWbMuxPorts[wb_ctl.mem_to_reg ? 0 : 1], wb_ctl.reg_write ? t.wb : t.wire);
+
+    // ── Pinned wire values ───────────────────────────────────────────────────
+    const auto& s_if = state_.stages[0];
+    val_pc_->setText(s_if.valid ? QStringLiteral("0x%1").arg(s_if.pc, 8, 16, QChar('0'))
+                                : QString());
+    val_pc_->setBrush(t.label);
+    val_pc_->setPos(73 - val_pc_->boundingRect().width() / 2, 312);
+
+    const auto& s_id = state_.stages[1];
+    QString     imm_text;
+    if (s_id.valid && s_id.raw != 0) {
+        if (const auto d = mips::Decoder::decode(s_id.raw)) {
+            if (d->format == mips::InstrFormat::I) {
+                const auto imm = static_cast<int16_t>(d->i().imm);
+                imm_text       = QStringLiteral("imm=%1").arg(imm);
+            }
+        }
+    }
+    val_imm_->setText(imm_text);
+    val_imm_->setBrush(t.label);
+    val_imm_->setPos(490 - val_imm_->boundingRect().width() / 2, 384);
+
+    const auto& s_wb = state_.stages[4];
+    QString     wb_text;
+    if (s_wb.valid && s_wb.raw != 0 && wb_ctl.reg_write) {
+        if (const auto d = mips::Decoder::decode(s_wb.raw)) {
+            uint8_t dest = 0;
+            if (d->format == mips::InstrFormat::R)
+                dest = d->r().rd;
+            else if (d->format == mips::InstrFormat::I)
+                dest = d->i().rt;
+            else if (d->opcode == mips::Opcode::JAL)
+                dest = 31;  // jal writes the return address into $ra
+            if (dest != 0)
+                wb_text =
+                    QStringLiteral("$%1 = 0x%2")
+                        .arg(QString::fromStdString(std::string(mips::register_abi_name(dest))))
+                        .arg(reg_values_[dest], 8, 16, QChar('0'));
+        }
+    }
+    val_wb_->setText(wb_text);
+    val_wb_->setBrush(t.wb);
+    val_wb_->setPos(700 - val_wb_->boundingRect().width() / 2, 486);
 
     updateTooltips();
 }
@@ -734,8 +841,10 @@ void SchematicDatapathWidget::updateTooltips() {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 void SchematicDatapathWidget::setPipelineState(const mips::PipelineState& state) {
-    state_ = state;
+    const mips::PipelineState old = state_;
+    state_                        = state;
     applyState();
+    startTokenAnimation(old);
 }
 
 void SchematicDatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>& bps) {
@@ -750,7 +859,64 @@ void SchematicDatapathWidget::setDarkMode(bool dark) {
 
 void SchematicDatapathWidget::setRegisterValues(const std::array<uint32_t, 32>& regs) {
     reg_values_ = regs;
-    updateTooltips();
+    applyState();  // refreshes the WB value label and operand tooltips
+}
+
+void SchematicDatapathWidget::startTokenAnimation(const mips::PipelineState& old_state) {
+    // Animate only across a single clock edge; resets and restores snap.
+    if (state_.cycle != old_state.cycle + 1) {
+        token_anim_->stop();
+        for (auto* tok : tokens_)
+            tok->setVisible(false);
+        return;
+    }
+    token_anim_->stop();
+
+    const Theme& t = theme(dark_mode_);
+    struct Move {
+        QGraphicsRectItem* tok;
+        qreal              from_x, to_x;
+    };
+    std::vector<Move> moves;
+
+    auto            col_center = [](int i) { return (kColumns[i].x0 + kColumns[i].x1) / 2 - 13; };
+    constexpr qreal kTokenY    = 48;
+
+    for (int i = 0; i < 5; ++i) {
+        const auto& now = state_.stages[static_cast<std::size_t>(i)];
+        if (!now.valid || now.stalled || now.flushed) continue;
+
+        qreal from_x = 0;
+        if (i == 0) {
+            // Fresh fetch: slide in from the left edge of the IF column.
+            const auto& before = old_state.stages[0];
+            if (before.valid && before.pc == now.pc) continue;  // IF held (stall)
+            from_x = kColumns[0].x0;
+        } else {
+            // Advanced: this instruction was in the previous column last cycle.
+            const auto& prev = old_state.stages[static_cast<std::size_t>(i - 1)];
+            if (!prev.valid || prev.pc != now.pc || prev.raw != now.raw) continue;
+            from_x = col_center(i - 1);
+        }
+
+        auto* tok = tokens_[static_cast<std::size_t>(i)];
+        tok->setBrush(dark_mode_ ? kStageDark[i] : kStageLight[i]);
+        tok->setPen(QPen(t.comp_border, 1));
+        tok->setPos(from_x, kTokenY);
+        tok->setVisible(true);
+        moves.push_back({tok, from_x, col_center(i)});
+    }
+    if (moves.empty()) return;
+
+    disconnect(token_anim_, &QVariantAnimation::valueChanged, this, nullptr);
+    token_anim_->setStartValue(0.0);
+    token_anim_->setEndValue(1.0);
+    connect(token_anim_, &QVariantAnimation::valueChanged, this, [this, moves](const QVariant& v) {
+        const qreal p = v.toReal();
+        for (const Move& m : moves)
+            m.tok->setPos(m.from_x + (m.to_x - m.from_x) * p, 48);
+    });
+    token_anim_->start();
 }
 
 // ── Interaction ─────────────────────────────────────────────────────────────

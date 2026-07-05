@@ -31,6 +31,7 @@ class QGraphicsEllipseItem;
 class QGraphicsLineItem;
 class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
+class QVariantAnimation;
 
 namespace nsc::qt {
 
@@ -78,6 +79,9 @@ private:
     void updateTooltips();
     // Render the scene to a 2x PNG chosen via a save dialog (lab reports).
     void exportImage();
+    // Slide a token from each stage column to the next for instructions that
+    // advanced between `old_state` and the current state_ (one clock edge).
+    void startTokenAnimation(const mips::PipelineState& old_state);
 
     QGraphicsScene* scene_ = nullptr;
 
@@ -108,6 +112,20 @@ private:
     std::array<QGraphicsSimpleTextItem*, 5> stage_pc_labels_{};     // PCs under the mnemonics
     std::vector<QGraphicsLineItem*>         legend_swatches_;       // wire-colour legend
     std::vector<QGraphicsSimpleTextItem*>   legend_texts_;
+
+    // Mux select-input markers: a dot on the input port each mux is passing
+    // through this cycle. Index: 0 = PC-source, 1 = fwd A, 2 = fwd B, 3 = WB.
+    std::array<QGraphicsEllipseItem*, 4> mux_markers_{};
+
+    // Live value labels pinned to wires whose values are known exactly:
+    // the fetch PC, the ID-stage immediate, and the WB write-back result.
+    QGraphicsSimpleTextItem* val_pc_  = nullptr;
+    QGraphicsSimpleTextItem* val_imm_ = nullptr;
+    QGraphicsSimpleTextItem* val_wb_  = nullptr;
+
+    // Step-animation tokens gliding between stage columns on each clock edge.
+    std::array<QGraphicsRectItem*, 5> tokens_{};
+    QVariantAnimation*                token_anim_ = nullptr;
 
     mips::PipelineState          state_{};
     std::unordered_set<uint32_t> breakpoints_{};
