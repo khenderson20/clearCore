@@ -45,6 +45,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y
           ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
           llvm-dev zlib1g-dev
+          xvfb libgl1-mesa-dev libglx-dev libxcb-cursor0
 
       - name: Install KSyntaxHighlighting (optional)
         run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
@@ -116,14 +117,26 @@ jobs:
           done
 
           # 2) Each binary must survive launch (the -O3 TUI bug crashed during
-          #    startup, before any input). Run headless with a timeout: a crash
-          #    exits 128+signal; a timeout (124) or clean exit is healthy. Qt uses
-          #    the offscreen platform so the GUI needs no display.
+          #    startup, before any input). Run with a timeout: a crash exits
+          #    128+signal; a timeout (124) or clean exit is healthy.
+          #
+          #    The TUI needs no display and runs under the offscreen platform.
+          #    clearCore-gui embeds a QOpenGLWidget, which the offscreen plugin
+          #    cannot back ("QOpenGLWidget is not supported on this platform" ->
+          #    segfault) — software-GL env vars don't help, since offscreen has
+          #    no GL integration at all. Launch it under Xvfb (a virtual X server)
+          #    with Mesa's software GL instead — the same approach the AppImage
+          #    job uses to launch this exact binary successfully.
           smoke() {
             local bin="$1"; shift
             local rc=0
-            QT_QPA_PLATFORM=offscreen timeout -s TERM 15s "$bin" "$@" \
-              </dev/null >/tmp/run.log 2>&1 || rc=$?
+            if [ "$(basename "$bin")" = "clearCore-gui" ]; then
+              xvfb-run -a --server-args="-screen 0 1280x1024x24" \
+                timeout -s TERM 15s "$bin" "$@" </dev/null >/tmp/run.log 2>&1 || rc=$?
+            else
+              QT_QPA_PLATFORM=offscreen \
+              timeout -s TERM 15s "$bin" "$@" </dev/null >/tmp/run.log 2>&1 || rc=$?
+            fi
             if [ "$rc" -ge 128 ] && [ "$rc" -ne 124 ]; then
               echo "::error::$(basename "$bin") crashed on launch (signal $((rc - 128)))"
               cat /tmp/run.log || true

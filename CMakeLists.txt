@@ -385,15 +385,35 @@ if (BUILD_QT6_UI)
             MACOSX_BUNDLE ON          # Create .app bundle on macOS
     )
 
-    # The Qt Advanced Docking System is a shared library; CPack installs it to
-    # lib/ next to the bin/ binary. Without an install RPATH the packaged
-    # clearCore-gui has no way to find libqtadvanceddocking-qt6.so.4 at runtime
-    # ("cannot open shared object file"). Point it at ../lib relative to the
-    # executable so the plain .tar.gz runs without LD_LIBRARY_PATH. (lib64 is
-    # covered too for distros/GNUInstallDirs that use it.)
+    # The Qt Advanced Docking System is a shared library; the packaged
+    # clearCore-gui needs a runtime search path to find it (and, on macOS, the
+    # bundled Qt frameworks) — without one it fails to launch.
     if (UNIX AND NOT APPLE)
+        # CPack installs QADS to lib/ next to the bin/ binary; point there so the
+        # plain .tar.gz runs without LD_LIBRARY_PATH ("cannot open shared object
+        # file"). lib64 is covered too for distros/GNUInstallDirs that use it.
         set_target_properties(clearCore-gui PROPERTIES
                 INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN/../lib64"
+        )
+    elseif (APPLE)
+        # macdeployqt bundles Qt and QADS into clearCore-gui.app/Contents/
+        # Frameworks; @executable_path/../Frameworks is where the installed
+        # binary resolves them at runtime (without it the app aborts with
+        # "Library not loaded: @rpath/QtOpenGLWidgets.framework ... no LC_RPATH's
+        # found").
+        #
+        # The trailing entry is what lets the bundling succeed in the first
+        # place: clearCore-gui links QADS via @rpath/libqtadvanceddocking-qt6.4
+        # .dylib, and macdeployqt resolves that dependency through the binary's
+        # LC_RPATHs. Exposing QADS's build-tree directory gives macdeployqt a
+        # path to the real dylib at deploy time — otherwise it errors ("Cannot
+        # resolve rpath ...") and skips bundling QtOpenGLWidgets. That entry only
+        # has to exist during `cmake --install`; it is a harmless dead path in
+        # the shipped bundle. (QADS stays shared for LGPL compliance — see above
+        # — so a static build is not an option here.)
+        set_target_properties(clearCore-gui PROPERTIES
+                BUILD_RPATH   "@executable_path/../Frameworks;@loader_path/../Frameworks"
+                INSTALL_RPATH "@executable_path/../Frameworks;@loader_path/../Frameworks;$<TARGET_FILE_DIR:qtadvanceddocking-qt6>"
         )
     endif ()
 
@@ -807,12 +827,17 @@ set(CPACK_DMG_VOLUME_NAME "clearCore ${PROJECT_VERSION}")
 # Source packages (`cpack --config CPackSourceConfig.cmake`) exclude build
 # output, VCS, and IDE metadata.
 set(CPACK_SOURCE_GENERATOR "TGZ")
+# Regex escapes need four backslashes here: CMake collapses "\\\\" to "\\" in
+# this string, and CPack writes that value verbatim into CPackConfig.cmake, so
+# the generated file carries a valid "\\." escape. Only "\\." (two backslashes)
+# in source would land a lone "\." in the generated config, which newer CMake
+# flags as an invalid escape sequence when cpack re-parses it.
 set(CPACK_SOURCE_IGNORE_FILES
-        "/\\.git/"
+        "/\\\\.git/"
         "/build/"
         "/cmake-build-.*/"
-        "/\\.idea/"
-        "\\.user$"
+        "/\\\\.idea/"
+        "\\\\.user$"
 )
 
 # Debian-specific fields (used only with -G DEB). SHLIBDEPS auto-detects the
