@@ -87,6 +87,55 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+      # Launch both binaries from the *extracted package* — not the build tree —
+      # so runtime breakage that only appears in the shipped layout fails the
+      # release instead of reaching users. Runs after the artifact upload (so a
+      # broken build is still downloadable for debugging) but before the release
+      # attach, so broken binaries are never published. Regression guard for two
+      # v0.2.0 bugs: clearCore-gui shipped with no RUNPATH to bundled
+      # libqtadvanceddocking (unresolved only from the installed layout), and an
+      # -O3-only out-of-bounds write that segfaulted the TUI on launch.
+      - name: Smoke-test packaged binaries
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          tar -xzf "${{ github.workspace }}"/dist/*.tar.gz -C "$workdir"
+          root="$(cd "$(dirname "$(find "$workdir" -type f -name number_system_converter)")/.." && pwd)"
+          echo "Package root: $root"; find "$root" -maxdepth 2 -type f | sort
+
+          fail=0
+
+          # 1) Every dynamic dependency must resolve from the packaged layout —
+          #    catches a missing or wrong RPATH to a bundled shared library.
+          for bin in "$root"/bin/*; do
+            echo "── ldd $(basename "$bin") ──"
+            if ldd "$bin" 2>&1 | tee /tmp/ldd.txt | grep -i 'not found'; then
+              echo "::error::$(basename "$bin") has unresolved shared libraries"
+              fail=1
+            fi
+          done
+
+          # 2) Each binary must survive launch (the -O3 TUI bug crashed during
+          #    startup, before any input). Run headless with a timeout: a crash
+          #    exits 128+signal; a timeout (124) or clean exit is healthy. Qt uses
+          #    the offscreen platform so the GUI needs no display.
+          smoke() {
+            local bin="$1"; shift
+            local rc=0
+            QT_QPA_PLATFORM=offscreen timeout -s TERM 15s "$bin" "$@" \
+              </dev/null >/tmp/run.log 2>&1 || rc=$?
+            if [ "$rc" -ge 128 ] && [ "$rc" -ne 124 ]; then
+              echo "::error::$(basename "$bin") crashed on launch (signal $((rc - 128)))"
+              cat /tmp/run.log || true
+              return 1
+            fi
+            echo "✓ $(basename "$bin") launched without crashing (exit $rc)"
+          }
+          smoke "$root/bin/number_system_converter" || fail=1
+          smoke "$root/bin/clearCore-gui"           || fail=1
+
+          exit "$fail"
+
       - name: Attach to the GitHub release
         if: github.event_name == 'release'
         env:

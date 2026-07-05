@@ -529,10 +529,19 @@ static void runSplash() {
     std::vector<Kind>        kind(static_cast<size_t>(kRows) * kCols, Kind::Empty);
 
     auto idx = [&](int x, int y) { return y * kCols + x; };
+    // The trace generators below intentionally draw past the grid (a via or bend
+    // can land a row or two outside kRows/kCols) and rely on put() to clip those
+    // writes. The coordinate guard alone is enough at -O0/-O2, but in the -O3
+    // Release build an out-of-grid coordinate slips past it and reaches the
+    // vector write, corrupting the heap (segfault on launch in the packaged
+    // binary; a Debug build is unaffected). Bounding the linear index against the
+    // actual buffer size closes the hole and keeps the clip effective at -O3.
     auto put = [&](int x, int y, const std::string& ch, Kind k) {
         if (x < 0 || x >= kCols || y < 0 || y >= kRows) return;
-        glyph[idx(x, y)] = ch;
-        kind[idx(x, y)]  = k;
+        const size_t i = static_cast<size_t>(idx(x, y));
+        if (i >= glyph.size()) return;
+        glyph[i] = ch;
+        kind[i]  = k;
     };
     auto putStr = [&](int x0, int y, const std::string& s, Kind k) {
         for (size_t i = 0; i < s.size(); ++i) {
