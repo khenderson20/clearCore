@@ -132,7 +132,8 @@ void MainWindow::setupMenuBar() {
                                 "Datapath panel (click or Tab to focus):\n"
                                 "Left/Right  – Select a pipeline stage\n"
                                 "Enter       – Show stage detail\n"
-                                "Space       – Toggle breakpoint on selected stage");
+                                "Space       – Toggle breakpoint on selected stage\n"
+                                "Ctrl+Wheel  – Zoom schematic (right-click to fit/export)");
         QMessageBox::information(this, tr("Keyboard Shortcuts"), text);
     });
 }
@@ -601,6 +602,7 @@ void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     for (int i = 0; i < 32; ++i)
         reg_vals[i] = controller_->registerValue(static_cast<uint8_t>(i));
     register_widget_->updateCycle(state, reg_vals);
+    datapath_widget_->setRegisterValues(reg_vals);  // live operand tooltips
 
     // Refresh memory
     memory_widget_->updateDisplay(controller_->memory());

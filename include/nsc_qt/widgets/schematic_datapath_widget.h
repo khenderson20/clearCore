@@ -25,8 +25,10 @@
 #include <utility>
 #include <vector>
 
+class QAbstractGraphicsShapeItem;
 class QGraphicsScene;
 class QGraphicsEllipseItem;
+class QGraphicsLineItem;
 class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
 
@@ -43,6 +45,9 @@ public:
     void setPipelineState(const mips::PipelineState& state);
     void setBreakpoints(const std::unordered_set<uint32_t>& bps);
     void setDarkMode(bool dark);
+    // Live register-file contents, used to enrich component tooltips with the
+    // actual operand values of the instructions in flight.
+    void setRegisterValues(const std::array<uint32_t, 32>& regs);
 
 signals:
     void breakpointToggleRequested(uint32_t pc);
@@ -69,6 +74,10 @@ private:
     int stageAtViewPos(const QPoint& pos) const;
     // Zoom-to-fit while the user hasn't zoomed manually.
     void fitSchematic();
+    // Refresh the live parts of the educational component tooltips.
+    void updateTooltips();
+    // Render the scene to a 2x PNG chosen via a save dialog (lab reports).
+    void exportImage();
 
     QGraphicsScene* scene_ = nullptr;
 
@@ -87,8 +96,22 @@ private:
     // Per-stage breakpoint bullseye (outer ring, punched-out centre).
     std::array<std::pair<QGraphicsEllipseItem*, QGraphicsEllipseItem*>, 5> bp_markers_{};
 
+    // Components with live tooltips / control-signal accents.
+    QAbstractGraphicsShapeItem* pc_box_      = nullptr;
+    QAbstractGraphicsShapeItem* imem_box_    = nullptr;
+    QAbstractGraphicsShapeItem* control_box_ = nullptr;
+    QAbstractGraphicsShapeItem* regs_box_    = nullptr;
+    QAbstractGraphicsShapeItem* alu_item_    = nullptr;
+    QAbstractGraphicsShapeItem* dmem_box_    = nullptr;
+
+    QGraphicsSimpleTextItem*                cycle_text_ = nullptr;  // in-scene cycle counter
+    std::array<QGraphicsSimpleTextItem*, 5> stage_pc_labels_{};     // PCs under the mnemonics
+    std::vector<QGraphicsLineItem*>         legend_swatches_;       // wire-colour legend
+    std::vector<QGraphicsSimpleTextItem*>   legend_texts_;
+
     mips::PipelineState          state_{};
     std::unordered_set<uint32_t> breakpoints_{};
+    std::array<uint32_t, 32>     reg_values_{};
     bool                         dark_mode_      = false;
     bool                         user_zoomed_    = false;
     int                          selected_stage_ = 0;

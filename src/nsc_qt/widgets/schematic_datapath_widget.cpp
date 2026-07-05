@@ -1,25 +1,33 @@
 #include "nsc_qt/widgets/schematic_datapath_widget.h"
+#include "mips/processor.h"
 #include "nsc_qt/instr_format.h"
 #include "nsc_qt/ui_scale.h"
 
 #include <QContextMenuEvent>
+#include <QFileDialog>
 #include <QFocusEvent>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsLineItem>
 #include <QGraphicsPathItem>
 #include <QGraphicsPolygonItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
+#include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSimpleTextItem>
+#include <QImage>
 #include <QKeyEvent>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
 #include <QPolygonF>
+#include <QStringList>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -32,8 +40,8 @@ namespace {
 // All geometry is authored in this fixed coordinate space; QGraphicsView
 // scales it to the widget. Chosen wide enough that the schematic reads at a
 // glance, like Ripes' processor tab.
-constexpr qreal kSceneW = 1400.0;
-constexpr qreal kSceneH = 540.0;
+constexpr qreal kSceneW = 1290.0;
+constexpr qreal kSceneH = 560.0;
 
 // Stage column x-extents (tint bands + hit testing). Bars live between them.
 struct ColumnSpan {
@@ -44,7 +52,7 @@ constexpr ColumnSpan kColumns[5] = {
     {286, 555},    // ID
     {571, 845},    // EX
     {861, 1130},   // MEM
-    {1146, 1392},  // WB
+    {1146, 1276},  // WB
 };
 
 constexpr qreal kColTop = 44.0, kColBot = 500.0;
@@ -162,59 +170,94 @@ private:
 
 namespace {
 
+// ── Hover-capable component shapes ───────────────────────────────────────────
+// Thickens the border while hovered, giving components a tactile feel and
+// signalling that the tooltip carries more detail (progressive disclosure).
+template <typename Base> class HoverShape : public Base {
+public:
+    using Base::Base;
+
+protected:
+    void hoverEnterEvent(QGraphicsSceneHoverEvent* ev) override {
+        saved_pen_ = this->pen();
+        QPen p     = saved_pen_;
+        p.setWidthF(saved_pen_.widthF() + 1.2);
+        this->setPen(p);
+        Base::hoverEnterEvent(ev);
+    }
+    void hoverLeaveEvent(QGraphicsSceneHoverEvent* ev) override {
+        this->setPen(saved_pen_);
+        Base::hoverLeaveEvent(ev);
+    }
+
+private:
+    QPen saved_pen_;
+};
+
+using HoverRect    = HoverShape<QGraphicsRectItem>;
+using HoverEllipse = HoverShape<QGraphicsEllipseItem>;
+using HoverPoly    = HoverShape<QGraphicsPolygonItem>;
+
 // ── Component construction helpers ──────────────────────────────────────────
-// Components are plain QGraphicsItems tagged with data(0)="comp" so the theme
-// pass can restyle fill/border/text without keeping a pointer to each one.
+// Components are tagged with data(0)="comp" so the theme pass can restyle
+// fill/border/text without keeping a pointer to each one.
+
+void attachLabel(QAbstractGraphicsShapeItem* item, const QRectF& r, const QString& label,
+                 const QFont& font, qreal cx_bias = 0.5) {
+    auto* txt = new QGraphicsSimpleTextItem(label, item);
+    txt->setData(0, QStringLiteral("comp-label"));
+    txt->setFont(font);
+    const QRectF tb = txt->boundingRect();
+    txt->setPos(r.x() + r.width() * cx_bias - tb.width() / 2, r.center().y() - tb.height() / 2);
+}
 
 QGraphicsRectItem* addBox(QGraphicsScene* s, const QRectF& r, const QString& label,
-                          int font_px = scale::kFontSizeDense) {
-    auto* box = s->addRect(r);
+                          const QString& tip, int font_px = scale::kFontSizeDense) {
+    auto* box = new HoverRect(r);
     box->setData(0, QStringLiteral("comp"));
-    auto* txt = new QGraphicsSimpleTextItem(label, box);
-    txt->setData(0, QStringLiteral("comp-label"));
-    txt->setFont(scale::monoFont(font_px));
-    const QRectF tb = txt->boundingRect();
-    txt->setPos(r.center().x() - tb.width() / 2, r.center().y() - tb.height() / 2);
+    box->setAcceptHoverEvents(true);
+    box->setToolTip(tip);
+    s->addItem(box);
+    attachLabel(box, r, label, scale::monoFont(font_px));
     return box;
 }
 
-QGraphicsEllipseItem* addEllipse(QGraphicsScene* s, const QRectF& r, const QString& label) {
-    auto* el = s->addEllipse(r);
+QGraphicsEllipseItem* addEllipse(QGraphicsScene* s, const QRectF& r, const QString& label,
+                                 const QString& tip) {
+    auto* el = new HoverEllipse(r);
     el->setData(0, QStringLiteral("comp"));
-    auto* txt = new QGraphicsSimpleTextItem(label, el);
-    txt->setData(0, QStringLiteral("comp-label"));
-    txt->setFont(scale::monoFont(scale::kFontSizeDense - 2));
-    const QRectF tb = txt->boundingRect();
-    txt->setPos(r.center().x() - tb.width() / 2, r.center().y() - tb.height() / 2);
+    el->setAcceptHoverEvents(true);
+    el->setToolTip(tip);
+    s->addItem(el);
+    attachLabel(el, r, label, scale::monoFont(scale::kFontSizeDense - 2));
     return el;
 }
 
 // Classic ALU / adder pentagon with the input notch on the left.
-QGraphicsPolygonItem* addAlu(QGraphicsScene* s, const QRectF& r, const QString& label) {
+QGraphicsPolygonItem* addAlu(QGraphicsScene* s, const QRectF& r, const QString& label,
+                             const QString& tip) {
     const qreal x = r.x(), y = r.y(), w = r.width(), h = r.height();
     QPolygonF   poly;
     poly << QPointF(x, y) << QPointF(x + w, y + h * 0.30) << QPointF(x + w, y + h * 0.70)
          << QPointF(x, y + h) << QPointF(x, y + h * 0.62) << QPointF(x + w * 0.18, y + h * 0.50)
          << QPointF(x, y + h * 0.38);
-    auto* item = s->addPolygon(poly);
+    auto* item = new HoverPoly(poly);
     item->setData(0, QStringLiteral("comp"));
-    auto* txt = new QGraphicsSimpleTextItem(label, item);
-    txt->setData(0, QStringLiteral("comp-label"));
-    txt->setFont(scale::monoFont(scale::kFontSizeDense, true));
-    const QRectF tb = txt->boundingRect();
-    txt->setPos(x + w * 0.52 - tb.width() / 2, y + h / 2 - tb.height() / 2);
+    item->setAcceptHoverEvents(true);
+    item->setToolTip(tip);
+    s->addItem(item);
+    attachLabel(item, r, label, scale::monoFont(scale::kFontSizeDense, true), 0.52);
     return item;
 }
 
 // Vertical capsule mux.
-QGraphicsRectItem* addMux(QGraphicsScene* s, const QRectF& r) {
-    auto* mux = s->addRect(r);  // rounded corners drawn via pen radius below
+QGraphicsRectItem* addMux(QGraphicsScene* s, const QRectF& r, const QString& tip) {
+    auto* mux = new HoverRect(r);
     mux->setData(0, QStringLiteral("comp"));
-    auto* txt = new QGraphicsSimpleTextItem(QStringLiteral("M"), mux);
-    txt->setData(0, QStringLiteral("comp-label"));
-    txt->setFont(scale::monoFont(scale::kFontSizeDense - 2, true));
-    const QRectF tb = txt->boundingRect();
-    txt->setPos(r.center().x() - tb.width() / 2, r.center().y() - tb.height() / 2);
+    mux->setAcceptHoverEvents(true);
+    mux->setToolTip(tip);
+    s->addItem(mux);
+    attachLabel(mux, r, QStringLiteral("M"), scale::monoFont(scale::kFontSizeDense - 2, true));
     return mux;
 }
 
@@ -269,7 +312,34 @@ void SchematicDatapathWidget::buildScene() {
 
         stage_labels_[static_cast<std::size_t>(i)] =
             scene_->addSimpleText(QString(), scale::monoFont(scale::kFontSizeDense));
-        stage_labels_[static_cast<std::size_t>(i)]->setPos((c.x0 + c.x1) / 2, 16);
+        stage_labels_[static_cast<std::size_t>(i)]->setPos((c.x0 + c.x1) / 2, 12);
+
+        // PC of the instruction in this stage, dimmer, under the mnemonic —
+        // lets users map schematic columns to Pipeline Trace rows at a glance.
+        stage_pc_labels_[static_cast<std::size_t>(i)] =
+            scene_->addSimpleText(QString(), scale::monoFont(scale::kFontSizeDense - 3));
+        stage_pc_labels_[static_cast<std::size_t>(i)]->setPos((c.x0 + c.x1) / 2, 30);
+    }
+
+    // In-scene cycle counter (top-right, mirrors the status bar for exports).
+    cycle_text_ = scene_->addSimpleText(QStringLiteral("Cycle 0"),
+                                        scale::monoFont(scale::kFontSizeBody, true));
+    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 16, 12);
+
+    // Wire-colour legend along the bottom: the special wires communicate by
+    // colour, so they need a permanent key (never rely on colour alone).
+    {
+        const char* names[4] = {QT_TR_NOOP("EX/MEM→EX forward"), QT_TR_NOOP("MEM/WB→EX forward"),
+                                QT_TR_NOOP("branch flush"), QT_TR_NOOP("write-back")};
+        qreal       x        = 20;
+        for (const char* name : names) {
+            auto* swatch = scene_->addLine(x, kSceneH - 18, x + 24, kSceneH - 18);
+            legend_swatches_.push_back(swatch);
+            auto* txt = scene_->addSimpleText(tr(name), scale::monoFont(scale::kFontSizeDense - 2));
+            txt->setPos(x + 30, kSceneH - 18 - txt->boundingRect().height() / 2);
+            legend_texts_.push_back(txt);
+            x += 30 + txt->boundingRect().width() + 34;
+        }
     }
 
     // ── Pipeline register bars ───────────────────────────────────────────────
@@ -277,6 +347,10 @@ void SchematicDatapathWidget::buildScene() {
     for (int i = 0; i < 4; ++i) {
         auto* bar = scene_->addRect(QRectF(bar_xs[i], 70, 16, 420));
         bar->setZValue(1);
+        bar->setToolTip(tr("Pipeline register %1 — latches this stage's results on "
+                           "every clock edge so the next stage can consume them.\n"
+                           "Red = being flushed, amber = frozen by a stall.")
+                            .arg(QString::fromLatin1(kPipeRegNames[i])));
         pipe_regs_[static_cast<std::size_t>(i)] = bar;
         auto* lbl = new QGraphicsSimpleTextItem(QString::fromLatin1(kPipeRegNames[i]), bar);
         lbl->setData(0, QStringLiteral("comp-label"));
@@ -286,10 +360,15 @@ void SchematicDatapathWidget::buildScene() {
     }
 
     // ── IF stage ─────────────────────────────────────────────────────────────
-    addMux(scene_, QRectF(16, 250, 20, 60));  // PC-source mux
-    addBox(scene_, QRectF(52, 255, 42, 50), QStringLiteral("PC"));
-    addAlu(scene_, QRectF(120, 100, 44, 56), QStringLiteral("+4"));  // PC+4 adder
-    addBox(scene_, QRectF(120, 235, 116, 105), QStringLiteral("Instr.\nmemory"));
+    addMux(scene_, QRectF(16, 250, 20, 60),
+           tr("PC-source mux — selects the next PC: PC+4 (sequential) or the "
+              "branch/jump target when a branch is taken."));
+    pc_box_ = addBox(scene_, QRectF(52, 255, 42, 50), QStringLiteral("PC"), QString());
+    addAlu(scene_, QRectF(120, 100, 44, 56), QStringLiteral("+4"),
+           tr("PC+4 adder — computes the next sequential instruction address "
+              "(each MIPS instruction is 4 bytes)."));
+    imem_box_ =
+        addBox(scene_, QRectF(120, 235, 116, 105), QStringLiteral("Instr.\nmemory"), QString());
 
     auto addWire = [&](QPainterPath p, std::vector<WireItem::Tip> tips,
                        std::vector<QPointF> junctions = {}) -> WireItem* {
@@ -310,9 +389,11 @@ void SchematicDatapathWidget::buildScene() {
     addWire(ortho({{236, 280}, {270, 280}}), {{{270, 280}, {1, 0}}});
 
     // ── ID stage ─────────────────────────────────────────────────────────────
-    addBox(scene_, QRectF(320, 74, 96, 40), QStringLiteral("Control"));
-    addBox(scene_, QRectF(320, 210, 130, 125), QStringLiteral("Registers"));
-    addEllipse(scene_, QRectF(340, 380, 84, 42), QStringLiteral("Sign-\nextend"));
+    control_box_ = addBox(scene_, QRectF(320, 74, 96, 40), QStringLiteral("Control"), QString());
+    regs_box_ = addBox(scene_, QRectF(320, 210, 130, 125), QStringLiteral("Registers"), QString());
+    addEllipse(scene_, QRectF(340, 380, 84, 42), QStringLiteral("Sign-\nextend"),
+               tr("Sign-extend — widens the 16-bit immediate field to 32 bits, "
+                  "replicating the sign bit."));
 
     // Instruction bus out of IF/ID: vertical spine at x=305 feeding Control,
     // both register read ports, and sign-extend.
@@ -341,10 +422,16 @@ void SchematicDatapathWidget::buildScene() {
     addWire(ortho({{416, 94}, {555, 94}}), {{{555, 94}, {1, 0}}})->setControlStyle(true);
 
     // ── EX stage ─────────────────────────────────────────────────────────────
-    addMux(scene_, QRectF(600, 210, 20, 56));  // forwarding mux A
-    addMux(scene_, QRectF(600, 280, 20, 56));  // forwarding mux B
-    addAlu(scene_, QRectF(680, 210, 84, 130), QStringLiteral("ALU"));
-    addAlu(scene_, QRectF(690, 92, 44, 56), QStringLiteral("+"));  // branch-target adder
+    const QString fwd_mux_tip =
+        tr("Forwarding mux — feeds the ALU with either the register value from "
+           "ID/EX, the EX/MEM bypass (orange), or the MEM/WB bypass (purple). "
+           "Forwarding resolves data hazards without stalling.");
+    addMux(scene_, QRectF(600, 210, 20, 56), fwd_mux_tip);
+    addMux(scene_, QRectF(600, 280, 20, 56), fwd_mux_tip);
+    alu_item_ = addAlu(scene_, QRectF(680, 210, 84, 130), QStringLiteral("ALU"), QString());
+    addAlu(scene_, QRectF(690, 92, 44, 56), QStringLiteral("+"),
+           tr("Branch-target adder — PC+4 plus the sign-extended immediate "
+              "shifted left 2 (word-aligned offset)."));
 
     // ID/EX → forwarding muxes → ALU
     addWire(ortho({{571, 240}, {585, 240}, {585, 222}, {600, 222}}), {{{600, 222}, {1, 0}}});
@@ -383,8 +470,12 @@ void SchematicDatapathWidget::buildScene() {
     }
 
     // ── MEM stage ────────────────────────────────────────────────────────────
-    addBox(scene_, QRectF(910, 230, 125, 125), QStringLiteral("Data\nmemory"));
-    addBox(scene_, QRectF(910, 96, 80, 44), QStringLiteral("Branch"));
+    dmem_box_ =
+        addBox(scene_, QRectF(910, 230, 125, 125), QStringLiteral("Data\nmemory"), QString());
+    addBox(scene_, QRectF(910, 96, 80, 44), QStringLiteral("Branch"),
+           tr("Branch decision — compares the operands and, on a taken branch, "
+              "redirects the PC to the branch target (red wire) and flushes the "
+              "younger instructions behind it."));
 
     addWire(ortho({{861, 275}, {910, 275}}), {{{910, 275}, {1, 0}}}, {{885, 275}});
     addWire(ortho({{861, 370}, {895, 370}, {895, 320}, {910, 320}}), {{{910, 320}, {1, 0}}});
@@ -399,7 +490,9 @@ void SchematicDatapathWidget::buildScene() {
                 {{{16, 298}, {1, 0}}});
 
     // ── WB stage ─────────────────────────────────────────────────────────────
-    addMux(scene_, QRectF(1180, 250, 22, 70));  // MemToReg mux
+    addMux(scene_, QRectF(1180, 250, 22, 70),
+           tr("MemToReg mux — selects what is written back to the register "
+              "file: the ALU result or the value loaded from data memory."));
     addWire(ortho({{1146, 275}, {1165, 275}, {1165, 272}, {1180, 272}}), {{{1180, 272}, {1, 0}}});
     addWire(ortho({{1146, 415}, {1172, 415}, {1172, 298}, {1180, 298}}), {{{1180, 298}, {1, 0}}});
     // Write-back loop to the register file write port
@@ -458,6 +551,14 @@ void SchematicDatapathWidget::applyTheme() {
 
     focus_ring_->setPen(QPen(dark_mode_ ? QColor("#4FC3F7") : QColor("#0078D4"), 2, Qt::DashLine));
 
+    // Legend swatches take the special-wire colours; text follows the theme.
+    const QColor legend_colors[4] = {t.fwd_ex, t.fwd_mem, t.flush, t.wb};
+    for (std::size_t i = 0; i < legend_swatches_.size() && i < 4; ++i) {
+        legend_swatches_[i]->setPen(QPen(legend_colors[i], 3));
+        legend_texts_[i]->setBrush(t.wire);
+    }
+    cycle_text_->setBrush(t.label);
+
     applyState();  // re-derives state-dependent tints for the new theme
 }
 
@@ -471,7 +572,8 @@ void SchematicDatapathWidget::applyState() {
         band.setAlpha(snap.valid ? (dark_mode_ ? 70 : 120) : (dark_mode_ ? 25 : 45));
         stage_tints_[static_cast<std::size_t>(i)]->setBrush(band);
 
-        // Mnemonic label above the column (Ripes-style).
+        // Mnemonic label above the column (Ripes-style). Raw word 0 encodes
+        // sll $zero,$zero,0 — the canonical MIPS nop — so print it as "nop".
         auto*   lbl = stage_labels_[static_cast<std::size_t>(i)];
         QString text;
         QColor  color = t.text;
@@ -482,7 +584,8 @@ void SchematicDatapathWidget::applyState() {
             text  = QStringLiteral("nop (stall)");
             color = t.stall;
         } else if (snap.valid) {
-            text = QString::fromStdString(format_instr(snap.raw));
+            text = snap.raw == 0 ? QStringLiteral("nop")
+                                 : QString::fromStdString(format_instr(snap.raw));
         } else {
             text  = QStringLiteral("—");
             color = t.wire_dim;
@@ -490,13 +593,23 @@ void SchematicDatapathWidget::applyState() {
         lbl->setText(text);
         lbl->setBrush(color);
         const auto& c = kColumns[i];
-        lbl->setPos((c.x0 + c.x1) / 2 - lbl->boundingRect().width() / 2, 16);
+        lbl->setPos((c.x0 + c.x1) / 2 - lbl->boundingRect().width() / 2, 12);
+
+        // PC chip under the mnemonic, matching the Pipeline Trace address column.
+        auto* pc_lbl = stage_pc_labels_[static_cast<std::size_t>(i)];
+        pc_lbl->setText(snap.valid ? QStringLiteral("0x%1").arg(snap.pc, 8, 16, QChar('0'))
+                                   : QString());
+        pc_lbl->setBrush(t.wire);
+        pc_lbl->setPos((c.x0 + c.x1) / 2 - pc_lbl->boundingRect().width() / 2, 30);
 
         // Breakpoint bullseye visibility.
         const bool bp = snap.valid && breakpoints_.count(snap.pc) > 0;
         bp_markers_[static_cast<std::size_t>(i)].first->setVisible(bp);
         bp_markers_[static_cast<std::size_t>(i)].second->setVisible(bp);
     }
+
+    cycle_text_->setText(tr("Cycle %1").arg(static_cast<qulonglong>(state_.cycle)));
+    cycle_text_->setPos(kSceneW - cycle_text_->boundingRect().width() - 16, 12);
 
     // Pipeline-register bars: red = flushing, amber = stalled, else neutral.
     for (int i = 0; i < 4; ++i) {
@@ -515,7 +628,107 @@ void SchematicDatapathWidget::applyState() {
     fwd_memwb_wire_->setActive(state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b);
     fwd_memwb_stub_->setActive(state_.fwd_mem_to_ex_b);
     branch_wire_->setActive(state_.branch_flush);
-    writeback_wire_->setActive(state_.stages[4].valid);
+
+    // Control-signal accents: light the component that is actually working
+    // this cycle, derived from the per-stage instruction's control word.
+    auto control_for = [](const mips::StageSnapshot& snap) -> mips::Control {
+        if (!snap.valid || snap.raw == 0) return {};
+        const auto d = mips::Decoder::decode(snap.raw);
+        return d ? mips::derive_control(*d) : mips::Control{};
+    };
+    const mips::Control mem_ctl = control_for(state_.stages[3]);
+    const mips::Control wb_ctl  = control_for(state_.stages[4]);
+
+    const QPen base_pen(t.comp_border, 1.4);
+    dmem_box_->setPen((mem_ctl.mem_read || mem_ctl.mem_write) ? QPen(t.label, 2.4) : base_pen);
+    regs_box_->setPen(wb_ctl.reg_write ? QPen(t.wb, 2.4) : base_pen);
+    writeback_wire_->setActive(wb_ctl.reg_write);
+
+    updateTooltips();
+}
+
+void SchematicDatapathWidget::updateTooltips() {
+    // Each tooltip = what the unit does (static teaching text) + what it is
+    // doing right now (live line derived from the stage snapshots).
+    const auto& s_if  = state_.stages[0];
+    const auto& s_id  = state_.stages[1];
+    const auto& s_ex  = state_.stages[2];
+    const auto& s_mem = state_.stages[3];
+
+    auto instr_line = [](const mips::StageSnapshot& s) {
+        if (!s.valid) return QString("—");
+        if (s.raw == 0) return QStringLiteral("nop");
+        return QString::fromStdString(format_instr(s.raw));
+    };
+
+    pc_box_->setToolTip(tr("Program Counter — holds the address of the instruction "
+                           "being fetched.\nPC = 0x%1")
+                            .arg(s_if.pc, 8, 16, QChar('0')));
+
+    imem_box_->setToolTip(tr("Instruction memory — read-only program storage; outputs "
+                             "the 32-bit word addressed by PC.\nFetching: %1")
+                              .arg(instr_line(s_if)));
+
+    // Control word of the instruction currently being decoded.
+    QString asserted = tr("(none)");
+    if (s_id.valid && s_id.raw != 0) {
+        if (const auto d = mips::Decoder::decode(s_id.raw)) {
+            const mips::Control c = mips::derive_control(*d);
+            QStringList         sig;
+            if (c.reg_write) sig << QStringLiteral("RegWrite");
+            if (c.mem_read) sig << QStringLiteral("MemRead");
+            if (c.mem_write) sig << QStringLiteral("MemWrite");
+            if (c.mem_to_reg) sig << QStringLiteral("MemToReg");
+            if (c.alu_src) sig << QStringLiteral("ALUSrc");
+            if (c.reg_dst) sig << QStringLiteral("RegDst");
+            if (c.branch) sig << QStringLiteral("Branch");
+            if (c.jump) sig << QStringLiteral("Jump");
+            if (!sig.isEmpty()) asserted = sig.join(QStringLiteral(", "));
+        }
+    }
+    control_box_->setToolTip(tr("Control unit — decodes the ID-stage instruction into the "
+                                "control signals that steer the datapath.\nID: %1\nAsserted: %2")
+                                 .arg(instr_line(s_id), asserted));
+
+    // Register file: show the ID instruction's source operands with live values.
+    QString read_line = tr("(idle)");
+    if (s_id.valid && s_id.raw != 0) {
+        if (const auto d = mips::Decoder::decode(s_id.raw)) {
+            uint8_t rs = 0, rt = 0;
+            if (d->format == mips::InstrFormat::R) {
+                rs = d->r().rs;
+                rt = d->r().rt;
+            } else if (d->format == mips::InstrFormat::I) {
+                rs = d->i().rs;
+                rt = d->i().rt;
+            }
+            read_line = QStringLiteral("$%1 = 0x%2   $%3 = 0x%4")
+                            .arg(QString::fromStdString(std::string(mips::register_abi_name(rs))))
+                            .arg(reg_values_[rs], 8, 16, QChar('0'))
+                            .arg(QString::fromStdString(std::string(mips::register_abi_name(rt))))
+                            .arg(reg_values_[rt], 8, 16, QChar('0'));
+        }
+    }
+    regs_box_->setToolTip(tr("Register file — 32 × 32-bit registers with two read ports "
+                             "(ID) and one write port (WB).\nID reads: %1")
+                              .arg(read_line));
+
+    alu_item_->setToolTip(tr("ALU — performs the arithmetic/logic operation for the "
+                             "EX-stage instruction. Its inputs come through the forwarding "
+                             "muxes on the left.\nEX: %1")
+                              .arg(instr_line(s_ex)));
+
+    const mips::Control mem_ctl = [&] {
+        if (s_mem.valid && s_mem.raw != 0)
+            if (const auto d = mips::Decoder::decode(s_mem.raw)) return mips::derive_control(*d);
+        return mips::Control{};
+    }();
+    const QString mem_act = mem_ctl.mem_read    ? tr("reading (load)")
+                            : mem_ctl.mem_write ? tr("writing (store)")
+                                                : tr("idle");
+    dmem_box_->setToolTip(tr("Data memory — the load/store port used in MEM. Only lw/sw "
+                             "class instructions touch it.\nMEM: %1 — %2")
+                              .arg(instr_line(s_mem), mem_act));
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -533,6 +746,11 @@ void SchematicDatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>&
 void SchematicDatapathWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
     applyTheme();
+}
+
+void SchematicDatapathWidget::setRegisterValues(const std::array<uint32_t, 32>& regs) {
+    reg_values_ = regs;
+    updateTooltips();
 }
 
 // ── Interaction ─────────────────────────────────────────────────────────────
@@ -581,21 +799,57 @@ void SchematicDatapathWidget::mouseDoubleClickEvent(QMouseEvent* ev) {
 }
 
 void SchematicDatapathWidget::contextMenuEvent(QContextMenuEvent* ev) {
-    const int idx = stageAtViewPos(ev->pos());
-    if (idx < 0) return;
-    const auto& snap = state_.stages[static_cast<std::size_t>(idx)];
-    if (!snap.valid) return;
+    QMenu menu(this);
 
-    QMenu      menu(this);
-    const bool has_bp = breakpoints_.count(snap.pc) > 0;
-    QAction*   act    = menu.addAction(has_bp ? tr("Clear Breakpoint") : tr("Set Breakpoint"));
-    QAction*   fit    = menu.addAction(tr("Zoom to Fit"));
-    QAction*   chosen = menu.exec(ev->globalPos());
-    if (chosen == act) emit breakpointToggleRequested(snap.pc);
-    if (chosen == fit) {
+    // Stage-specific actions only when the cursor is over a stage with a
+    // real instruction; view actions are available everywhere.
+    const int idx     = stageAtViewPos(ev->pos());
+    QAction*  bp_act  = nullptr;
+    QAction*  det_act = nullptr;
+    if (idx >= 0 && state_.stages[static_cast<std::size_t>(idx)].valid) {
+        const auto& snap   = state_.stages[static_cast<std::size_t>(idx)];
+        const bool  has_bp = breakpoints_.count(snap.pc) > 0;
+        bp_act             = menu.addAction(has_bp ? tr("Clear Breakpoint") : tr("Set Breakpoint"));
+        det_act            = menu.addAction(tr("Stage Detail…"));
+        menu.addSeparator();
+    }
+    QAction* fit_act    = menu.addAction(tr("Zoom to Fit"));
+    QAction* export_act = menu.addAction(tr("Export as Image…"));
+
+    QAction* chosen = menu.exec(ev->globalPos());
+    if (chosen == nullptr) return;
+    if (chosen == fit_act) {
         user_zoomed_ = false;
         fitSchematic();
+    } else if (chosen == export_act) {
+        exportImage();
+    } else if (chosen == bp_act) {
+        emit breakpointToggleRequested(state_.stages[static_cast<std::size_t>(idx)].pc);
+    } else if (chosen == det_act) {
+        const auto& snap = state_.stages[static_cast<std::size_t>(idx)];
+        emit        stageDetailRequested(idx, snap.pc, snap.raw);
     }
+}
+
+void SchematicDatapathWidget::exportImage() {
+    const QString path = QFileDialog::getSaveFileName(
+        this, tr("Export Schematic"),
+        QStringLiteral("datapath-cycle-%1.png").arg(static_cast<qulonglong>(state_.cycle)),
+        tr("PNG Images (*.png)"));
+    if (path.isEmpty()) return;
+
+    // 2x supersampling so wire and label detail survives in lab reports.
+    QImage img(static_cast<int>(kSceneW) * 2, static_cast<int>(kSceneH) * 2,
+               QImage::Format_ARGB32_Premultiplied);
+    img.fill(theme(dark_mode_).bg);
+    QPainter p(&img);
+    p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+    scene_->render(&p);
+    p.end();
+
+    if (!img.save(path))
+        QMessageBox::warning(this, tr("Export Failed"),
+                             tr("Could not write the image to:\n%1").arg(path));
 }
 
 void SchematicDatapathWidget::keyPressEvent(QKeyEvent* ev) {
