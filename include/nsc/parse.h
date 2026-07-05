@@ -1,5 +1,4 @@
-#ifndef NUMBER_SYSTEM_CONVERTER_PARSE_H
-#define NUMBER_SYSTEM_CONVERTER_PARSE_H
+#pragma once
 
 #include <cstdint>
 #include <optional>
@@ -15,5 +14,3 @@ namespace nsc {
 [[nodiscard]] std::optional<std::uint64_t> parseBase(const std::string& str, int base);
 
 }  // namespace nsc
-
-#endif  // NUMBER_SYSTEM_CONVERTER_PARSE_H

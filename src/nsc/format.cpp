@@ -47,7 +47,7 @@ std::string groupBits(std::uint64_t value) {
         }
         out.push_back(bits[i]);
     }
-    return {out};
+    return out;
 }
 
 }  // namespace nsc
