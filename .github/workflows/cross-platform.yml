@@ -1,0 +1,164 @@
+name: Cross-platform build
+
+# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon), the
+# groundwork for shipping Windows/macOS release assets. Nyxstone (LLVM) and the
+# golden tests (JRE) are disabled — they are Linux-oriented dev/test tooling, not
+# user-facing, and painful to provision off-Linux.
+#
+# Triggers: pushes to the packaging branch (for iteration) and manual dispatch.
+# Packaging + release-asset upload are layered on in later steps.
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write  # attach installers to the release
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          # One universal (arm64 + x86_64) macOS build on Apple Silicon. Qt's
+          # official macOS binaries are universal (since 6.2), so a single Qt
+          # install covers both slices — no scarce Intel (macos-13) runner needed.
+          - { name: macos-universal, os: macos-14 }
+    env:
+      # macOS minimum: std::format's to_chars backend is only available in
+      # libc++ from macOS 13.3 onward. CMake reads this to seed the deployment
+      # target; it is ignored on Windows.
+      MACOSX_DEPLOYMENT_TARGET: '13.3'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history + tags: the Qt Advanced Docking System's CMake runs
+          # `git describe --tags` in this repo to stamp its Windows version
+          # resource. A shallow, tagless checkout yields an empty version and a
+          # malformed FILEVERSION that the resource compiler rejects (RC2127).
+          fetch-depth: 0
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: '6.8.*'
+          cache: true
+
+      # Puts cl.exe / the MSVC toolchain on PATH so the Ninja-based preset works
+      # on Windows without relying on the Visual Studio generator's discovery.
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Ensure NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # choco can return exit 0 even when the community feed is down (503),
+          # leaving NSIS uninstalled and cpack unable to find makensis. Retry
+          # until makensis actually exists on disk.
+          makensis="/c/Program Files (x86)/NSIS/makensis.exe"
+          for attempt in 1 2 3 4 5; do
+            [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
+            echo "Installing NSIS (attempt $attempt)…"
+            choco install nsis --no-progress -y || true
+            [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
+            sleep 20
+          done
+          echo "::error::NSIS could not be installed"; exit 1
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
+
+      - name: Configure (macOS, universal)
+        if: runner.os == 'macOS'
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Verify universal binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          bin=$(find build/release -path '*clearCore-gui.app/Contents/MacOS/clearCore-gui' | head -1)
+          echo "binary: $bin"
+          file "$bin"
+          archs=$(lipo -archs "$bin")
+          echo "architectures: $archs"
+          echo "$archs" | grep -qw arm64  || { echo "::error::missing arm64 slice";  exit 1; }
+          echo "$archs" | grep -qw x86_64 || { echo "::error::missing x86_64 slice"; exit 1; }
+          echo "✓ universal (arm64 + x86_64)"
+
+      - name: Test
+        run: ctest --test-dir build/release --output-on-failure
+
+      # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
+      # Versioned, arch-labelled filenames; version comes from the release tag
+      # (published release) or a dev placeholder (push / manual dispatch).
+      - name: Package installer
+        id: package
+        shell: bash
+        working-directory: build/release
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            version="${{ github.event.release.tag_name }}"; version="${version#v}"
+          else
+            version="0.0.0-dev"
+          fi
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            generator="NSIS";      name="clearCore-${version}-windows-x64"
+          else
+            generator="DragNDrop"; name="clearCore-${version}-macOS-universal"
+          fi
+          cpack -G "$generator" \
+                -D CPACK_PACKAGE_VERSION="$version" \
+                -D CPACK_PACKAGE_FILE_NAME="$name" -V
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          ls -la "$name".* || true
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clearCore-${{ matrix.name }}
+          path: |
+            build/release/*.exe
+            build/release/*.dmg
+          if-no-files-found: error
+
+      - name: Attach installer to the release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "build/release/${{ steps.package.outputs.name }}".* \
+            --clobber --repo "${{ github.repository }}"
