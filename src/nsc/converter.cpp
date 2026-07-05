@@ -1,5 +1,7 @@
 #include "nsc/converter.h"
 
+#include <string>
+
 #include "nsc/format.h"
 #include "nsc/parse.h"
 
@@ -21,12 +23,13 @@ std::string Converter::as(const Base base) const {
         return toDecimal(value_);
     case Base::Hex:
         return toHex(value_);
+    default:
+        return {};
     }
-    return {""};
 }
 
 std::string Converter::bits() const {
-    return {groupBits(value_)};
+    return groupBits(value_);
 }
 
 }  // namespace nsc
