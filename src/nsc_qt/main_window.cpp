@@ -6,10 +6,10 @@
 #include "nsc_qt/examples.h"
 #include "nsc_qt/preferences_dialog.h"
 #include "nsc_qt/widgets/code_editor.h"
-#include "nsc_qt/widgets/datapath_widget.h"
 #include "nsc_qt/widgets/memory_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
 #include "nsc_qt/widgets/register_widget.h"
+#include "nsc_qt/widgets/schematic_datapath_widget.h"
 
 #include "mips/decoder.h"
 #include "mips/pipelined_cpu.h"
@@ -159,7 +159,7 @@ void MainWindow::setupCentralWidget() {
     ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasUndockButton, false);
     dock_manager_ = new ads::CDockManager(this);
 
-    datapath_widget_ = new DatapathWidget(this);
+    datapath_widget_ = new SchematicDatapathWidget(this);
     register_widget_ = new RegisterWidget(this);
     memory_widget_   = new MemoryWidget(this);
     trace_widget_    = new PipelineTraceWidget(this);
@@ -415,9 +415,9 @@ void MainWindow::setupConnections() {
         setRunState(false);
     });
 
-    connect(datapath_widget_, &DatapathWidget::breakpointToggleRequested, this,
+    connect(datapath_widget_, &SchematicDatapathWidget::breakpointToggleRequested, this,
             &MainWindow::onBreakpointToggle);
-    connect(datapath_widget_, &DatapathWidget::stageDetailRequested, this,
+    connect(datapath_widget_, &SchematicDatapathWidget::stageDetailRequested, this,
             &MainWindow::onStageDetailRequested);
 }
 
