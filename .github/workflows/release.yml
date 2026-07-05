@@ -119,11 +119,25 @@ jobs:
           #    startup, before any input). Run headless with a timeout: a crash
           #    exits 128+signal; a timeout (124) or clean exit is healthy. Qt uses
           #    the offscreen platform so the GUI needs no display.
+          #
+          #    clearCore-gui embeds a QOpenGLWidget; on a headless runner the
+          #    offscreen plugin has no GL context ("QOpenGLWidget: Failed to
+          #    create context") and segfaults — not a packaging fault. Force a
+          #    software GL/rasteriser stack for the GUI so it initialises without
+          #    a GPU. The TUI needs none of this, so scope it to the GUI.
           smoke() {
             local bin="$1"; shift
             local rc=0
-            QT_QPA_PLATFORM=offscreen timeout -s TERM 15s "$bin" "$@" \
-              </dev/null >/tmp/run.log 2>&1 || rc=$?
+            if [ "$(basename "$bin")" = "clearCore-gui" ]; then
+              QT_QPA_PLATFORM=offscreen \
+              QT_OPENGL=software \
+              QT_QUICK_BACKEND=software \
+              LIBGL_ALWAYS_SOFTWARE=1 \
+              timeout -s TERM 15s "$bin" "$@" </dev/null >/tmp/run.log 2>&1 || rc=$?
+            else
+              QT_QPA_PLATFORM=offscreen \
+              timeout -s TERM 15s "$bin" "$@" </dev/null >/tmp/run.log 2>&1 || rc=$?
+            fi
             if [ "$rc" -ge 128 ] && [ "$rc" -ne 124 ]; then
               echo "::error::$(basename "$bin") crashed on launch (signal $((rc - 128)))"
               cat /tmp/run.log || true

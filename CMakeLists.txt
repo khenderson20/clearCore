@@ -807,12 +807,17 @@ set(CPACK_DMG_VOLUME_NAME "clearCore ${PROJECT_VERSION}")
 # Source packages (`cpack --config CPackSourceConfig.cmake`) exclude build
 # output, VCS, and IDE metadata.
 set(CPACK_SOURCE_GENERATOR "TGZ")
+# Regex escapes need four backslashes here: CMake collapses "\\\\" to "\\" in
+# this string, and CPack writes that value verbatim into CPackConfig.cmake, so
+# the generated file carries a valid "\\." escape. Only "\\." (two backslashes)
+# in source would land a lone "\." in the generated config, which newer CMake
+# flags as an invalid escape sequence when cpack re-parses it.
 set(CPACK_SOURCE_IGNORE_FILES
-        "/\\.git/"
+        "/\\\\.git/"
         "/build/"
         "/cmake-build-.*/"
-        "/\\.idea/"
-        "\\.user$"
+        "/\\\\.idea/"
+        "\\\\.user$"
 )
 
 # Debian-specific fields (used only with -G DEB). SHLIBDEPS auto-detects the
