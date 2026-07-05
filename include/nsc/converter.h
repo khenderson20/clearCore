@@ -1,9 +1,4 @@
-//
-// Created by venus on 6/28/26.
-//
-
-#ifndef NUMBER_SYSTEM_CONVERTER_CONVERTER_H
-#define NUMBER_SYSTEM_CONVERTER_CONVERTER_H
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -42,4 +37,3 @@ private:
 };
 
 }  // namespace nsc
-#endif  // NUMBER_SYSTEM_CONVERTER_CONVERTER_H

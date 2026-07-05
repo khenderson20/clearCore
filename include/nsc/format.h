@@ -1,5 +1,4 @@
-#ifndef NUMBER_SYSTEM_CONVERTER_FORMAT_H
-#define NUMBER_SYSTEM_CONVERTER_FORMAT_H
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -20,5 +19,3 @@ namespace nsc {
 [[nodiscard]] std::string groupBits(std::uint64_t value);
 
 }  // namespace nsc
-
-#endif  // NUMBER_SYSTEM_CONVERTER_FORMAT_H
