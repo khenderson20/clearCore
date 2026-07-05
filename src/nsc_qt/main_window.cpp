@@ -359,39 +359,75 @@ void MainWindow::onExampleSelected(int idx) {
 }
 
 QWidget* MainWindow::createStatisticsTab() {
-    auto* w  = new QWidget;
+    auto* w = new QWidget;
+    w->setAutoFillBackground(true);
     auto* vl = new QVBoxLayout(w);
-    vl->setContentsMargins(16, 16, 16, 16);
+    vl->setContentsMargins(12, 12, 12, 12);
     vl->setSpacing(12);
 
-    auto mkLabel = [&](QFormLayout* fl, const QString& name, QLabel*& ptr) {
-        ptr = new QLabel("—", w);
-        ptr->setFont(scale::monoFont(scale::kFontSizeBody));
-        fl->addRow(name, ptr);
+    // ── KPI card row ──────────────────────────────────────────────────────────
+    // Three headline metrics in large-number "cards" for immediate readability.
+    // The CPI card background is color-coded (green/orange/red) in onStatisticsUpdated()
+    // and stored in stat_cpi_card_ for later updates. Values are mouse-selectable
+    // so students can copy numbers into lab reports without retyping.
+    auto mkCard = [&](const QString& label, QLabel*& val_ptr) -> QFrame* {
+        auto* card = new QFrame(w);
+        card->setFrameShape(QFrame::StyledPanel);
+        card->setObjectName("statCard");
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(12, 10, 12, 10);
+        cl->setSpacing(4);
+
+        val_ptr = new QLabel("—", card);
+        val_ptr->setAlignment(Qt::AlignCenter);
+        val_ptr->setFont(scale::monoFont(26, true));
+        val_ptr->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+        auto* name_lbl = new QLabel(label, card);
+        name_lbl->setAlignment(Qt::AlignCenter);
+        name_lbl->setObjectName("statCardLabel");
+        name_lbl->setFont(scale::monoFont(scale::kFontSizeDense));
+
+        cl->addWidget(val_ptr);
+        cl->addWidget(name_lbl);
+        return card;
     };
 
-    // ── Performance group ──────────────────────────────────────────────────────
-    auto* perf_box = new QGroupBox(tr("Performance"), w);
-    auto* perf_fl  = new QFormLayout(perf_box);
-    perf_fl->setContentsMargins(12, 8, 12, 8);
-    perf_fl->setSpacing(8);
-    perf_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(perf_fl, tr("Cycles executed:"), stat_cycles_lbl_);
-    mkLabel(perf_fl, tr("Instructions retired:"), stat_instrs_lbl_);
-    mkLabel(perf_fl, tr("CPI:"), stat_cpi_lbl_);
-    vl->addWidget(perf_box);
+    auto* kpi_row = new QHBoxLayout;
+    kpi_row->setSpacing(8);
+    kpi_row->addWidget(mkCard(tr("Cycles"), stat_cycles_lbl_), 1);
+    kpi_row->addWidget(mkCard(tr("Instructions"), stat_instrs_lbl_), 1);
+    auto* cpi_card = mkCard(tr("CPI"), stat_cpi_lbl_);
+    cpi_card->setToolTip(tr("Cycles Per Instruction — lower is better\n"
+                            "1.0 = ideal (no stalls)   >2.0 = heavy pipeline overhead"));
+    stat_cpi_card_ = cpi_card;
+    kpi_row->addWidget(cpi_card, 1);
+    vl->addLayout(kpi_row);
 
-    // ── Pipeline events group ──────────────────────────────────────────────────
+    // ── Pipeline events ────────────────────────────────────────────────────────
     auto* pipe_box = new QGroupBox(tr("Pipeline Events"), w);
     auto* pipe_fl  = new QFormLayout(pipe_box);
-    pipe_fl->setContentsMargins(12, 8, 12, 8);
+    pipe_fl->setContentsMargins(12, 8, 12, 12);
     pipe_fl->setSpacing(8);
     pipe_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(pipe_fl, tr("Data hazards:"), stat_data_haz_lbl_);
-    mkLabel(pipe_fl, tr("Control hazards:"), stat_ctrl_haz_lbl_);
-    mkLabel(pipe_fl, tr("Forwarding events:"), stat_fwd_lbl_);
-    mkLabel(pipe_fl, tr("Stalls:"), stat_stalls_lbl_);
-    mkLabel(pipe_fl, tr("Flushes:"), stat_flushes_lbl_);
+
+    auto mkRow = [&](const QString& name, QLabel*& ptr, const QString& tip) {
+        ptr = new QLabel("—", pipe_box);
+        ptr->setFont(scale::monoFont(scale::kFontSizeBody));
+        ptr->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        ptr->setToolTip(tip);
+        pipe_fl->addRow(name, ptr);
+    };
+    mkRow(tr("Data hazards:"), stat_data_haz_lbl_,
+          tr("RAW (Read-After-Write) hazards detected in the Decode stage"));
+    mkRow(tr("Control hazards:"), stat_ctrl_haz_lbl_,
+          tr("Hazards from branches and jumps that disrupted the pipeline"));
+    mkRow(tr("Forwarding events:"), stat_fwd_lbl_,
+          tr("Times the forwarding unit bypassed the register file to resolve a data hazard"));
+    mkRow(tr("Stalls:"), stat_stalls_lbl_,
+          tr("Bubble cycles inserted for hazards that could not be resolved by forwarding"));
+    mkRow(tr("Flushes:"), stat_flushes_lbl_,
+          tr("Pipeline flushes caused by branch mispredictions or control hazards"));
     vl->addWidget(pipe_box);
 
     vl->addStretch();
@@ -581,14 +617,35 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
 
     if (cpi > 0) {
         stat_cpi_lbl_->setText(QString::number(cpi, 'f', 2));
-        const QColor cpi_color = cpi >= 2.0   ? QColor("#F44336")
-                                 : cpi >= 1.5 ? QColor("#FF9800")
-                                              : QColor("#4CAF50");
+        const QColor text_color = cpi >= 2.0   ? QColor("#F44336")
+                                  : cpi >= 1.5 ? QColor("#FF9800")
+                                               : QColor("#4CAF50");
         stat_cpi_lbl_->setStyleSheet(
-            QString("color: %1; font-weight: bold;").arg(cpi_color.name()));
+            QString("color: %1; font-weight: bold;").arg(text_color.name()));
+        // Color the card background to give a glanceable health signal even
+        // when the user isn't reading the exact number.
+        if (stat_cpi_card_) {
+            const QColor bg  = dark_mode_ ? (cpi >= 2.0   ? QColor("#3D1515")
+                                             : cpi >= 1.5 ? QColor("#3D2D10")
+                                                          : QColor("#152D15"))
+                                          : (cpi >= 2.0   ? QColor("#FFEBEE")
+                                             : cpi >= 1.5 ? QColor("#FFF3E0")
+                                                          : QColor("#E8F5E9"));
+            const QColor bdr = dark_mode_ ? (cpi >= 2.0   ? QColor("#7C2020")
+                                             : cpi >= 1.5 ? QColor("#7C5810")
+                                                          : QColor("#1E7C1E"))
+                                          : (cpi >= 2.0   ? QColor("#EF9A9A")
+                                             : cpi >= 1.5 ? QColor("#FFCC80")
+                                                          : QColor("#A5D6A7"));
+            stat_cpi_card_->setStyleSheet(
+                QString(
+                    "QFrame#statCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
+                    .arg(bg.name(), bdr.name()));
+        }
     } else {
         stat_cpi_lbl_->setText("—");
         stat_cpi_lbl_->setStyleSheet("");
+        if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
     }
 
     stat_data_haz_lbl_->setText(QString::number(stats.data_hazards));
@@ -714,6 +771,14 @@ void MainWindow::applyColorScheme(bool dark) {
         pal.setColor(QPalette::Button, QColor(0x3C, 0x3C, 0x3C));
         pal.setColor(QPalette::ButtonText, Qt::white);
         pal.setColor(QPalette::BrightText, Qt::red);
+        // 3D/bevel roles — set explicitly so ADS's palette(light/dark/mid) selectors
+        // resolve to our dark-theme values rather than the system palette's defaults.
+        pal.setColor(QPalette::Light, QColor(0x3C, 0x3C, 0x3C));
+        pal.setColor(QPalette::Midlight, QColor(0x2D, 0x2D, 0x2D));
+        pal.setColor(QPalette::Dark, QColor(0x14, 0x14, 0x14));
+        pal.setColor(QPalette::Mid, QColor(0x22, 0x22, 0x22));
+        pal.setColor(QPalette::Shadow, Qt::black);
+        pal.setColor(QPalette::PlaceholderText, QColor(0x66, 0x66, 0x66));
         pal.setColor(QPalette::Highlight, QColor(0x26, 0x4F, 0x78));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     } else {
@@ -726,6 +791,15 @@ void MainWindow::applyColorScheme(bool dark) {
         pal.setColor(QPalette::Text, Qt::black);
         pal.setColor(QPalette::Button, QColor(0xEE, 0xEE, 0xEE));
         pal.setColor(QPalette::ButtonText, Qt::black);
+        // 3D/bevel roles — critical: ADS uses palette(light) as CDockWidget background.
+        // Setting Light=white here means that background resolves to white in light mode
+        // rather than inheriting whatever the system's dark theme has for QPalette::Light.
+        pal.setColor(QPalette::Light, Qt::white);
+        pal.setColor(QPalette::Midlight, QColor(0xF8, 0xF8, 0xF8));
+        pal.setColor(QPalette::Dark, QColor(0xBE, 0xBE, 0xBE));
+        pal.setColor(QPalette::Mid, QColor(0xD0, 0xD0, 0xD0));
+        pal.setColor(QPalette::Shadow, QColor(0x80, 0x80, 0x80));
+        pal.setColor(QPalette::PlaceholderText, QColor(0x99, 0x99, 0x99));
         pal.setColor(QPalette::Highlight, QColor(0x00, 0x78, 0xD4));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     }
@@ -860,12 +934,16 @@ QComboBox {
     color: #CCCCCC;
     border: 1px solid #555555;
     border-radius: 3px;
-    padding: 4px 8px;
+    padding: 4px 8px 4px 10px;
     min-width: 80px;
 }
 QComboBox:hover { border-color: #777777; }
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid #888; }
+QComboBox::drop-down {
+    border: none;
+    border-left: 1px solid #555555;
+    width: 22px;
+    background: transparent;
+}
 QComboBox QAbstractItemView {
     background: #252526;
     color: #CCCCCC;
@@ -878,6 +956,14 @@ QWidget#codeEditorBtnBar {
     background: #252526;
     border-top: 1px solid #3C3C3C;
 }
+
+QFrame#statCard {
+    background: #2D2D2D;
+    border: 1px solid #3C3C3C;
+    border-radius: 6px;
+}
+QFrame#statCard QLabel { background: transparent; }
+QLabel#statCardLabel { color: #888888; }
 )"
                              : R"(
 QMainWindow, QDialog { background: #F5F5F5; }
@@ -1007,12 +1093,16 @@ QComboBox {
     color: #333333;
     border: 1px solid #CCCCCC;
     border-radius: 3px;
-    padding: 4px 8px;
+    padding: 4px 8px 4px 10px;
     min-width: 80px;
 }
 QComboBox:hover { border-color: #AAAAAA; }
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid #666; }
+QComboBox::drop-down {
+    border: none;
+    border-left: 1px solid #CCCCCC;
+    width: 22px;
+    background: transparent;
+}
 QComboBox QAbstractItemView {
     background: white;
     color: #333333;
@@ -1025,6 +1115,14 @@ QWidget#codeEditorBtnBar {
     background: #F0F0F0;
     border-top: 1px solid #DDDDDD;
 }
+
+QFrame#statCard {
+    background: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+}
+QFrame#statCard QLabel { background: transparent; }
+QLabel#statCardLabel { color: #777777; }
 )";
     qApp->setStyleSheet(qss);
 
@@ -1053,6 +1151,8 @@ ads--CDockWidgetTab[activeTab="true"] {
 }
 ads--CDockWidgetTab QLabel           { color: #888888; }
 ads--CDockWidgetTab[activeTab="true"] QLabel { color: #FFFFFF; }
+ads--CDockWidget { background: #1E1E1E; border: none; }
+QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
 )"
                                               : R"(
 ads--CDockContainerWidget { background: #F5F5F5; }
@@ -1071,9 +1171,14 @@ ads--CDockWidgetTab[activeTab="true"] {
 }
 ads--CDockWidgetTab QLabel           { color: #555555; }
 ads--CDockWidgetTab[activeTab="true"] QLabel { color: #1A1A1A; }
+ads--CDockWidget { background: white; border: none; }
+QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
 )";
         dock_manager_->setStyleSheet(ads_base + ads_theme);
     }
+
+    // Reset the CPI card to the QSS default (color re-applied by onStatisticsUpdated).
+    if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
 
     datapath_widget_->setDarkMode(dark);
     register_widget_->setDarkMode(dark);
