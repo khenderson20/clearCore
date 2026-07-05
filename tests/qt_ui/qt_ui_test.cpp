@@ -2,6 +2,7 @@
 #include "nsc_qt/dock_panels.h"
 #include "nsc_qt/simulator_controller.h"
 #include "nsc_qt/widgets/memory_widget.h"
+#include "nsc_qt/widgets/pipeline_events_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
 #include "nsc_qt/widgets/register_widget.h"
 
@@ -203,6 +204,39 @@ static void test_trace_widget_clear() {
     CHECK(true);
 }
 
+// ── PipelineEventsWidget log behaviour ───────────────────────────────────────
+
+static void test_events_widget_log() {
+    using namespace nsc::qt;
+
+    PipelineEventsWidget ew;
+    CHECK(ew.eventCount() == 0);
+
+    ew.logEvent(PipelineEventsWidget::Kind::Info, 0, "program loaded");
+    CHECK(ew.eventCount() == 1);
+
+    // A forwarding event is derived from the pipeline state.
+    mips::PipelineState st{};
+    st.stages[2]      = {"EX", true, false, false, 0x08, 0x012A5020u};  // add $t2,$t1,$t2
+    st.fwd_ex_to_ex_a = true;
+    st.cycle          = 4;
+    ew.updateCycle(st);
+    CHECK(ew.eventCount() == 2);
+
+    // The same event on the very next cycle is suppressed (rising edge only)…
+    st.cycle = 5;
+    ew.updateCycle(st);
+    CHECK(ew.eventCount() == 2);
+
+    // …but logs again after a gap.
+    st.cycle = 9;
+    ew.updateCycle(st);
+    CHECK(ew.eventCount() == 3);
+
+    ew.clear();
+    CHECK(ew.eventCount() == 0);
+}
+
 // ── Dock panels ───────────────────────────────────────────────────────────────
 
 // Regression guard: every panel added via addDockPanel() must actually carry
@@ -244,6 +278,7 @@ int main(int argc, char* argv[]) {
     test_register_widget_clear();
     test_memory_widget_construct();
     test_trace_widget_clear();
+    test_events_widget_log();
     test_dock_panels_carry_content();
 
     std::printf("%d passed, %d failed\n", g_pass, g_fail);

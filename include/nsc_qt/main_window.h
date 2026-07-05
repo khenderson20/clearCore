@@ -25,6 +25,7 @@ class SchematicDatapathWidget;
 class RegisterWidget;
 class MemoryWidget;
 class PipelineTraceWidget;
+class PipelineEventsWidget;
 class CodeEditor;
 
 class MainWindow : public QMainWindow {
@@ -97,6 +98,7 @@ private:
     RegisterWidget*          register_widget_ = nullptr;
     MemoryWidget*            memory_widget_   = nullptr;
     PipelineTraceWidget*     trace_widget_    = nullptr;
+    PipelineEventsWidget*    events_widget_   = nullptr;
     CodeEditor*              code_editor_     = nullptr;
     QComboBox*               examples_combo_  = nullptr;
     QLabel*                  asm_status_lbl_  = nullptr;
