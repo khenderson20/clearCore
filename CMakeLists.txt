@@ -358,6 +358,7 @@ if (BUILD_QT6_UI)
             src/nsc_qt/examples.cpp
             src/nsc_qt/simulator_controller.cpp
             src/nsc_qt/main_window.cpp
+            src/nsc_qt/dock_panels.cpp
             src/nsc_qt/preferences_dialog.cpp
             src/nsc_qt/widgets/code_editor.cpp
             src/nsc_qt/widgets/datapath_widget.cpp
@@ -576,6 +577,7 @@ if (BUILD_QT6_UI)
             tests/qt_ui/qt_ui_test.cpp
             src/nsc_qt/assembler.cpp
             src/nsc_qt/simulator_controller.cpp
+            src/nsc_qt/dock_panels.cpp                       # dock-content invariant under test
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
@@ -590,6 +592,7 @@ if (BUILD_QT6_UI)
             Qt6::Widgets
             mips_core
             QHexView  # memory_widget.cpp is compiled into the test
+            ads::qtadvanceddocking-qt6  # dock_panels.cpp exercises the docking API
             clearcore_warnings
     )
     target_compile_features(qt_ui_test PUBLIC cxx_std_20)
