@@ -2,8 +2,10 @@
 
 #include "mips/processor.h"
 #include "nsc_qt/simulator_controller.h"
+#include <QByteArray>
 #include <QMainWindow>
 #include <memory>
+#include <vector>
 
 class QLabel;
 class QComboBox;
@@ -58,6 +60,13 @@ private:
     void setupConnections();
     void applyColorScheme(bool dark);
 
+    // Restore the default (first-run) dock arrangement — backs View > Reset
+    // Layout and the corrupt-state fallback in setupCentralWidget().
+    void resetLayout();
+    // True if at least one dock panel is open; a restored layout with none is
+    // degenerate (an empty window) and must be discarded.
+    bool hasOpenPanel() const;
+
     QWidget* createCodeEditorTab();
     QWidget* createStatisticsTab();
 
@@ -77,7 +86,8 @@ private:
     std::unique_ptr<SimulatorController> controller_;
 
     // Widgets
-    ads::CDockManager*   dock_manager_    = nullptr;
+    ads::CDockManager*   dock_manager_ = nullptr;
+    QByteArray           default_layout_;             // snapshot of the first-run arrangement
     QMenu*               panels_menu_     = nullptr;  // View > Panels toggle actions
     DatapathWidget*      datapath_widget_ = nullptr;
     RegisterWidget*      register_widget_ = nullptr;
