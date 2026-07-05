@@ -8,8 +8,6 @@ name: Cross-platform build
 # Triggers: pushes to the packaging branch (for iteration) and manual dispatch.
 # Packaging + release-asset upload are layered on in later steps.
 on:
-  push:
-    branches: [ci/windows-macos-packaging]
   workflow_dispatch:
   release:
     types: [published]

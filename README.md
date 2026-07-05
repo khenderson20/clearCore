@@ -61,6 +61,22 @@ front ends and every visualizer unchanged.
 
 *(clearCore began life as a live number-system converter — that converter is still the first tab of the terminal UI.)*
 
+## Download
+
+Prebuilt binaries are attached to every [release](https://github.com/khenderson20/clearCore/releases/latest):
+
+| Platform | Asset | Notes |
+|----------|-------|-------|
+| **Windows** | `clearCore-<ver>-windows-x64.exe` | NSIS installer, Qt bundled |
+| **macOS** (Intel + Apple Silicon) | `clearCore-<ver>-macOS-universal.dmg` | Universal binary, Qt bundled |
+| **Linux** | `clearCore-<ver>-Linux-x86_64.tar.gz`, `.AppImage`, `.deb`/`.rpm` | AppImage is self-contained |
+
+> **These builds are unsigned**, so the OS will warn on first launch — this is expected, not a problem with the download:
+> - **macOS**: right-click the app → **Open** → **Open** (clears Gatekeeper once). Or *System Settings → Privacy & Security → Open Anyway*.
+> - **Windows**: on the SmartScreen prompt, click **More info** → **Run anyway**.
+
+Prefer to build it yourself? Read on.
+
 ## Quick Start
 
 You need a **C++20 compiler** (GCC 13+ / Clang 16+) and **CMake 3.25+**. The terminal UI's FTXUI library is fetched

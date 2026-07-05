@@ -24,9 +24,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Windows and macOS release assets**: published releases now attach a Windows NSIS installer
+  (`clearCore-<ver>-windows-x64.exe`) and a universal macOS `.dmg` (`clearCore-<ver>-macOS-universal.dmg`,
+  arm64 + x86_64), each with the Qt runtime bundled, alongside the existing Linux `.tar.gz`/AppImage. Built by a
+  new cross-platform workflow. Installers are currently unsigned (see the README Download section).
+
 ### Documentation
 - README and `CITATION.cff` reframed as a multi-ISA CPU-architecture simulator that foreshadows the RISC-V
   backend (was described as MIPS-only). (#61)
+- README gains a Download section listing per-platform assets and how to clear the Gatekeeper/SmartScreen
+  warnings on the unsigned builds.
 
 ### CI / Internal
 - `update-changelog.yml` now opens a pull request into `develop` instead of pushing directly, so the CHANGELOG
