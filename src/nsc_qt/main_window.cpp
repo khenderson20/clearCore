@@ -913,8 +913,6 @@ QSpinBox {
     padding: 2px 6px;
 }
 QSpinBox::up-button, QSpinBox::down-button { background: #3C3C3C; border: none; width: 16px; }
-QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #888; }
-QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #888; }
 
 QScrollBar:vertical   { background: #1E1E1E; width: 10px; border: none; }
 QScrollBar:horizontal { background: #1E1E1E; height: 10px; border: none; }
@@ -938,12 +936,6 @@ QComboBox {
     min-width: 80px;
 }
 QComboBox:hover { border-color: #777777; }
-QComboBox::drop-down {
-    border: none;
-    border-left: 1px solid #555555;
-    width: 22px;
-    background: transparent;
-}
 QComboBox QAbstractItemView {
     background: #252526;
     color: #CCCCCC;
@@ -1072,8 +1064,6 @@ QSpinBox {
     padding: 2px 6px;
 }
 QSpinBox::up-button, QSpinBox::down-button { background: #EEEEEE; border: none; width: 16px; }
-QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #666; }
-QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #666; }
 
 QScrollBar:vertical   { background: #F5F5F5; width: 10px; border: none; }
 QScrollBar:horizontal { background: #F5F5F5; height: 10px; border: none; }
@@ -1097,12 +1087,6 @@ QComboBox {
     min-width: 80px;
 }
 QComboBox:hover { border-color: #AAAAAA; }
-QComboBox::drop-down {
-    border: none;
-    border-left: 1px solid #CCCCCC;
-    width: 22px;
-    background: transparent;
-}
 QComboBox QAbstractItemView {
     background: white;
     color: #333333;

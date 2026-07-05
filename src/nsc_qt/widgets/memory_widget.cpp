@@ -50,6 +50,18 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
     hex_view_ = new QHexView(this);
     hex_view_->setReadOnly(true);
     hex_view_->setFont(scale::monoFont(scale::kFontSizeDense));
+
+    // Label each section of the hex dump so new users immediately understand
+    // what they are looking at. "Offset" = row start address, hex column keeps
+    // its default byte-position numbers (00–0F), "ASCII" = text view.
+    {
+        auto opts          = hex_view_->options();
+        opts.address_label = tr("Offset");
+        opts.ascii_label   = QStringLiteral("ASCII");
+        opts.flags |= QHexFlags::StyledHeader | QHexFlags::Separators;
+        hex_view_->setOptions(opts);
+    }
+
     vl->addWidget(hex_view_);
 
     connect(addr_spin_, qOverload<int>(&QSpinBox::valueChanged), this,
@@ -92,6 +104,14 @@ void MemoryWidget::onAddressChanged(int value) {
 
 void MemoryWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
+    // Sync the QHexView header text colour to match the app's accent colour.
+    auto         opts                    = hex_view_->options();
+    const QColor hdr_fg                  = dark ? QColor("#9CDCFE") : QColor("#0078D4");
+    opts.header_format.foreground        = hdr_fg;
+    opts.addressheader_format.foreground = hdr_fg;
+    opts.hexheader_format.foreground     = hdr_fg;
+    opts.asciiheader_format.foreground   = hdr_fg;
+    hex_view_->setOptions(opts);
     if (last_mem_) refreshView(*last_mem_);
 }
 
