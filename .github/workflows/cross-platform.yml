@@ -92,6 +92,19 @@ jobs:
       - name: Build
         run: cmake --build --preset release
 
+      - name: Verify universal binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          bin=$(find build/release -path '*clearCore-gui.app/Contents/MacOS/clearCore-gui' | head -1)
+          echo "binary: $bin"
+          file "$bin"
+          archs=$(lipo -archs "$bin")
+          echo "architectures: $archs"
+          echo "$archs" | grep -qw arm64  || { echo "::error::missing arm64 slice";  exit 1; }
+          echo "$archs" | grep -qw x86_64 || { echo "::error::missing x86_64 slice"; exit 1; }
+          echo "✓ universal (arm64 + x86_64)"
+
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
 
