@@ -32,7 +32,9 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QSize>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -47,11 +49,12 @@
 namespace nsc::qt {
 
 namespace {
-// Schema version for the persisted dock layout. Bump this whenever the set of
-// docks or the default arrangement changes: ADS restoreState() rejects a saved
-// state tagged with a different version, so stale/incompatible layouts are
-// dropped instead of being rebuilt into a broken window.
-constexpr int kLayoutVersion = 1;
+// Schema version for the persisted dock layout. Bump whenever the default
+// arrangement changes — ADS restoreState() rejects a saved state with a
+// different version, so stale/incompatible layouts are cleanly discarded.
+// v1: all panels in one central tabbed area.
+// v2: 2-column split — Code Editor left, Datapath center-top, inspector tabs bottom.
+constexpr int kLayoutVersion = 2;
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
@@ -80,22 +83,29 @@ void MainWindow::setupMenuBar() {
     auto* file_menu = mb->addMenu(tr("&File"));
     act_open_       = file_menu->addAction(tr("&Open Program…"), QKeySequence("Ctrl+O"), this,
                                            &MainWindow::onOpenFile);
-    act_save_       = file_menu->addAction(tr("&Save Trace…"), QKeySequence("Ctrl+S"), this,
-                                           &MainWindow::onSaveTrace);
+    act_open_->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
+    act_save_ = file_menu->addAction(tr("&Save Trace…"), QKeySequence("Ctrl+S"), this,
+                                     &MainWindow::onSaveTrace);
+    act_save_->setIcon(style()->standardIcon(QStyle::SP_DialogSaveButton));
     file_menu->addSeparator();
     file_menu->addAction(tr("E&xit"), qApp, &QApplication::quit);
 
     // Simulation
     auto* sim_menu = mb->addMenu(tr("&Simulation"));
     act_step_ = sim_menu->addAction(tr("&Step"), QKeySequence("F10"), this, &MainWindow::onStep);
+    act_step_->setIcon(style()->standardIcon(QStyle::SP_ArrowRight));
+    act_step_->setToolTip(tr("Step one pipeline cycle (F10)"));
     act_run_pause_ =
         sim_menu->addAction(tr("&Run"), QKeySequence("F5"), this, &MainWindow::onRunPause);
+    act_run_pause_->setToolTip(tr("Run / pause simulation (F5)"));
     sim_menu->addAction(tr("Sto&p"), QKeySequence("Shift+F5"), this, [this] {
         controller_->stop();
-        act_run_pause_->setText(tr("&Run"));
+        setRunState(false);
     });
     act_reset_ =
         sim_menu->addAction(tr("&Reset"), QKeySequence("Ctrl+R"), this, &MainWindow::onReset);
+    act_reset_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    act_reset_->setToolTip(tr("Reset simulation to start (Ctrl+R)"));
 
     // View
     auto* view_menu = mb->addMenu(tr("&View"));
@@ -107,15 +117,19 @@ void MainWindow::setupMenuBar() {
     view_menu->addAction(tr("&Preferences…"), QKeySequence("Ctrl+,"), this,
                          &MainWindow::onShowPreferences);
     view_menu->addAction(tr("Keyboard &Shortcuts"), QKeySequence("Ctrl+?"), this, [this] {
-        const QString text = tr("F10         – Step one cycle\n"
-                                "F5          – Run\n"
-                                "Shift+F5    – Stop\n"
-                                "Ctrl+R      – Reset\n"
-                                "Ctrl+O      – Open program file\n"
-                                "Ctrl+S      – Save trace to CSV\n"
-                                "Ctrl+,      – Preferences\n"
+        const QString text = tr("F10               – Step one pipeline cycle\n"
+                                "F5                – Run / Pause\n"
+                                "Shift+F5          – Stop\n"
+                                "Ctrl+R            – Reset simulation\n"
+                                "Ctrl+O            – Open hex program file\n"
+                                "Ctrl+S            – Save trace to CSV\n"
+                                "Ctrl+,            – Preferences\n"
                                 "\n"
-                                "Datapath tab (click or Tab to focus):\n"
+                                "Code Editor:\n"
+                                "Ctrl+Enter        – Assemble\n"
+                                "Ctrl+Shift+Enter  – Load (after assembling)\n"
+                                "\n"
+                                "Datapath panel (click or Tab to focus):\n"
                                 "Left/Right  – Select a pipeline stage\n"
                                 "Enter       – Show stage detail\n"
                                 "Space       – Toggle breakpoint on selected stage");
@@ -128,6 +142,9 @@ void MainWindow::setupMenuBar() {
 void MainWindow::setupToolBar() {
     auto* tb = addToolBar(tr("Main"));
     tb->setMovable(false);
+    tb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    tb->setIconSize(QSize(16, 16));
+    setRunState(false);  // seeds Run icon before toolbar renders
     tb->addAction(act_step_);
     tb->addAction(act_run_pause_);
     tb->addAction(act_reset_);
@@ -138,46 +155,79 @@ void MainWindow::setupToolBar() {
 // ── Central widget ────────────────────────────────────────────────────────────
 
 void MainWindow::setupCentralWidget() {
-    // IDE-style docking (Qt Advanced Docking System): every panel starts
-    // tabbed in one central area — visually the old QTabWidget — but can be
-    // dragged out, split, floated, or hidden via View > Panels. The layout
-    // is saved on close and restored below.
     ads::CDockManager::setConfigFlag(ads::CDockManager::OpaqueSplitterResize, true);
     ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasUndockButton, false);
-    dock_manager_ = new ads::CDockManager(this);  // installs itself as central widget
+    dock_manager_ = new ads::CDockManager(this);
 
     datapath_widget_ = new DatapathWidget(this);
     register_widget_ = new RegisterWidget(this);
     memory_widget_   = new MemoryWidget(this);
     trace_widget_    = new PipelineTraceWidget(this);
 
-    ads::CDockAreaWidget* area      = nullptr;
-    const auto            add_panel = [&](const QString& title, QWidget* contents) {
-        auto* dock = addDockPanel(dock_manager_, area, title, contents);
+    // Helper: create a named dock and register its View > Panels toggle.
+    auto make_dock = [&](const QString& title, QWidget* contents) -> ads::CDockWidget* {
+        auto* dock = new ads::CDockWidget(dock_manager_, title);
+        dock->setObjectName(title);
+        dock->setWidget(contents);
         panels_menu_->addAction(dock->toggleViewAction());
+        return dock;
     };
 
-    add_panel(tr("Datapath"), datapath_widget_);
-    add_panel(tr("Registers"), register_widget_);
-    add_panel(tr("Memory"), memory_widget_);
-    add_panel(tr("Pipeline Trace"), trace_widget_);
-    add_panel(tr("Code Editor"), createCodeEditorTab());
-    add_panel(tr("Statistics"), createStatisticsTab());
-    area->setCurrentIndex(0);  // Datapath in front, as before
+    // ── 2-column IDE layout ───────────────────────────────────────────────────
+    //
+    //  ┌─ Code Editor ─┬─────── Datapath ──────────┐
+    //  │  (edit code,  │  (pipeline visualization,  │
+    //  │  assemble,    │  stage highlights,          │
+    //  │  load)        │  breakpoints)               │
+    //  │               ├── Registers ─┬─ Memory ────┤
+    //  │               │  (live vals) │ (hex dump)  │
+    //  └───────────────┴─────────────┴─────────────-┘
+    //                                 Pipeline Trace / Statistics also tabbed bottom-right.
+    //
+    // Panels can be dragged, split, floated, or hidden via View > Panels.
+    // The arrangement is saved on close and restored defensively below.
 
-    // Snapshot the freshly-built default arrangement so we can fall back to it
-    // (and power View > Reset Layout) without reconstructing the docks.
+    // Code editor — left column (narrower; user writes and loads programs here).
+    auto* code_dock = make_dock(tr("Code Editor"), createCodeEditorTab());
+    auto* left_area = dock_manager_->addDockWidget(ads::LeftDockWidgetArea, code_dock);
+    (void)left_area;
+
+    // Datapath — center, largest panel. Shown first so new users see the
+    // pipeline visualization immediately after loading and running a program.
+    auto* dp_dock     = make_dock(tr("Datapath"), datapath_widget_);
+    auto* center_area = dock_manager_->addDockWidget(ads::CenterDockWidgetArea, dp_dock);
+
+    // Inspector row — tabbed below the Datapath. Registers is the default tab
+    // because it updates every cycle and gives the most direct feedback.
+    auto* reg_dock = make_dock(tr("Registers"), register_widget_);
+    auto* bottom_area =
+        dock_manager_->addDockWidget(ads::BottomDockWidgetArea, reg_dock, center_area);
+    auto* mem_dock = make_dock(tr("Memory"), memory_widget_);
+    dock_manager_->addDockWidgetTabToArea(mem_dock, bottom_area);
+    auto* trace_dock = make_dock(tr("Pipeline Trace"), trace_widget_);
+    dock_manager_->addDockWidgetTabToArea(trace_dock, bottom_area);
+    auto* stats_dock = make_dock(tr("Statistics"), createStatisticsTab());
+    dock_manager_->addDockWidgetTabToArea(stats_dock, bottom_area);
+    bottom_area->setCurrentIndex(0);  // Registers in front
+
+    // Snapshot the default arrangement so resetLayout() and the fallback
+    // restore can reinstate it without rebuilding the docks from scratch.
     default_layout_ = dock_manager_->saveState(kLayoutVersion);
 
-    // Restore the previous session's arrangement — defensively. ADS applies a
-    // saved state wholesale, so a stale (different kLayoutVersion) or corrupt
-    // one must not be trusted: version-gate it, and if the restore still leaves
-    // no panel open (e.g. every dock Closed with a zero-size central area — an
-    // empty window), discard it and reinstate the default.
+    // Restore the previous session's layout defensively. ADS rejects layouts
+    // tagged with a different kLayoutVersion, so schema changes cleanly
+    // discard stale states instead of rebuilding a broken window. If the
+    // restore leaves every dock closed (degenerate empty window), fall back.
     const QSettings s("nsc-qt", "clearCore-gui");
-    if (const auto state = s.value("dockLayout").toByteArray(); !state.isEmpty()) {
-        if (!dock_manager_->restoreState(state, kLayoutVersion) || !hasOpenPanel())
+    const auto      saved = s.value("dockLayout").toByteArray();
+    if (!saved.isEmpty()) {
+        if (!dock_manager_->restoreState(saved, kLayoutVersion) || !hasOpenPanel())
             dock_manager_->restoreState(default_layout_, kLayoutVersion);
+    } else {
+        // Fresh install — pre-load "Hello registers" so the editor isn't blank
+        // on first launch and new users can immediately click Assemble → Load → Step.
+        const auto& catalog = exampleProgramCatalog();
+        if (!catalog.empty()) code_editor_->setPlainText(catalog[0].source);
     }
 
     // Status bar
@@ -189,6 +239,7 @@ void MainWindow::setupCentralWidget() {
     statusBar()->addPermanentWidget(status_instrs_lbl_);
     statusBar()->addPermanentWidget(new QLabel("|"));
     statusBar()->addPermanentWidget(status_cpi_lbl_);
+    statusBar()->showMessage(tr("Ready — load a program or click Assemble to get started"), 5000);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -200,6 +251,16 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 // View > Reset Layout: restore the default arrangement captured on first build.
 void MainWindow::resetLayout() {
     if (!default_layout_.isEmpty()) dock_manager_->restoreState(default_layout_, kLayoutVersion);
+}
+
+void MainWindow::setRunState(bool running) {
+    if (running) {
+        act_run_pause_->setText(tr("&Pause"));
+        act_run_pause_->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+    } else {
+        act_run_pause_->setText(tr("&Run"));
+        act_run_pause_->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    }
 }
 
 bool MainWindow::hasOpenPanel() const {
@@ -237,9 +298,11 @@ QWidget* MainWindow::createCodeEditorTab() {
     auto* asm_btn = new QPushButton(tr("Assemble"), w);
     asm_btn->setObjectName("primaryButton");
     asm_btn->setToolTip(tr("Assemble source and prepare machine code (does not load)"));
+    asm_btn->setShortcut(QKeySequence("Ctrl+Return"));
 
     auto* load_btn = new QPushButton(tr("Load"), w);
-    load_btn->setToolTip(tr("Load assembled program into simulator and reset"));
+    load_btn->setToolTip(tr("Load assembled program into simulator and reset (Ctrl+Shift+Return)"));
+    load_btn->setShortcut(QKeySequence("Ctrl+Shift+Return"));
 
     // Examples dropdown -- a short, curated list (Hick's Law) chosen to
     // demonstrate the pipeline behavior this simulator actually visualizes,
@@ -349,7 +412,7 @@ void MainWindow::setupConnections() {
     connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
     connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
-        act_run_pause_->setText(tr("&Run"));
+        setRunState(false);
     });
 
     connect(datapath_widget_, &DatapathWidget::breakpointToggleRequested, this,
@@ -362,23 +425,23 @@ void MainWindow::setupConnections() {
 
 void MainWindow::onStep() {
     controller_->stop();
-    act_run_pause_->setText(tr("&Run"));
+    setRunState(false);
     controller_->stepCycle();
 }
 
 void MainWindow::onRunPause() {
     if (controller_->isRunning()) {
         controller_->stop();
-        act_run_pause_->setText(tr("&Run"));
+        setRunState(false);
     } else {
         controller_->run();
-        act_run_pause_->setText(tr("&Pause"));
+        setRunState(true);
     }
 }
 
 void MainWindow::onReset() {
     controller_->stop();
-    act_run_pause_->setText(tr("&Run"));
+    setRunState(false);
     controller_->reset();
     register_widget_->clear();
     trace_widget_->clear();
@@ -538,13 +601,13 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
 
 void MainWindow::onHalted() {
     controller_->stop();
-    act_run_pause_->setText(tr("&Run"));
+    setRunState(false);
     flashStatusBanner(true, tr("✓ Program halted (spin-loop detected)."));
 }
 
 void MainWindow::onFaulted() {
     controller_->stop();
-    act_run_pause_->setText(tr("&Run"));
+    setRunState(false);
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
 }
 

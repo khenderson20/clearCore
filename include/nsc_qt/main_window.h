@@ -66,6 +66,9 @@ private:
     // True if at least one dock panel is open; a restored layout with none is
     // degenerate (an empty window) and must be discarded.
     bool hasOpenPanel() const;
+    // Syncs the Run/Pause action text AND icon so every code path that changes
+    // run state (Stop menu, Reset, Halt, Fault, Breakpoint) stays consistent.
+    void setRunState(bool running);
 
     QWidget* createCodeEditorTab();
     QWidget* createStatisticsTab();
