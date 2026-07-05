@@ -285,15 +285,15 @@ QWidget* MainWindow::createCodeEditorTab() {
                                         "#   add  $t2, $t0, $t1\n"));
     vl->addWidget(code_editor_);
 
-    // Separator line above button row
-    auto* sep = new QFrame(w);
-    sep->setFrameShape(QFrame::HLine);
-    sep->setFrameShadow(QFrame::Sunken);
-    vl->addWidget(sep);
-
-    auto* btn_row = new QHBoxLayout;
+    // Button toolbar row — given a named container so the QSS can set its
+    // background independently of the ADS dock area that hosts this panel.
+    auto* btn_bar = new QWidget(w);
+    btn_bar->setObjectName("codeEditorBtnBar");
+    btn_bar->setAutoFillBackground(true);
+    auto* btn_row = new QHBoxLayout(btn_bar);
     btn_row->setContentsMargins(8, 6, 8, 6);
     btn_row->setSpacing(8);
+    vl->addWidget(btn_bar);
 
     auto* asm_btn = new QPushButton(tr("Assemble"), w);
     asm_btn->setObjectName("primaryButton");
@@ -318,7 +318,7 @@ QWidget* MainWindow::createCodeEditorTab() {
     connect(examples_combo_, qOverload<int>(&QComboBox::activated), this,
             &MainWindow::onExampleSelected);
 
-    asm_status_lbl_ = new QLabel(w);
+    asm_status_lbl_ = new QLabel(btn_bar);
     asm_status_lbl_->setFont(scale::monoFont(scale::kFontSizeBody));
     btn_row->addWidget(asm_btn);
     btn_row->addWidget(load_btn);
@@ -327,7 +327,6 @@ QWidget* MainWindow::createCodeEditorTab() {
     btn_row->addSpacing(12);
     btn_row->addWidget(asm_status_lbl_);
     btn_row->addStretch();
-    vl->addLayout(btn_row);
 
     connect(asm_btn, &QPushButton::clicked, this, &MainWindow::onAssemble);
     connect(load_btn, &QPushButton::clicked, this, &MainWindow::onLoad);
@@ -855,6 +854,30 @@ QFrame[frameShape="4"] { color: #444444; }
 QFrame[frameShape="5"] { color: #444444; }
 QWidget#regHeader { background: #252526; border-bottom: 1px solid #3C3C3C; }
 QWidget#regHeader QLabel { color: #9CDCFE; background: transparent; border: none; }
+
+QComboBox {
+    background: #3C3C3C;
+    color: #CCCCCC;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 4px 8px;
+    min-width: 80px;
+}
+QComboBox:hover { border-color: #777777; }
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid #888; }
+QComboBox QAbstractItemView {
+    background: #252526;
+    color: #CCCCCC;
+    border: 1px solid #454545;
+    selection-background-color: #094771;
+    selection-color: white;
+}
+
+QWidget#codeEditorBtnBar {
+    background: #252526;
+    border-top: 1px solid #3C3C3C;
+}
 )"
                              : R"(
 QMainWindow, QDialog { background: #F5F5F5; }
@@ -978,8 +1001,79 @@ QFrame[frameShape="4"] { color: #DDDDDD; }
 QFrame[frameShape="5"] { color: #DDDDDD; }
 QWidget#regHeader { background: #EBEBEB; border-bottom: 1px solid #DDDDDD; }
 QWidget#regHeader QLabel { color: #0078D4; background: transparent; border: none; }
+
+QComboBox {
+    background: white;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    padding: 4px 8px;
+    min-width: 80px;
+}
+QComboBox:hover { border-color: #AAAAAA; }
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid #666; }
+QComboBox QAbstractItemView {
+    background: white;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    selection-background-color: #0078D4;
+    selection-color: white;
+}
+
+QWidget#codeEditorBtnBar {
+    background: #F0F0F0;
+    border-top: 1px solid #DDDDDD;
+}
 )";
     qApp->setStyleSheet(qss);
+
+    // ADS calls dock_manager_->setStyleSheet(its_built_in_css) during
+    // construction, which takes precedence over qApp->setStyleSheet() for
+    // all ads--* selectors. The only way to theme ADS elements is to append
+    // our overrides onto its own stylesheet. We cache the ADS base CSS once
+    // on the first call (after dock_manager_ is created) so subsequent
+    // scheme switches always start from the unmodified original.
+    if (dock_manager_) {
+        static const QString ads_base  = dock_manager_->styleSheet();
+        const QString        ads_theme = dark ? R"(
+ads--CDockContainerWidget { background: #1E1E1E; }
+ads--CDockContainerWidget ads--CDockSplitter::handle { background: #3C3C3C; }
+ads--CDockAreaWidget      { background: #1E1E1E; }
+ads--CDockAreaTitleBar    { background: #252526; border-bottom: 1px solid #3C3C3C; }
+ads--CDockWidgetTab {
+    background: #2D2D2D;
+    border-color: #3C3C3C;
+    padding: 4px 16px;
+}
+ads--CDockWidgetTab:hover { background: #383838; }
+ads--CDockWidgetTab[activeTab="true"] {
+    background: #1E1E1E;
+    border-top: 2px solid #007ACC;
+}
+ads--CDockWidgetTab QLabel           { color: #888888; }
+ads--CDockWidgetTab[activeTab="true"] QLabel { color: #FFFFFF; }
+)"
+                                              : R"(
+ads--CDockContainerWidget { background: #F5F5F5; }
+ads--CDockContainerWidget ads--CDockSplitter::handle { background: #D5D5D5; }
+ads--CDockAreaWidget      { background: #F5F5F5; }
+ads--CDockAreaTitleBar    { background: #E8E8E8; border-bottom: 1px solid #CCCCCC; }
+ads--CDockWidgetTab {
+    background: #E8E8E8;
+    border-color: #D0D0D0;
+    padding: 4px 16px;
+}
+ads--CDockWidgetTab:hover { background: #DCDCDC; }
+ads--CDockWidgetTab[activeTab="true"] {
+    background: white;
+    border-top: 2px solid #0078D4;
+}
+ads--CDockWidgetTab QLabel           { color: #555555; }
+ads--CDockWidgetTab[activeTab="true"] QLabel { color: #1A1A1A; }
+)";
+        dock_manager_->setStyleSheet(ads_base + ads_theme);
+    }
 
     datapath_widget_->setDarkMode(dark);
     register_widget_->setDarkMode(dark);
