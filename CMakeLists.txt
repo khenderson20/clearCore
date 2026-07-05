@@ -362,6 +362,7 @@ if (BUILD_QT6_UI)
             src/nsc_qt/preferences_dialog.cpp
             src/nsc_qt/widgets/code_editor.cpp
             src/nsc_qt/widgets/datapath_widget.cpp
+            src/nsc_qt/widgets/schematic_datapath_widget.cpp
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
@@ -374,6 +375,7 @@ if (BUILD_QT6_UI)
             include/nsc_qt/examples.h
             include/nsc_qt/widgets/code_editor.h
             include/nsc_qt/widgets/datapath_widget.h
+            include/nsc_qt/widgets/schematic_datapath_widget.h
             include/nsc_qt/widgets/register_widget.h
             include/nsc_qt/widgets/memory_widget.h
             include/nsc_qt/widgets/pipeline_trace_widget.h

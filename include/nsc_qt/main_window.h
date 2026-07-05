@@ -20,7 +20,7 @@ class CDockManager;
 
 namespace nsc::qt {
 
-class DatapathWidget;
+class SchematicDatapathWidget;
 class RegisterWidget;
 class MemoryWidget;
 class PipelineTraceWidget;
@@ -89,16 +89,16 @@ private:
     std::unique_ptr<SimulatorController> controller_;
 
     // Widgets
-    ads::CDockManager*   dock_manager_ = nullptr;
-    QByteArray           default_layout_;             // snapshot of the first-run arrangement
-    QMenu*               panels_menu_     = nullptr;  // View > Panels toggle actions
-    DatapathWidget*      datapath_widget_ = nullptr;
-    RegisterWidget*      register_widget_ = nullptr;
-    MemoryWidget*        memory_widget_   = nullptr;
-    PipelineTraceWidget* trace_widget_    = nullptr;
-    CodeEditor*          code_editor_     = nullptr;
-    QComboBox*           examples_combo_  = nullptr;
-    QLabel*              asm_status_lbl_  = nullptr;
+    ads::CDockManager*       dock_manager_ = nullptr;
+    QByteArray               default_layout_;             // snapshot of the first-run arrangement
+    QMenu*                   panels_menu_     = nullptr;  // View > Panels toggle actions
+    SchematicDatapathWidget* datapath_widget_ = nullptr;
+    RegisterWidget*          register_widget_ = nullptr;
+    MemoryWidget*            memory_widget_   = nullptr;
+    PipelineTraceWidget*     trace_widget_    = nullptr;
+    CodeEditor*              code_editor_     = nullptr;
+    QComboBox*               examples_combo_  = nullptr;
+    QLabel*                  asm_status_lbl_  = nullptr;
 
     // Statistics labels
     QLabel*  stat_cycles_lbl_   = nullptr;
