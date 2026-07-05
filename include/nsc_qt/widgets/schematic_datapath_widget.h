@@ -31,6 +31,7 @@ class QGraphicsEllipseItem;
 class QGraphicsLineItem;
 class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
+class QToolButton;
 class QVariantAnimation;
 
 namespace nsc::qt {
@@ -77,6 +78,8 @@ private:
     void fitSchematic();
     // Refresh the live parts of the educational component tooltips.
     void updateTooltips();
+    // Multiply the current view scale by `factor`, clamped; marks user zoom.
+    void zoomBy(qreal factor);
     // Render the scene to a 2x PNG chosen via a save dialog (lab reports).
     void exportImage();
     // Slide a token from each stage column to the next for instructions that
@@ -126,6 +129,16 @@ private:
     // Step-animation tokens gliding between stage columns on each clock edge.
     std::array<QGraphicsRectItem*, 5> tokens_{};
     QVariantAnimation*                token_anim_ = nullptr;
+
+    // Hazard explainer chip: names and explains the stall/flush the moment
+    // it happens, in the hazard's colour.
+    QGraphicsRectItem*       hazard_chip_ = nullptr;
+    QGraphicsSimpleTextItem* hazard_text_ = nullptr;
+
+    // Zoom controls overlaid on the view (discoverable alternative to Ctrl+wheel).
+    QToolButton* btn_zoom_in_  = nullptr;
+    QToolButton* btn_zoom_out_ = nullptr;
+    QToolButton* btn_zoom_fit_ = nullptr;
 
     mips::PipelineState          state_{};
     std::unordered_set<uint32_t> breakpoints_{};

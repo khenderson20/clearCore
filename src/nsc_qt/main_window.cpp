@@ -33,6 +33,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSize>
+#include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
@@ -151,6 +152,28 @@ void MainWindow::setupToolBar() {
     tb->addAction(act_reset_);
     tb->addSeparator();
     tb->addAction(act_open_);
+    tb->addSeparator();
+
+    // Execution-speed slider, in the toolbar where runs are started rather
+    // than buried in Preferences. Left = slow (long cycle interval, good for
+    // watching the datapath), right = fast. Mirrors the Preferences setting.
+    auto* speed_lbl = new QLabel(tr(" Speed: "), tb);
+    tb->addWidget(speed_lbl);
+    speed_slider_ = new QSlider(Qt::Horizontal, tb);
+    speed_slider_->setRange(10, 1000);  // cycle interval in ms
+    speed_slider_->setInvertedAppearance(true);
+    speed_slider_->setFixedWidth(140);
+    const QSettings s("nsc-qt", "clearCore-gui");
+    speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
+    speed_slider_->setToolTip(
+        tr("Run speed — one pipeline cycle every %1 ms").arg(speed_slider_->value()));
+    connect(speed_slider_, &QSlider::valueChanged, this, [this](int ms) {
+        controller_->setExecutionSpeed(ms);
+        speed_slider_->setToolTip(tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+        QSettings settings("nsc-qt", "clearCore-gui");
+        settings.setValue("executionSpeed", ms);
+    });
+    tb->addWidget(speed_slider_);
 }
 
 // ── Central widget ────────────────────────────────────────────────────────────
@@ -580,6 +603,8 @@ void MainWindow::onShowPreferences() {
     connect(&dlg, &PreferencesDialog::colorSchemeChanged, this, &MainWindow::applyColorScheme);
     connect(&dlg, &PreferencesDialog::executionSpeedChanged, controller_.get(),
             &SimulatorController::setExecutionSpeed);
+    // Keep the toolbar slider in step with the Preferences control.
+    connect(&dlg, &PreferencesDialog::executionSpeedChanged, speed_slider_, &QSlider::setValue);
     connect(&dlg, &PreferencesDialog::showRegisterAliasesChanged, register_widget_,
             &RegisterWidget::setShowAliases);
     connect(&dlg, &PreferencesDialog::fontSizeChanged, this, [this](int sz) {

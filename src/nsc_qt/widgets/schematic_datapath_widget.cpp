@@ -24,11 +24,13 @@
 #include <QPen>
 #include <QPolygonF>
 #include <QStringList>
+#include <QToolButton>
 #include <QVariantAnimation>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -181,25 +183,46 @@ namespace {
 // ── Hover-capable component shapes ───────────────────────────────────────────
 // Thickens the border while hovered, giving components a tactile feel and
 // signalling that the tooltip carries more detail (progressive disclosure).
+// The highlight is drawn at paint time on top of the item's current pen —
+// never by swapping the pen — so control-signal accents applied by
+// applyState() mid-hover are not wiped when the cursor leaves.
 template <typename Base> class HoverShape : public Base {
 public:
     using Base::Base;
 
+    QRectF boundingRect() const override {
+        return Base::boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5);  // room for the halo
+    }
+
+    void paint(QPainter* p, const QStyleOptionGraphicsItem* opt, QWidget* w) override {
+        Base::paint(p, opt, w);
+        if (!hovered_) return;
+        QPen hp = this->pen();
+        hp.setWidthF(hp.widthF() + 1.4);
+        p->setPen(hp);
+        p->setBrush(Qt::NoBrush);
+        if constexpr (std::is_same_v<Base, QGraphicsRectItem>)
+            p->drawRect(this->rect());
+        else if constexpr (std::is_same_v<Base, QGraphicsEllipseItem>)
+            p->drawEllipse(this->rect());
+        else
+            p->drawPolygon(this->polygon());
+    }
+
 protected:
     void hoverEnterEvent(QGraphicsSceneHoverEvent* ev) override {
-        saved_pen_ = this->pen();
-        QPen p     = saved_pen_;
-        p.setWidthF(saved_pen_.widthF() + 1.2);
-        this->setPen(p);
+        hovered_ = true;
+        this->update();
         Base::hoverEnterEvent(ev);
     }
     void hoverLeaveEvent(QGraphicsSceneHoverEvent* ev) override {
-        this->setPen(saved_pen_);
+        hovered_ = false;
+        this->update();
         Base::hoverLeaveEvent(ev);
     }
 
 private:
-    QPen saved_pen_;
+    bool hovered_ = false;
 };
 
 using HoverRect    = HoverShape<QGraphicsRectItem>;
@@ -298,6 +321,27 @@ SchematicDatapathWidget::SchematicDatapathWidget(QWidget* parent) : QGraphicsVie
     setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(560, 260);
+
+    // Zoom controls overlaid top-right of the viewport: a visible, clickable
+    // alternative to Ctrl+wheel (which nothing on screen advertises).
+    auto mk_btn = [&](const QString& text, const QString& tip) {
+        auto* b = new QToolButton(this);
+        b->setText(text);
+        b->setToolTip(tip);
+        b->setAutoRaise(true);
+        b->setFixedSize(26, 26);
+        b->setFocusPolicy(Qt::NoFocus);  // keep keyboard focus on the schematic
+        return b;
+    };
+    btn_zoom_in_  = mk_btn(QStringLiteral("+"), tr("Zoom in (Ctrl+Wheel)"));
+    btn_zoom_out_ = mk_btn(QStringLiteral("−"), tr("Zoom out (Ctrl+Wheel)"));
+    btn_zoom_fit_ = mk_btn(QStringLiteral("⤢"), tr("Zoom to fit"));
+    connect(btn_zoom_in_, &QToolButton::clicked, this, [this] { zoomBy(1.2); });
+    connect(btn_zoom_out_, &QToolButton::clicked, this, [this] { zoomBy(1.0 / 1.2); });
+    connect(btn_zoom_fit_, &QToolButton::clicked, this, [this] {
+        user_zoomed_ = false;
+        fitSchematic();
+    });
 
     buildScene();
     applyTheme();
@@ -559,6 +603,17 @@ void SchematicDatapathWidget::buildScene() {
             tok->setVisible(false);
     });
 
+    // ── Hazard explainer chip ────────────────────────────────────────────────
+    // Appears the moment a stall or flush happens and says why, in the
+    // hazard's colour — turning "the pipeline did something weird" into a
+    // teachable moment. Hidden when no hazard is active.
+    hazard_chip_ = scene_->addRect(QRectF());
+    hazard_chip_->setZValue(11);
+    hazard_chip_->setVisible(false);
+    hazard_text_ = scene_->addSimpleText(QString(), scale::monoFont(scale::kFontSizeDense, true));
+    hazard_text_->setZValue(12);
+    hazard_text_->setVisible(false);
+
     // ── Keyboard focus ring ──────────────────────────────────────────────────
     focus_ring_ = scene_->addRect(QRectF());
     focus_ring_->setZValue(10);
@@ -616,7 +671,9 @@ void SchematicDatapathWidget::applyState() {
         const auto&  snap = state_.stages[static_cast<std::size_t>(i)];
         const QColor tint = dark_mode_ ? kStageDark[i] : kStageLight[i];
         QColor       band = tint;
-        band.setAlpha(snap.valid ? (dark_mode_ ? 70 : 120) : (dark_mode_ ? 25 : 45));
+        // Dark tints are deep, saturated hues; at high alpha they overwhelm
+        // the schematic (MEM turned solid brown). Keep them a faint wash.
+        band.setAlpha(snap.valid ? (dark_mode_ ? 32 : 120) : (dark_mode_ ? 12 : 45));
         stage_tints_[static_cast<std::size_t>(i)]->setBrush(band);
 
         // Mnemonic label above the column (Ripes-style). Raw word 0 encodes
@@ -750,6 +807,43 @@ void SchematicDatapathWidget::applyState() {
     val_wb_->setText(wb_text);
     val_wb_->setBrush(t.wb);
     val_wb_->setPos(700 - val_wb_->boundingRect().width() / 2, 486);
+
+    // ── Hazard explainer chip ────────────────────────────────────────────────
+    QString hz;
+    QColor  hz_color;
+    if (state_.branch_flush) {
+        const auto& s_mem2 = state_.stages[3];
+        hz                 = tr("Branch taken: %1 — PC redirected, younger instructions flushed")
+                                 .arg(s_mem2.valid && s_mem2.raw != 0
+                                          ? QString::fromStdString(format_instr(s_mem2.raw))
+                                          : QStringLiteral("branch"));
+        hz_color           = t.flush;
+    } else if (state_.load_stall) {
+        const auto& s_ex2 = state_.stages[2];
+        hz =
+            tr("Load-use hazard: %1 — its data arrives after MEM, so the "
+               "dependent instruction waits one cycle")
+                .arg(s_ex2.valid && s_ex2.raw != 0 ? QString::fromStdString(format_instr(s_ex2.raw))
+                                                   : QStringLiteral("lw"));
+        hz_color = t.stall;
+    }
+    if (hz.isEmpty()) {
+        hazard_chip_->setVisible(false);
+        hazard_text_->setVisible(false);
+    } else {
+        hazard_text_->setText(hz);
+        hazard_text_->setBrush(hz_color);
+        const QRectF tb = hazard_text_->boundingRect();
+        const qreal  cx = kSceneW / 2;
+        hazard_text_->setPos(cx - tb.width() / 2, 54);
+        QColor bg = t.comp_fill;
+        bg.setAlpha(235);
+        hazard_chip_->setRect(cx - tb.width() / 2 - 10, 50, tb.width() + 20, tb.height() + 8);
+        hazard_chip_->setBrush(bg);
+        hazard_chip_->setPen(QPen(hz_color, 1.4));
+        hazard_chip_->setVisible(true);
+        hazard_text_->setVisible(true);
+    }
 
     updateTooltips();
 }
@@ -933,14 +1027,17 @@ void SchematicDatapathWidget::fitSchematic() {
     if (!user_zoomed_) fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 }
 
+void SchematicDatapathWidget::zoomBy(qreal factor) {
+    user_zoomed_       = true;
+    const qreal cur    = transform().m11();
+    const qreal target = std::clamp(cur * factor, 0.3, 4.0);
+    scale(target / cur, target / cur);
+}
+
 void SchematicDatapathWidget::wheelEvent(QWheelEvent* ev) {
     // Ctrl+wheel zooms around the cursor; plain wheel scrolls as usual.
     if (ev->modifiers() & Qt::ControlModifier) {
-        user_zoomed_       = true;
-        const qreal step   = std::pow(1.15, ev->angleDelta().y() / 120.0);
-        const qreal cur    = transform().m11();
-        const qreal target = std::clamp(cur * step, 0.3, 4.0);
-        scale(target / cur, target / cur);
+        zoomBy(std::pow(1.15, ev->angleDelta().y() / 120.0));
         ev->accept();
         return;
     }
@@ -1052,6 +1149,11 @@ void SchematicDatapathWidget::keyPressEvent(QKeyEvent* ev) {
 void SchematicDatapathWidget::resizeEvent(QResizeEvent* ev) {
     QGraphicsView::resizeEvent(ev);
     fitSchematic();
+    // Keep the zoom buttons pinned to the top-right of the viewport.
+    const int x = viewport()->width() - 30;
+    btn_zoom_in_->move(x, 6);
+    btn_zoom_out_->move(x, 34);
+    btn_zoom_fit_->move(x, 62);
 }
 
 void SchematicDatapathWidget::focusInEvent(QFocusEvent* ev) {

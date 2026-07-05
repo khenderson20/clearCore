@@ -13,6 +13,7 @@ class QAction;
 class QToolBar;
 class QMenu;
 class QCloseEvent;
+class QSlider;
 
 namespace ads {
 class CDockManager;
@@ -115,6 +116,9 @@ private:
     QLabel* status_cycles_lbl_ = nullptr;
     QLabel* status_instrs_lbl_ = nullptr;
     QLabel* status_cpi_lbl_    = nullptr;
+
+    // Toolbar execution-speed slider (mirrors the Preferences setting)
+    QSlider* speed_slider_ = nullptr;
 
     // Actions
     QAction* act_step_      = nullptr;
