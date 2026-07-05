@@ -101,14 +101,15 @@ private:
     QLabel*                  asm_status_lbl_  = nullptr;
 
     // Statistics labels
-    QLabel* stat_cycles_lbl_   = nullptr;
-    QLabel* stat_instrs_lbl_   = nullptr;
-    QLabel* stat_cpi_lbl_      = nullptr;
-    QLabel* stat_data_haz_lbl_ = nullptr;
-    QLabel* stat_ctrl_haz_lbl_ = nullptr;
-    QLabel* stat_fwd_lbl_      = nullptr;
-    QLabel* stat_stalls_lbl_   = nullptr;
-    QLabel* stat_flushes_lbl_  = nullptr;
+    QLabel*  stat_cycles_lbl_   = nullptr;
+    QLabel*  stat_instrs_lbl_   = nullptr;
+    QLabel*  stat_cpi_lbl_      = nullptr;
+    QLabel*  stat_data_haz_lbl_ = nullptr;
+    QLabel*  stat_ctrl_haz_lbl_ = nullptr;
+    QLabel*  stat_fwd_lbl_      = nullptr;
+    QLabel*  stat_stalls_lbl_   = nullptr;
+    QLabel*  stat_flushes_lbl_  = nullptr;
+    QWidget* stat_cpi_card_     = nullptr;  // KPI card widget, re-colored by CPI health
 
     // Status bar labels
     QLabel* status_cycles_lbl_ = nullptr;
