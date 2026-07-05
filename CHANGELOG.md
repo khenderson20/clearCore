@@ -24,6 +24,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-07-05
+
 ### Added
 - **Windows and macOS release assets**: published releases now attach a Windows NSIS installer
   (`clearCore-<ver>-windows-x64.exe`) and a universal macOS `.dmg` (`clearCore-<ver>-macOS-universal.dmg`,
