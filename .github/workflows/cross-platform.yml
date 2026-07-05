@@ -116,6 +116,15 @@ jobs:
           echo "$archs" | grep -qw x86_64 || { echo "::error::missing x86_64 slice"; exit 1; }
           echo "✓ universal (arm64 + x86_64)"
 
+      # Suppress Windows Error Reporting dialogs so a crashing test subprocess
+      # exits immediately instead of blocking on a modal "stopped working" prompt.
+      - name: Suppress WER crash dialogs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-ItemProperty -Force -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" `
+            -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
+
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
 
