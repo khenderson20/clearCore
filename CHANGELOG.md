@@ -24,6 +24,36 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Ripes-style schematic datapath**: the Datapath panel is now a full circuit schematic of the 5-stage
+  pipeline (QGraphicsScene) — PC, instruction memory, register file, control, sign-extend, forwarding muxes,
+  ALU, branch logic, data memory, and the four pipeline registers, connected by routed wires. Live per cycle:
+  forwarding buses light orange/purple, the branch-flush path lights red, the write-back loop lights green
+  (only when the retiring instruction actually writes a register), mux select-input dots show the chosen input,
+  mnemonic + PC labels sit above each stage column, and value labels pin the fetch PC, ID immediate, and WB
+  result to their wires. Educational hover tooltips on every unit explain what it does and what it is doing
+  this cycle (control-signal breakdown included). Step animation glides an instruction token between columns
+  each clock edge. A hazard explainer chip names each stall/flush in plain language the moment it happens.
+  Ctrl+wheel / overlay buttons zoom; right-click exports a 2x PNG (`datapath-cycle-N.png`). (#83, #84)
+- **Pipeline Events panel**: scrolling, colour-coded log of every forward, stall, and flush (with the
+  instruction responsible), plus program milestones (load, breakpoints, halt, fault). Consecutive-cycle
+  repeats collapse into one entry; colours match the schematic wires. (#84)
+- **2-column IDE layout** (Qt Advanced Docking System): Code Editor left; Datapath centre; Registers, Memory,
+  Pipeline Trace, Statistics, and Pipeline Events tabbed below. Panels dock, float, and persist; View ▸ Panels
+  toggles and View ▸ Reset Layout restore them. (#80, #82)
+- **Statistics redesign**: Cycles / Instructions / CPI as large KPI cards, with the CPI card colour-coded
+  green/orange/red by pipeline health; pipeline-event counters gained explanatory tooltips. (#82)
+- Execution-speed slider in the main toolbar (10–1000 ms per cycle), synced with Preferences. (#84)
+
+### Fixed
+- **TUI froze on a blank screen at launch in packaged Linux builds** (`number_system_converter` from the
+  release archive): signed-integer-overflow UB in the startup splash's coordinate hash let GCC `-O3`
+  miscompile the splash setup into an infinite loop. Hash arithmetic now uses unsigned math; `-O0`/`-O2`
+  builds were never affected, which is why local builds ran fine. (#87)
+- Light/dark theming: ADS dock chrome no longer inherits the system palette (dark tab bars in light mode),
+  dropdown/spinbox arrows render again, dark-mode schematic stage tints no longer drown the wiring, and the
+  memory hex view labels its Offset/ASCII columns. (#82, #84)
+
 ---
 
 ## [0.2.1] - 2026-07-05
