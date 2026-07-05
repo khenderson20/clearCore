@@ -6,10 +6,11 @@
 #include "nsc_qt/examples.h"
 #include "nsc_qt/preferences_dialog.h"
 #include "nsc_qt/widgets/code_editor.h"
-#include "nsc_qt/widgets/datapath_widget.h"
 #include "nsc_qt/widgets/memory_widget.h"
+#include "nsc_qt/widgets/pipeline_events_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
 #include "nsc_qt/widgets/register_widget.h"
+#include "nsc_qt/widgets/schematic_datapath_widget.h"
 
 #include "mips/decoder.h"
 #include "mips/pipelined_cpu.h"
@@ -33,6 +34,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSize>
+#include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
@@ -54,7 +56,8 @@ namespace {
 // different version, so stale/incompatible layouts are cleanly discarded.
 // v1: all panels in one central tabbed area.
 // v2: 2-column split — Code Editor left, Datapath center-top, inspector tabs bottom.
-constexpr int kLayoutVersion = 2;
+// v3: adds the Pipeline Events panel to the bottom inspector row.
+constexpr int kLayoutVersion = 3;
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
@@ -132,7 +135,8 @@ void MainWindow::setupMenuBar() {
                                 "Datapath panel (click or Tab to focus):\n"
                                 "Left/Right  – Select a pipeline stage\n"
                                 "Enter       – Show stage detail\n"
-                                "Space       – Toggle breakpoint on selected stage");
+                                "Space       – Toggle breakpoint on selected stage\n"
+                                "Ctrl+Wheel  – Zoom schematic (right-click to fit/export)");
         QMessageBox::information(this, tr("Keyboard Shortcuts"), text);
     });
 }
@@ -150,6 +154,28 @@ void MainWindow::setupToolBar() {
     tb->addAction(act_reset_);
     tb->addSeparator();
     tb->addAction(act_open_);
+    tb->addSeparator();
+
+    // Execution-speed slider, in the toolbar where runs are started rather
+    // than buried in Preferences. Left = slow (long cycle interval, good for
+    // watching the datapath), right = fast. Mirrors the Preferences setting.
+    auto* speed_lbl = new QLabel(tr(" Speed: "), tb);
+    tb->addWidget(speed_lbl);
+    speed_slider_ = new QSlider(Qt::Horizontal, tb);
+    speed_slider_->setRange(10, 1000);  // cycle interval in ms
+    speed_slider_->setInvertedAppearance(true);
+    speed_slider_->setFixedWidth(140);
+    const QSettings s("nsc-qt", "clearCore-gui");
+    speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
+    speed_slider_->setToolTip(
+        tr("Run speed — one pipeline cycle every %1 ms").arg(speed_slider_->value()));
+    connect(speed_slider_, &QSlider::valueChanged, this, [this](int ms) {
+        controller_->setExecutionSpeed(ms);
+        speed_slider_->setToolTip(tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+        QSettings settings("nsc-qt", "clearCore-gui");
+        settings.setValue("executionSpeed", ms);
+    });
+    tb->addWidget(speed_slider_);
 }
 
 // ── Central widget ────────────────────────────────────────────────────────────
@@ -159,10 +185,11 @@ void MainWindow::setupCentralWidget() {
     ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasUndockButton, false);
     dock_manager_ = new ads::CDockManager(this);
 
-    datapath_widget_ = new DatapathWidget(this);
+    datapath_widget_ = new SchematicDatapathWidget(this);
     register_widget_ = new RegisterWidget(this);
     memory_widget_   = new MemoryWidget(this);
     trace_widget_    = new PipelineTraceWidget(this);
+    events_widget_   = new PipelineEventsWidget(this);
 
     // Helper: create a named dock and register its View > Panels toggle.
     auto make_dock = [&](const QString& title, QWidget* contents) -> ads::CDockWidget* {
@@ -208,6 +235,8 @@ void MainWindow::setupCentralWidget() {
     dock_manager_->addDockWidgetTabToArea(trace_dock, bottom_area);
     auto* stats_dock = make_dock(tr("Statistics"), createStatisticsTab());
     dock_manager_->addDockWidgetTabToArea(stats_dock, bottom_area);
+    auto* events_dock = make_dock(tr("Pipeline Events"), events_widget_);
+    dock_manager_->addDockWidgetTabToArea(events_dock, bottom_area);
     bottom_area->setCurrentIndex(0);  // Registers in front
 
     // Snapshot the default arrangement so resetLayout() and the fallback
@@ -285,15 +314,15 @@ QWidget* MainWindow::createCodeEditorTab() {
                                         "#   add  $t2, $t0, $t1\n"));
     vl->addWidget(code_editor_);
 
-    // Separator line above button row
-    auto* sep = new QFrame(w);
-    sep->setFrameShape(QFrame::HLine);
-    sep->setFrameShadow(QFrame::Sunken);
-    vl->addWidget(sep);
-
-    auto* btn_row = new QHBoxLayout;
+    // Button toolbar row — given a named container so the QSS can set its
+    // background independently of the ADS dock area that hosts this panel.
+    auto* btn_bar = new QWidget(w);
+    btn_bar->setObjectName("codeEditorBtnBar");
+    btn_bar->setAutoFillBackground(true);
+    auto* btn_row = new QHBoxLayout(btn_bar);
     btn_row->setContentsMargins(8, 6, 8, 6);
     btn_row->setSpacing(8);
+    vl->addWidget(btn_bar);
 
     auto* asm_btn = new QPushButton(tr("Assemble"), w);
     asm_btn->setObjectName("primaryButton");
@@ -318,7 +347,7 @@ QWidget* MainWindow::createCodeEditorTab() {
     connect(examples_combo_, qOverload<int>(&QComboBox::activated), this,
             &MainWindow::onExampleSelected);
 
-    asm_status_lbl_ = new QLabel(w);
+    asm_status_lbl_ = new QLabel(btn_bar);
     asm_status_lbl_->setFont(scale::monoFont(scale::kFontSizeBody));
     btn_row->addWidget(asm_btn);
     btn_row->addWidget(load_btn);
@@ -327,7 +356,6 @@ QWidget* MainWindow::createCodeEditorTab() {
     btn_row->addSpacing(12);
     btn_row->addWidget(asm_status_lbl_);
     btn_row->addStretch();
-    vl->addLayout(btn_row);
 
     connect(asm_btn, &QPushButton::clicked, this, &MainWindow::onAssemble);
     connect(load_btn, &QPushButton::clicked, this, &MainWindow::onLoad);
@@ -360,39 +388,75 @@ void MainWindow::onExampleSelected(int idx) {
 }
 
 QWidget* MainWindow::createStatisticsTab() {
-    auto* w  = new QWidget;
+    auto* w = new QWidget;
+    w->setAutoFillBackground(true);
     auto* vl = new QVBoxLayout(w);
-    vl->setContentsMargins(16, 16, 16, 16);
+    vl->setContentsMargins(12, 12, 12, 12);
     vl->setSpacing(12);
 
-    auto mkLabel = [&](QFormLayout* fl, const QString& name, QLabel*& ptr) {
-        ptr = new QLabel("—", w);
-        ptr->setFont(scale::monoFont(scale::kFontSizeBody));
-        fl->addRow(name, ptr);
+    // ── KPI card row ──────────────────────────────────────────────────────────
+    // Three headline metrics in large-number "cards" for immediate readability.
+    // The CPI card background is color-coded (green/orange/red) in onStatisticsUpdated()
+    // and stored in stat_cpi_card_ for later updates. Values are mouse-selectable
+    // so students can copy numbers into lab reports without retyping.
+    auto mkCard = [&](const QString& label, QLabel*& val_ptr) -> QFrame* {
+        auto* card = new QFrame(w);
+        card->setFrameShape(QFrame::StyledPanel);
+        card->setObjectName("statCard");
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(12, 10, 12, 10);
+        cl->setSpacing(4);
+
+        val_ptr = new QLabel("—", card);
+        val_ptr->setAlignment(Qt::AlignCenter);
+        val_ptr->setFont(scale::monoFont(26, true));
+        val_ptr->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+        auto* name_lbl = new QLabel(label, card);
+        name_lbl->setAlignment(Qt::AlignCenter);
+        name_lbl->setObjectName("statCardLabel");
+        name_lbl->setFont(scale::monoFont(scale::kFontSizeDense));
+
+        cl->addWidget(val_ptr);
+        cl->addWidget(name_lbl);
+        return card;
     };
 
-    // ── Performance group ──────────────────────────────────────────────────────
-    auto* perf_box = new QGroupBox(tr("Performance"), w);
-    auto* perf_fl  = new QFormLayout(perf_box);
-    perf_fl->setContentsMargins(12, 8, 12, 8);
-    perf_fl->setSpacing(8);
-    perf_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(perf_fl, tr("Cycles executed:"), stat_cycles_lbl_);
-    mkLabel(perf_fl, tr("Instructions retired:"), stat_instrs_lbl_);
-    mkLabel(perf_fl, tr("CPI:"), stat_cpi_lbl_);
-    vl->addWidget(perf_box);
+    auto* kpi_row = new QHBoxLayout;
+    kpi_row->setSpacing(8);
+    kpi_row->addWidget(mkCard(tr("Cycles"), stat_cycles_lbl_), 1);
+    kpi_row->addWidget(mkCard(tr("Instructions"), stat_instrs_lbl_), 1);
+    auto* cpi_card = mkCard(tr("CPI"), stat_cpi_lbl_);
+    cpi_card->setToolTip(tr("Cycles Per Instruction — lower is better\n"
+                            "1.0 = ideal (no stalls)   >2.0 = heavy pipeline overhead"));
+    stat_cpi_card_ = cpi_card;
+    kpi_row->addWidget(cpi_card, 1);
+    vl->addLayout(kpi_row);
 
-    // ── Pipeline events group ──────────────────────────────────────────────────
+    // ── Pipeline events ────────────────────────────────────────────────────────
     auto* pipe_box = new QGroupBox(tr("Pipeline Events"), w);
     auto* pipe_fl  = new QFormLayout(pipe_box);
-    pipe_fl->setContentsMargins(12, 8, 12, 8);
+    pipe_fl->setContentsMargins(12, 8, 12, 12);
     pipe_fl->setSpacing(8);
     pipe_fl->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    mkLabel(pipe_fl, tr("Data hazards:"), stat_data_haz_lbl_);
-    mkLabel(pipe_fl, tr("Control hazards:"), stat_ctrl_haz_lbl_);
-    mkLabel(pipe_fl, tr("Forwarding events:"), stat_fwd_lbl_);
-    mkLabel(pipe_fl, tr("Stalls:"), stat_stalls_lbl_);
-    mkLabel(pipe_fl, tr("Flushes:"), stat_flushes_lbl_);
+
+    auto mkRow = [&](const QString& name, QLabel*& ptr, const QString& tip) {
+        ptr = new QLabel("—", pipe_box);
+        ptr->setFont(scale::monoFont(scale::kFontSizeBody));
+        ptr->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        ptr->setToolTip(tip);
+        pipe_fl->addRow(name, ptr);
+    };
+    mkRow(tr("Data hazards:"), stat_data_haz_lbl_,
+          tr("RAW (Read-After-Write) hazards detected in the Decode stage"));
+    mkRow(tr("Control hazards:"), stat_ctrl_haz_lbl_,
+          tr("Hazards from branches and jumps that disrupted the pipeline"));
+    mkRow(tr("Forwarding events:"), stat_fwd_lbl_,
+          tr("Times the forwarding unit bypassed the register file to resolve a data hazard"));
+    mkRow(tr("Stalls:"), stat_stalls_lbl_,
+          tr("Bubble cycles inserted for hazards that could not be resolved by forwarding"));
+    mkRow(tr("Flushes:"), stat_flushes_lbl_,
+          tr("Pipeline flushes caused by branch mispredictions or control hazards"));
     vl->addWidget(pipe_box);
 
     vl->addStretch();
@@ -412,12 +476,14 @@ void MainWindow::setupConnections() {
     connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
     connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
+        events_widget_->logEvent(PipelineEventsWidget::Kind::Info, controller_->cycleCount(),
+                                 tr("breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')));
         setRunState(false);
     });
 
-    connect(datapath_widget_, &DatapathWidget::breakpointToggleRequested, this,
+    connect(datapath_widget_, &SchematicDatapathWidget::breakpointToggleRequested, this,
             &MainWindow::onBreakpointToggle);
-    connect(datapath_widget_, &DatapathWidget::stageDetailRequested, this,
+    connect(datapath_widget_, &SchematicDatapathWidget::stageDetailRequested, this,
             &MainWindow::onStageDetailRequested);
 }
 
@@ -445,6 +511,7 @@ void MainWindow::onReset() {
     controller_->reset();
     register_widget_->clear();
     trace_widget_->clear();
+    events_widget_->clear();
     statusBar()->showMessage(tr("Reset."), 2000);
 }
 
@@ -480,6 +547,9 @@ void MainWindow::onOpenFile() {
     }
     statusBar()->showMessage(tr("Loaded %1 instructions from %2").arg(prog.words.size()).arg(path),
                              4000);
+    events_widget_->logEvent(
+        PipelineEventsWidget::Kind::Info, 0,
+        tr("program loaded from file (%1 instructions)").arg(prog.words.size()));
 }
 
 void MainWindow::onSaveTrace() {
@@ -537,6 +607,8 @@ void MainWindow::onLoad() {
     }
     asm_status_lbl_->setStyleSheet("color: green;");
     asm_status_lbl_->setText(tr("✓ %1 instructions loaded").arg(assembled_words_.size()));
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Info, 0,
+                             tr("program loaded (%1 instructions)").arg(assembled_words_.size()));
 }
 
 void MainWindow::onShowPreferences() {
@@ -544,6 +616,8 @@ void MainWindow::onShowPreferences() {
     connect(&dlg, &PreferencesDialog::colorSchemeChanged, this, &MainWindow::applyColorScheme);
     connect(&dlg, &PreferencesDialog::executionSpeedChanged, controller_.get(),
             &SimulatorController::setExecutionSpeed);
+    // Keep the toolbar slider in step with the Preferences control.
+    connect(&dlg, &PreferencesDialog::executionSpeedChanged, speed_slider_, &QSlider::setValue);
     connect(&dlg, &PreferencesDialog::showRegisterAliasesChanged, register_widget_,
             &RegisterWidget::setShowAliases);
     connect(&dlg, &PreferencesDialog::fontSizeChanged, this, [this](int sz) {
@@ -559,6 +633,7 @@ void MainWindow::onCycleExecuted(uint64_t count) {
 void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     datapath_widget_->setPipelineState(state);
     trace_widget_->updateCycle(state);
+    events_widget_->updateCycle(state);
 
     // Gather register values once, then push state + values to RegisterWidget
     // together so it refreshes each of its 32 cells exactly once per cycle.
@@ -566,6 +641,7 @@ void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
     for (int i = 0; i < 32; ++i)
         reg_vals[i] = controller_->registerValue(static_cast<uint8_t>(i));
     register_widget_->updateCycle(state, reg_vals);
+    datapath_widget_->setRegisterValues(reg_vals);  // live operand tooltips
 
     // Refresh memory
     memory_widget_->updateDisplay(controller_->memory());
@@ -582,14 +658,35 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
 
     if (cpi > 0) {
         stat_cpi_lbl_->setText(QString::number(cpi, 'f', 2));
-        const QColor cpi_color = cpi >= 2.0   ? QColor("#F44336")
-                                 : cpi >= 1.5 ? QColor("#FF9800")
-                                              : QColor("#4CAF50");
+        const QColor text_color = cpi >= 2.0   ? QColor("#F44336")
+                                  : cpi >= 1.5 ? QColor("#FF9800")
+                                               : QColor("#4CAF50");
         stat_cpi_lbl_->setStyleSheet(
-            QString("color: %1; font-weight: bold;").arg(cpi_color.name()));
+            QString("color: %1; font-weight: bold;").arg(text_color.name()));
+        // Color the card background to give a glanceable health signal even
+        // when the user isn't reading the exact number.
+        if (stat_cpi_card_) {
+            const QColor bg  = dark_mode_ ? (cpi >= 2.0   ? QColor("#3D1515")
+                                             : cpi >= 1.5 ? QColor("#3D2D10")
+                                                          : QColor("#152D15"))
+                                          : (cpi >= 2.0   ? QColor("#FFEBEE")
+                                             : cpi >= 1.5 ? QColor("#FFF3E0")
+                                                          : QColor("#E8F5E9"));
+            const QColor bdr = dark_mode_ ? (cpi >= 2.0   ? QColor("#7C2020")
+                                             : cpi >= 1.5 ? QColor("#7C5810")
+                                                          : QColor("#1E7C1E"))
+                                          : (cpi >= 2.0   ? QColor("#EF9A9A")
+                                             : cpi >= 1.5 ? QColor("#FFCC80")
+                                                          : QColor("#A5D6A7"));
+            stat_cpi_card_->setStyleSheet(
+                QString(
+                    "QFrame#statCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
+                    .arg(bg.name(), bdr.name()));
+        }
     } else {
         stat_cpi_lbl_->setText("—");
         stat_cpi_lbl_->setStyleSheet("");
+        if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
     }
 
     stat_data_haz_lbl_->setText(QString::number(stats.data_hazards));
@@ -602,12 +699,16 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
 void MainWindow::onHalted() {
     controller_->stop();
     setRunState(false);
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Success, controller_->cycleCount(),
+                             tr("program halted (spin-loop detected)"));
     flashStatusBanner(true, tr("✓ Program halted (spin-loop detected)."));
 }
 
 void MainWindow::onFaulted() {
     controller_->stop();
     setRunState(false);
+    events_widget_->logEvent(PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
+                             tr("processor fault"));
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
 }
 
@@ -715,6 +816,14 @@ void MainWindow::applyColorScheme(bool dark) {
         pal.setColor(QPalette::Button, QColor(0x3C, 0x3C, 0x3C));
         pal.setColor(QPalette::ButtonText, Qt::white);
         pal.setColor(QPalette::BrightText, Qt::red);
+        // 3D/bevel roles — set explicitly so ADS's palette(light/dark/mid) selectors
+        // resolve to our dark-theme values rather than the system palette's defaults.
+        pal.setColor(QPalette::Light, QColor(0x3C, 0x3C, 0x3C));
+        pal.setColor(QPalette::Midlight, QColor(0x2D, 0x2D, 0x2D));
+        pal.setColor(QPalette::Dark, QColor(0x14, 0x14, 0x14));
+        pal.setColor(QPalette::Mid, QColor(0x22, 0x22, 0x22));
+        pal.setColor(QPalette::Shadow, Qt::black);
+        pal.setColor(QPalette::PlaceholderText, QColor(0x66, 0x66, 0x66));
         pal.setColor(QPalette::Highlight, QColor(0x26, 0x4F, 0x78));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     } else {
@@ -727,6 +836,15 @@ void MainWindow::applyColorScheme(bool dark) {
         pal.setColor(QPalette::Text, Qt::black);
         pal.setColor(QPalette::Button, QColor(0xEE, 0xEE, 0xEE));
         pal.setColor(QPalette::ButtonText, Qt::black);
+        // 3D/bevel roles — critical: ADS uses palette(light) as CDockWidget background.
+        // Setting Light=white here means that background resolves to white in light mode
+        // rather than inheriting whatever the system's dark theme has for QPalette::Light.
+        pal.setColor(QPalette::Light, Qt::white);
+        pal.setColor(QPalette::Midlight, QColor(0xF8, 0xF8, 0xF8));
+        pal.setColor(QPalette::Dark, QColor(0xBE, 0xBE, 0xBE));
+        pal.setColor(QPalette::Mid, QColor(0xD0, 0xD0, 0xD0));
+        pal.setColor(QPalette::Shadow, QColor(0x80, 0x80, 0x80));
+        pal.setColor(QPalette::PlaceholderText, QColor(0x99, 0x99, 0x99));
         pal.setColor(QPalette::Highlight, QColor(0x00, 0x78, 0xD4));
         pal.setColor(QPalette::HighlightedText, Qt::white);
     }
@@ -840,8 +958,6 @@ QSpinBox {
     padding: 2px 6px;
 }
 QSpinBox::up-button, QSpinBox::down-button { background: #3C3C3C; border: none; width: 16px; }
-QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #888; }
-QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #888; }
 
 QScrollBar:vertical   { background: #1E1E1E; width: 10px; border: none; }
 QScrollBar:horizontal { background: #1E1E1E; height: 10px; border: none; }
@@ -855,6 +971,39 @@ QFrame[frameShape="4"] { color: #444444; }
 QFrame[frameShape="5"] { color: #444444; }
 QWidget#regHeader { background: #252526; border-bottom: 1px solid #3C3C3C; }
 QWidget#regHeader QLabel { color: #9CDCFE; background: transparent; border: none; }
+
+QComboBox {
+    background: #3C3C3C;
+    color: #CCCCCC;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 4px 8px 4px 10px;
+    min-width: 80px;
+}
+QComboBox:hover { border-color: #777777; }
+QComboBox QAbstractItemView {
+    background: #252526;
+    color: #CCCCCC;
+    border: 1px solid #454545;
+    selection-background-color: #094771;
+    selection-color: white;
+}
+
+QWidget#codeEditorBtnBar {
+    background: #252526;
+    border-top: 1px solid #3C3C3C;
+}
+
+QListWidget { background: #1E1E1E; color: #CCCCCC; border: none; }
+QListWidget::item { padding: 1px 6px; }
+
+QFrame#statCard {
+    background: #2D2D2D;
+    border: 1px solid #3C3C3C;
+    border-radius: 6px;
+}
+QFrame#statCard QLabel { background: transparent; }
+QLabel#statCardLabel { color: #888888; }
 )"
                              : R"(
 QMainWindow, QDialog { background: #F5F5F5; }
@@ -963,8 +1112,6 @@ QSpinBox {
     padding: 2px 6px;
 }
 QSpinBox::up-button, QSpinBox::down-button { background: #EEEEEE; border: none; width: 16px; }
-QSpinBox::up-arrow   { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid #666; }
-QSpinBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top:    4px solid #666; }
 
 QScrollBar:vertical   { background: #F5F5F5; width: 10px; border: none; }
 QScrollBar:horizontal { background: #F5F5F5; height: 10px; border: none; }
@@ -978,13 +1125,101 @@ QFrame[frameShape="4"] { color: #DDDDDD; }
 QFrame[frameShape="5"] { color: #DDDDDD; }
 QWidget#regHeader { background: #EBEBEB; border-bottom: 1px solid #DDDDDD; }
 QWidget#regHeader QLabel { color: #0078D4; background: transparent; border: none; }
+
+QComboBox {
+    background: white;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    padding: 4px 8px 4px 10px;
+    min-width: 80px;
+}
+QComboBox:hover { border-color: #AAAAAA; }
+QComboBox QAbstractItemView {
+    background: white;
+    color: #333333;
+    border: 1px solid #CCCCCC;
+    selection-background-color: #0078D4;
+    selection-color: white;
+}
+
+QWidget#codeEditorBtnBar {
+    background: #F0F0F0;
+    border-top: 1px solid #DDDDDD;
+}
+
+QListWidget { background: white; color: #333333; border: none; }
+QListWidget::item { padding: 1px 6px; }
+
+QFrame#statCard {
+    background: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+}
+QFrame#statCard QLabel { background: transparent; }
+QLabel#statCardLabel { color: #777777; }
 )";
     qApp->setStyleSheet(qss);
+
+    // ADS calls dock_manager_->setStyleSheet(its_built_in_css) during
+    // construction, which takes precedence over qApp->setStyleSheet() for
+    // all ads--* selectors. The only way to theme ADS elements is to append
+    // our overrides onto its own stylesheet. We cache the ADS base CSS once
+    // on the first call (after dock_manager_ is created) so subsequent
+    // scheme switches always start from the unmodified original.
+    if (dock_manager_) {
+        static const QString ads_base  = dock_manager_->styleSheet();
+        const QString        ads_theme = dark ? R"(
+ads--CDockContainerWidget { background: #1E1E1E; }
+ads--CDockContainerWidget ads--CDockSplitter::handle { background: #3C3C3C; }
+ads--CDockAreaWidget      { background: #1E1E1E; }
+ads--CDockAreaTitleBar    { background: #252526; border-bottom: 1px solid #3C3C3C; }
+ads--CDockWidgetTab {
+    background: #2D2D2D;
+    border-color: #3C3C3C;
+    padding: 4px 16px;
+}
+ads--CDockWidgetTab:hover { background: #383838; }
+ads--CDockWidgetTab[activeTab="true"] {
+    background: #1E1E1E;
+    border-top: 2px solid #007ACC;
+}
+ads--CDockWidgetTab QLabel           { color: #888888; }
+ads--CDockWidgetTab[activeTab="true"] QLabel { color: #FFFFFF; }
+ads--CDockWidget { background: #1E1E1E; border: none; }
+QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
+)"
+                                              : R"(
+ads--CDockContainerWidget { background: #F5F5F5; }
+ads--CDockContainerWidget ads--CDockSplitter::handle { background: #D5D5D5; }
+ads--CDockAreaWidget      { background: #F5F5F5; }
+ads--CDockAreaTitleBar    { background: #E8E8E8; border-bottom: 1px solid #CCCCCC; }
+ads--CDockWidgetTab {
+    background: #E8E8E8;
+    border-color: #D0D0D0;
+    padding: 4px 16px;
+}
+ads--CDockWidgetTab:hover { background: #DCDCDC; }
+ads--CDockWidgetTab[activeTab="true"] {
+    background: white;
+    border-top: 2px solid #0078D4;
+}
+ads--CDockWidgetTab QLabel           { color: #555555; }
+ads--CDockWidgetTab[activeTab="true"] QLabel { color: #1A1A1A; }
+ads--CDockWidget { background: white; border: none; }
+QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
+)";
+        dock_manager_->setStyleSheet(ads_base + ads_theme);
+    }
+
+    // Reset the CPI card to the QSS default (color re-applied by onStatisticsUpdated).
+    if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
 
     datapath_widget_->setDarkMode(dark);
     register_widget_->setDarkMode(dark);
     memory_widget_->setDarkMode(dark);
     trace_widget_->setDarkMode(dark);
+    events_widget_->setDarkMode(dark);
     code_editor_->setDarkMode(dark);
 }
 

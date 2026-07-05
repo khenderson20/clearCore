@@ -13,6 +13,7 @@ class QAction;
 class QToolBar;
 class QMenu;
 class QCloseEvent;
+class QSlider;
 
 namespace ads {
 class CDockManager;
@@ -20,10 +21,11 @@ class CDockManager;
 
 namespace nsc::qt {
 
-class DatapathWidget;
+class SchematicDatapathWidget;
 class RegisterWidget;
 class MemoryWidget;
 class PipelineTraceWidget;
+class PipelineEventsWidget;
 class CodeEditor;
 
 class MainWindow : public QMainWindow {
@@ -89,31 +91,36 @@ private:
     std::unique_ptr<SimulatorController> controller_;
 
     // Widgets
-    ads::CDockManager*   dock_manager_ = nullptr;
-    QByteArray           default_layout_;             // snapshot of the first-run arrangement
-    QMenu*               panels_menu_     = nullptr;  // View > Panels toggle actions
-    DatapathWidget*      datapath_widget_ = nullptr;
-    RegisterWidget*      register_widget_ = nullptr;
-    MemoryWidget*        memory_widget_   = nullptr;
-    PipelineTraceWidget* trace_widget_    = nullptr;
-    CodeEditor*          code_editor_     = nullptr;
-    QComboBox*           examples_combo_  = nullptr;
-    QLabel*              asm_status_lbl_  = nullptr;
+    ads::CDockManager*       dock_manager_ = nullptr;
+    QByteArray               default_layout_;             // snapshot of the first-run arrangement
+    QMenu*                   panels_menu_     = nullptr;  // View > Panels toggle actions
+    SchematicDatapathWidget* datapath_widget_ = nullptr;
+    RegisterWidget*          register_widget_ = nullptr;
+    MemoryWidget*            memory_widget_   = nullptr;
+    PipelineTraceWidget*     trace_widget_    = nullptr;
+    PipelineEventsWidget*    events_widget_   = nullptr;
+    CodeEditor*              code_editor_     = nullptr;
+    QComboBox*               examples_combo_  = nullptr;
+    QLabel*                  asm_status_lbl_  = nullptr;
 
     // Statistics labels
-    QLabel* stat_cycles_lbl_   = nullptr;
-    QLabel* stat_instrs_lbl_   = nullptr;
-    QLabel* stat_cpi_lbl_      = nullptr;
-    QLabel* stat_data_haz_lbl_ = nullptr;
-    QLabel* stat_ctrl_haz_lbl_ = nullptr;
-    QLabel* stat_fwd_lbl_      = nullptr;
-    QLabel* stat_stalls_lbl_   = nullptr;
-    QLabel* stat_flushes_lbl_  = nullptr;
+    QLabel*  stat_cycles_lbl_   = nullptr;
+    QLabel*  stat_instrs_lbl_   = nullptr;
+    QLabel*  stat_cpi_lbl_      = nullptr;
+    QLabel*  stat_data_haz_lbl_ = nullptr;
+    QLabel*  stat_ctrl_haz_lbl_ = nullptr;
+    QLabel*  stat_fwd_lbl_      = nullptr;
+    QLabel*  stat_stalls_lbl_   = nullptr;
+    QLabel*  stat_flushes_lbl_  = nullptr;
+    QWidget* stat_cpi_card_     = nullptr;  // KPI card widget, re-colored by CPI health
 
     // Status bar labels
     QLabel* status_cycles_lbl_ = nullptr;
     QLabel* status_instrs_lbl_ = nullptr;
     QLabel* status_cpi_lbl_    = nullptr;
+
+    // Toolbar execution-speed slider (mirrors the Preferences setting)
+    QSlider* speed_slider_ = nullptr;
 
     // Actions
     QAction* act_step_      = nullptr;
