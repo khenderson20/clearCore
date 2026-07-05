@@ -24,6 +24,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] - 2026-07-05
+
 ### Added
 - **Ripes-style schematic datapath**: the Datapath panel is now a full circuit schematic of the 5-stage
   pipeline (QGraphicsScene) — PC, instruction memory, register file, control, sign-extend, forwarding muxes,
