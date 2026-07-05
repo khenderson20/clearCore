@@ -36,7 +36,7 @@
 <table align="center">
   <tr>
     <td align="center"><img src="assets/demo_small.gif" alt="clearCore TUI demo" width="100%"></td>
-    <td align="center"><video src="assets/demo-compressed.mp4" loop autoplay controls width="100%"></video></td>
+    <td align="center"><video src="https://github.com/user-attachments/assets/a56c6fcb-1b09-48f3-8099-97f5f77fe33b" loop autoplay muted controls width="100%"></video></td>
   </tr>
 </table>
 
