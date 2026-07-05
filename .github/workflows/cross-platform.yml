@@ -67,15 +67,21 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja
 
+      - name: Ensure NSIS (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nsis --no-progress -y
+
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset release -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
 
       - name: Configure (macOS, universal)
         if: runner.os == 'macOS'
         run: >
           cmake --preset release
-          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
@@ -83,3 +89,23 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
+
+      # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
+      - name: Package installer (Windows / NSIS)
+        if: runner.os == 'Windows'
+        working-directory: build/release
+        run: cpack -G NSIS -V
+
+      - name: Package installer (macOS / .dmg)
+        if: runner.os == 'macOS'
+        working-directory: build/release
+        run: cpack -G DragNDrop -V
+
+      - name: Upload installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clearCore-${{ matrix.name }}
+          path: |
+            build/release/*.exe
+            build/release/*.dmg
+          if-no-files-found: error

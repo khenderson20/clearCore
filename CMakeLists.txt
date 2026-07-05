@@ -688,6 +688,53 @@ install(FILES
 )
 
 # ============================================================================
+# SELF-CONTAINED BUNDLING (Windows / macOS installers)
+# ============================================================================
+# For standalone Windows/macOS installers the Qt runtime must ship inside the
+# package so the app launches on a machine with no system Qt. OFF by default so
+# Linux DEB/RPM (which declare Qt as a package dependency), the AppImage flow,
+# and plain developer installs are unaffected; the cross-platform release
+# workflow turns it ON.
+option(CLEARCORE_BUNDLE_QT "Bundle the Qt runtime into the install tree / installers" OFF)
+
+if (CLEARCORE_BUNDLE_QT AND (BUILD_QT6_UI OR BUILD_QT6_QUICK_UI))
+    # On macOS the GUI apps must be .app bundles for macdeployqt and the .dmg.
+    if (APPLE)
+        foreach (gui_target clearCore-gui clearCore-quick)
+            if (TARGET ${gui_target})
+                set_target_properties(${gui_target} PROPERTIES MACOSX_BUNDLE ON)
+            endif ()
+        endforeach ()
+    endif ()
+
+    # On Windows, also drag in the MSVC runtime redistributable DLLs.
+    if (WIN32)
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+        include(InstallRequiredSystemLibraries)
+    endif ()
+
+    # qt_generate_deploy_app_script hooks windeployqt/macdeployqt into
+    # `cmake --install`, so CPack automatically gathers Qt (and, for the QML
+    # app, its QML imports) next to the executables.
+    if (TARGET clearCore-gui)
+        qt_generate_deploy_app_script(
+                TARGET clearCore-gui
+                OUTPUT_SCRIPT deploy_clearcore_gui
+                NO_UNSUPPORTED_PLATFORM_ERROR
+        )
+        install(SCRIPT ${deploy_clearcore_gui})
+    endif ()
+    if (TARGET clearCore-quick)
+        qt_generate_deploy_app_script(
+                TARGET clearCore-quick
+                OUTPUT_SCRIPT deploy_clearcore_quick
+                NO_UNSUPPORTED_PLATFORM_ERROR
+        )
+        install(SCRIPT ${deploy_clearcore_quick})
+    endif ()
+endif ()
+
+# ============================================================================
 # PACKAGING (CPack)
 # ============================================================================
 #
@@ -714,10 +761,36 @@ set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 
-# Portable compressed archive by default; DEB/RPM are opt-in via `cpack -G`.
+# Default generator per platform (overridable with `cpack -G`): a native
+# installer on Windows/macOS, a portable archive elsewhere.
 if (NOT CPACK_GENERATOR)
-    set(CPACK_GENERATOR "TGZ")
+    if (WIN32)
+        set(CPACK_GENERATOR "NSIS")
+    elseif (APPLE)
+        set(CPACK_GENERATOR "DragNDrop")
+    else ()
+        set(CPACK_GENERATOR "TGZ")
+    endif ()
 endif ()
+
+# ── Windows NSIS installer ──────────────────────────────────────────────────
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "clearCore")
+set(CPACK_NSIS_PACKAGE_NAME "clearCore")
+set(CPACK_NSIS_DISPLAY_NAME "clearCore")
+set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+set(CPACK_NSIS_URL_INFO_ABOUT "${CPACK_PACKAGE_HOMEPAGE_URL}")
+# Start-menu / desktop shortcuts. Pairs of <exe-without-extension> ; <label>.
+# The TUI is a console program, so it gets no GUI shortcut.
+set(CPACK_PACKAGE_EXECUTABLES
+        "clearCore-gui"   "clearCore (Qt Widgets)"
+        "clearCore-quick" "clearCore (QML)"
+)
+set(CPACK_NSIS_CREATE_ICONS_EXTRA
+        "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\clearCore (Qt Widgets).lnk' '$INSTDIR\\\\${CMAKE_INSTALL_BINDIR}\\\\clearCore-gui.exe'"
+)
+
+# ── macOS drag-and-drop .dmg ────────────────────────────────────────────────
+set(CPACK_DMG_VOLUME_NAME "clearCore ${PROJECT_VERSION}")
 
 # Source packages (`cpack --config CPackSourceConfig.cmake`) exclude build
 # output, VCS, and IDE metadata.
