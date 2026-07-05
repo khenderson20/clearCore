@@ -18,6 +18,8 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <sstream>
+#include <string>
+#include <unordered_set>
 
 namespace nsc::qt {
 
@@ -187,9 +189,9 @@ QRect DatapathWidget::stageRect(int idx) const {
     const int avail_h = height() - TITLE_H - BOTTOM_H;
 
     // Gap scales: ~4.5% of available width per gap, min 16px
-    const int gap = std::max(GAP_MIN, avail_w / 22);
+    const int gap = (std::max)(GAP_MIN, avail_w / 22);
     // Box width fills remaining space equally across 5 stages
-    const int box_w = std::max(BOX_W_MIN, (avail_w - 4 * gap) / 5);
+    const int box_w = (std::max)(BOX_W_MIN, (avail_w - 4 * gap) / 5);
     // Height: 80% of box width, clamped so it fits vertically
     const int box_h = std::clamp(box_w * 4 / 5, BOX_H_MIN, avail_h);
 
@@ -251,7 +253,7 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx, const mips::StageSnapsho
     p.drawRoundedRect(r, 6, 6);
 
     // ── Header band ────────────────────────────────────────────────────────────
-    const int   header_h = std::max(24, r.height() / 4);
+    const int   header_h = (std::max)(24, r.height() / 4);
     const QRect header_r(r.x(), r.y(), r.width(), header_h);
 
     // Clip to box so rounded corners at top are preserved
@@ -267,7 +269,7 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx, const mips::StageSnapsho
 
     // Stage name -- clamped to the shared scale rather than an ad hoc
     // width-derived size (audit Warning: no modular scale / too-small text).
-    const int name_font_size = std::max(scale::kFontSizeBody, r.width() / 14);
+    const int name_font_size = (std::max)(scale::kFontSizeBody, r.width() / 14);
     p.setPen(dark_mode_ ? Qt::white : Qt::black);
     p.setFont(scale::monoFont(name_font_size, true));
     p.drawText(header_r, Qt::AlignCenter, QString(STAGE_NAMES[idx]));
@@ -275,7 +277,7 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx, const mips::StageSnapsho
     // ── Inactive state ─────────────────────────────────────────────────────────
     if (!snap.valid) {
         p.setPen(dark_mode_ ? QColor(0x66, 0x66, 0x66) : QColor(0xAA, 0xAA, 0xAA));
-        p.setFont(scale::monoFont(std::max(scale::kFontSizeDense, r.width() / 18)));
+        p.setFont(scale::monoFont((std::max)(scale::kFontSizeDense, r.width() / 18)));
         p.drawText(r.adjusted(0, header_h, 0, 0), Qt::AlignCenter,
                    snap.stalled   ? tr("STALL")
                    : snap.flushed ? tr("FLUSH")
@@ -285,8 +287,8 @@ void DatapathWidget::drawStageBox(QPainter& p, int idx, const mips::StageSnapsho
 
     // ── Content area ───────────────────────────────────────────────────────────
     const int content_top  = r.y() + header_h + 4;
-    const int content_pad  = std::max(4, r.width() / 30);
-    const int body_font_sz = std::max(scale::kFontSizeDense, r.width() / 18);
+    const int content_pad  = (std::max)(4, r.width() / 30);
+    const int body_font_sz = (std::max)(scale::kFontSizeDense, r.width() / 18);
 
     // PC label
     p.setPen(dark_mode_ ? QColor(0x9C, 0xDC, 0xFE) : QColor(0x00, 0x52, 0x9B));
@@ -336,7 +338,7 @@ void DatapathWidget::drawForwardingArrows(QPainter& p) const {
         const int    arc_y  = from_r.top() - 10;
         const QPoint start(from_r.center().x(), arc_y);
         const QPoint end(to_r.center().x(), arc_y);
-        const int    lift = std::max(20, (from_r.top() - 34) / 2);
+        const int    lift = (std::max)(20, (from_r.top() - 34) / 2);
 
         QPainterPath path;
         path.moveTo(start);
