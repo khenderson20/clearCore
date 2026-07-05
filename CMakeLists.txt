@@ -385,6 +385,18 @@ if (BUILD_QT6_UI)
             MACOSX_BUNDLE ON          # Create .app bundle on macOS
     )
 
+    # The Qt Advanced Docking System is a shared library; CPack installs it to
+    # lib/ next to the bin/ binary. Without an install RPATH the packaged
+    # clearCore-gui has no way to find libqtadvanceddocking-qt6.so.4 at runtime
+    # ("cannot open shared object file"). Point it at ../lib relative to the
+    # executable so the plain .tar.gz runs without LD_LIBRARY_PATH. (lib64 is
+    # covered too for distros/GNUInstallDirs that use it.)
+    if (UNIX AND NOT APPLE)
+        set_target_properties(clearCore-gui PROPERTIES
+                INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN/../lib64"
+        )
+    endif ()
+
     target_include_directories(clearCore-gui PRIVATE include)
     target_compile_features(clearCore-gui PUBLIC cxx_std_20)
     target_link_libraries(clearCore-gui
