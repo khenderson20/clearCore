@@ -125,6 +125,27 @@ jobs:
           New-ItemProperty -Force -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" `
             -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
 
+      # qt_ui_test links the Qt Advanced Docking System as a shared library
+      # (LGPL compliance — cannot be static). The DLL is built by FetchContent
+      # into build/release/_deps/qtads-build/ and is not on the system PATH,
+      # so Windows' DLL loader hangs on a missing-library dialog instead of
+      # exiting, causing the test to hit its 120 s timeout. Add the directory
+      # containing the Release DLL to PATH so the loader finds it.
+      - name: Add QADS DLL to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Recurse -Path build\release\_deps\qtads-build `
+                   -Filter "qtadvanceddocking*.dll" |
+                 Where-Object { $_.Name -notmatch 'd\.dll$' } |
+                 Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "QADS DLL not found under build\release\_deps\qtads-build"
+            exit 1
+          }
+          Write-Host "QADS DLL: $($dll.FullName)"
+          Add-Content $env:GITHUB_PATH $dll.DirectoryName
+
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
 

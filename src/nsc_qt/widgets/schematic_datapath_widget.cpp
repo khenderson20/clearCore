@@ -667,6 +667,15 @@ void SchematicDatapathWidget::applyTheme() {
 void SchematicDatapathWidget::applyState() {
     const Theme& t = theme(dark_mode_);
 
+    // Pre-decode each stage once; reuse results everywhere in this function
+    // and in updateTooltips() to avoid repeated Decoder::decode() calls per cycle.
+    using OptDecoded = std::optional<mips::DecodedInstr>;
+    std::array<OptDecoded, 5> decoded;
+    for (std::size_t i = 0; i < 5; ++i) {
+        const auto& s = state_.stages[i];
+        decoded[i]    = (s.valid && s.raw != 0) ? mips::Decoder::decode(s.raw) : std::nullopt;
+    }
+
     for (int i = 0; i < 5; ++i) {
         const auto&  snap = state_.stages[static_cast<std::size_t>(i)];
         const QColor tint = dark_mode_ ? kStageDark[i] : kStageLight[i];
@@ -689,7 +698,10 @@ void SchematicDatapathWidget::applyState() {
             color = t.stall;
         } else if (snap.valid) {
             text = snap.raw == 0 ? QStringLiteral("nop")
-                                 : QString::fromStdString(format_instr(snap.raw));
+                                 : QString::fromStdString(
+                                       decoded[static_cast<std::size_t>(i)]
+                                           ? format_decoded(*decoded[static_cast<std::size_t>(i)])
+                                           : "(?/?)");
         } else {
             text  = QStringLiteral("—");
             color = t.wire_dim;
@@ -735,13 +747,8 @@ void SchematicDatapathWidget::applyState() {
 
     // Control-signal accents: light the component that is actually working
     // this cycle, derived from the per-stage instruction's control word.
-    auto control_for = [](const mips::StageSnapshot& snap) -> mips::Control {
-        if (!snap.valid || snap.raw == 0) return {};
-        const auto d = mips::Decoder::decode(snap.raw);
-        return d ? mips::derive_control(*d) : mips::Control{};
-    };
-    const mips::Control mem_ctl = control_for(state_.stages[3]);
-    const mips::Control wb_ctl  = control_for(state_.stages[4]);
+    const mips::Control mem_ctl = decoded[3] ? mips::derive_control(*decoded[3]) : mips::Control{};
+    const mips::Control wb_ctl  = decoded[4] ? mips::derive_control(*decoded[4]) : mips::Control{};
 
     const QPen base_pen(t.comp_border, 1.4);
     dmem_box_->setPen((mem_ctl.mem_read || mem_ctl.mem_write) ? QPen(t.label, 2.4) : base_pen);
@@ -774,13 +781,9 @@ void SchematicDatapathWidget::applyState() {
 
     const auto& s_id = state_.stages[1];
     QString     imm_text;
-    if (s_id.valid && s_id.raw != 0) {
-        if (const auto d = mips::Decoder::decode(s_id.raw)) {
-            if (d->format == mips::InstrFormat::I) {
-                const auto imm = static_cast<int16_t>(d->i().imm);
-                imm_text       = QStringLiteral("imm=%1").arg(imm);
-            }
-        }
+    if (decoded[1] && decoded[1]->format == mips::InstrFormat::I) {
+        const auto imm = static_cast<int16_t>(decoded[1]->i().imm);
+        imm_text       = QStringLiteral("imm=%1").arg(imm);
     }
     val_imm_->setText(imm_text);
     val_imm_->setBrush(t.label);
@@ -788,21 +791,19 @@ void SchematicDatapathWidget::applyState() {
 
     const auto& s_wb = state_.stages[4];
     QString     wb_text;
-    if (s_wb.valid && s_wb.raw != 0 && wb_ctl.reg_write) {
-        if (const auto d = mips::Decoder::decode(s_wb.raw)) {
-            uint8_t dest = 0;
-            if (d->format == mips::InstrFormat::R)
-                dest = d->r().rd;
-            else if (d->format == mips::InstrFormat::I)
-                dest = d->i().rt;
-            else if (d->opcode == mips::Opcode::JAL)
-                dest = 31;  // jal writes the return address into $ra
-            if (dest != 0)
-                wb_text =
-                    QStringLiteral("$%1 = 0x%2")
-                        .arg(QString::fromStdString(std::string(mips::register_abi_name(dest))))
-                        .arg(reg_values_[dest], 8, 16, QChar('0'));
-        }
+    if (decoded[4] && wb_ctl.reg_write) {
+        const auto& d    = *decoded[4];
+        uint8_t     dest = 0;
+        if (d.format == mips::InstrFormat::R)
+            dest = d.r().rd;
+        else if (d.format == mips::InstrFormat::I)
+            dest = d.i().rt;
+        else if (d.opcode == mips::Opcode::JAL)
+            dest = 31;  // jal writes the return address into $ra
+        if (dest != 0)
+            wb_text = QStringLiteral("$%1 = 0x%2")
+                          .arg(QString::fromStdString(std::string(mips::register_abi_name(dest))))
+                          .arg(reg_values_[dest], 8, 16, QChar('0'));
     }
     val_wb_->setText(wb_text);
     val_wb_->setBrush(t.wb);
@@ -812,19 +813,15 @@ void SchematicDatapathWidget::applyState() {
     QString hz;
     QColor  hz_color;
     if (state_.branch_flush) {
-        const auto& s_mem2 = state_.stages[3];
-        hz                 = tr("Branch taken: %1 — PC redirected, younger instructions flushed")
-                                 .arg(s_mem2.valid && s_mem2.raw != 0
-                                          ? QString::fromStdString(format_instr(s_mem2.raw))
-                                          : QStringLiteral("branch"));
-        hz_color           = t.flush;
+        hz       = tr("Branch taken: %1 — PC redirected, younger instructions flushed")
+                       .arg(decoded[3] ? QString::fromStdString(format_decoded(*decoded[3]))
+                                       : QStringLiteral("branch"));
+        hz_color = t.flush;
     } else if (state_.load_stall) {
-        const auto& s_ex2 = state_.stages[2];
-        hz =
-            tr("Load-use hazard: %1 — its data arrives after MEM, so the "
-               "dependent instruction waits one cycle")
-                .arg(s_ex2.valid && s_ex2.raw != 0 ? QString::fromStdString(format_instr(s_ex2.raw))
-                                                   : QStringLiteral("lw"));
+        hz       = tr("Load-use hazard: %1 — its data arrives after MEM, so the "
+                      "dependent instruction waits one cycle")
+                       .arg(decoded[2] ? QString::fromStdString(format_decoded(*decoded[2]))
+                                       : QStringLiteral("lw"));
         hz_color = t.stall;
     }
     if (hz.isEmpty()) {
@@ -856,10 +853,21 @@ void SchematicDatapathWidget::updateTooltips() {
     const auto& s_ex  = state_.stages[2];
     const auto& s_mem = state_.stages[3];
 
-    auto instr_line = [](const mips::StageSnapshot& s) {
-        if (!s.valid) return QString("—");
+    // Decode each stage once; avoid repeated Decoder::decode() per tooltip line.
+    using OptDecoded = std::optional<mips::DecodedInstr>;
+    const OptDecoded dec0 =
+        (s_if.valid && s_if.raw != 0) ? mips::Decoder::decode(s_if.raw) : std::nullopt;
+    const OptDecoded dec1 =
+        (s_id.valid && s_id.raw != 0) ? mips::Decoder::decode(s_id.raw) : std::nullopt;
+    const OptDecoded dec2 =
+        (s_ex.valid && s_ex.raw != 0) ? mips::Decoder::decode(s_ex.raw) : std::nullopt;
+    const OptDecoded dec3 =
+        (s_mem.valid && s_mem.raw != 0) ? mips::Decoder::decode(s_mem.raw) : std::nullopt;
+
+    auto instr_label = [](const mips::StageSnapshot& s, const OptDecoded& d) -> QString {
+        if (!s.valid) return QStringLiteral("—");
         if (s.raw == 0) return QStringLiteral("nop");
-        return QString::fromStdString(format_instr(s.raw));
+        return d ? QString::fromStdString(format_decoded(*d)) : QStringLiteral("(?/?)");
     };
 
     pc_box_->setToolTip(tr("Program Counter — holds the address of the instruction "
@@ -868,47 +876,43 @@ void SchematicDatapathWidget::updateTooltips() {
 
     imem_box_->setToolTip(tr("Instruction memory — read-only program storage; outputs "
                              "the 32-bit word addressed by PC.\nFetching: %1")
-                              .arg(instr_line(s_if)));
+                              .arg(instr_label(s_if, dec0)));
 
     // Control word of the instruction currently being decoded.
     QString asserted = tr("(none)");
-    if (s_id.valid && s_id.raw != 0) {
-        if (const auto d = mips::Decoder::decode(s_id.raw)) {
-            const mips::Control c = mips::derive_control(*d);
-            QStringList         sig;
-            if (c.reg_write) sig << QStringLiteral("RegWrite");
-            if (c.mem_read) sig << QStringLiteral("MemRead");
-            if (c.mem_write) sig << QStringLiteral("MemWrite");
-            if (c.mem_to_reg) sig << QStringLiteral("MemToReg");
-            if (c.alu_src) sig << QStringLiteral("ALUSrc");
-            if (c.reg_dst) sig << QStringLiteral("RegDst");
-            if (c.branch) sig << QStringLiteral("Branch");
-            if (c.jump) sig << QStringLiteral("Jump");
-            if (!sig.isEmpty()) asserted = sig.join(QStringLiteral(", "));
-        }
+    if (dec1) {
+        const mips::Control c = mips::derive_control(*dec1);
+        QStringList         sig;
+        if (c.reg_write) sig << QStringLiteral("RegWrite");
+        if (c.mem_read) sig << QStringLiteral("MemRead");
+        if (c.mem_write) sig << QStringLiteral("MemWrite");
+        if (c.mem_to_reg) sig << QStringLiteral("MemToReg");
+        if (c.alu_src) sig << QStringLiteral("ALUSrc");
+        if (c.reg_dst) sig << QStringLiteral("RegDst");
+        if (c.branch) sig << QStringLiteral("Branch");
+        if (c.jump) sig << QStringLiteral("Jump");
+        if (!sig.isEmpty()) asserted = sig.join(QStringLiteral(", "));
     }
     control_box_->setToolTip(tr("Control unit — decodes the ID-stage instruction into the "
                                 "control signals that steer the datapath.\nID: %1\nAsserted: %2")
-                                 .arg(instr_line(s_id), asserted));
+                                 .arg(instr_label(s_id, dec1), asserted));
 
     // Register file: show the ID instruction's source operands with live values.
     QString read_line = tr("(idle)");
-    if (s_id.valid && s_id.raw != 0) {
-        if (const auto d = mips::Decoder::decode(s_id.raw)) {
-            uint8_t rs = 0, rt = 0;
-            if (d->format == mips::InstrFormat::R) {
-                rs = d->r().rs;
-                rt = d->r().rt;
-            } else if (d->format == mips::InstrFormat::I) {
-                rs = d->i().rs;
-                rt = d->i().rt;
-            }
-            read_line = QStringLiteral("$%1 = 0x%2   $%3 = 0x%4")
-                            .arg(QString::fromStdString(std::string(mips::register_abi_name(rs))))
-                            .arg(reg_values_[rs], 8, 16, QChar('0'))
-                            .arg(QString::fromStdString(std::string(mips::register_abi_name(rt))))
-                            .arg(reg_values_[rt], 8, 16, QChar('0'));
+    if (dec1) {
+        uint8_t rs = 0, rt = 0;
+        if (dec1->format == mips::InstrFormat::R) {
+            rs = dec1->r().rs;
+            rt = dec1->r().rt;
+        } else if (dec1->format == mips::InstrFormat::I) {
+            rs = dec1->i().rs;
+            rt = dec1->i().rt;
         }
+        read_line = QStringLiteral("$%1 = 0x%2   $%3 = 0x%4")
+                        .arg(QString::fromStdString(std::string(mips::register_abi_name(rs))))
+                        .arg(reg_values_[rs], 8, 16, QChar('0'))
+                        .arg(QString::fromStdString(std::string(mips::register_abi_name(rt))))
+                        .arg(reg_values_[rt], 8, 16, QChar('0'));
     }
     regs_box_->setToolTip(tr("Register file — 32 × 32-bit registers with two read ports "
                              "(ID) and one write port (WB).\nID reads: %1")
@@ -917,19 +921,15 @@ void SchematicDatapathWidget::updateTooltips() {
     alu_item_->setToolTip(tr("ALU — performs the arithmetic/logic operation for the "
                              "EX-stage instruction. Its inputs come through the forwarding "
                              "muxes on the left.\nEX: %1")
-                              .arg(instr_line(s_ex)));
+                              .arg(instr_label(s_ex, dec2)));
 
-    const mips::Control mem_ctl = [&] {
-        if (s_mem.valid && s_mem.raw != 0)
-            if (const auto d = mips::Decoder::decode(s_mem.raw)) return mips::derive_control(*d);
-        return mips::Control{};
-    }();
-    const QString mem_act = mem_ctl.mem_read    ? tr("reading (load)")
-                            : mem_ctl.mem_write ? tr("writing (store)")
-                                                : tr("idle");
+    const mips::Control mem_ctl = dec3 ? mips::derive_control(*dec3) : mips::Control{};
+    const QString       mem_act = mem_ctl.mem_read    ? tr("reading (load)")
+                                  : mem_ctl.mem_write ? tr("writing (store)")
+                                                      : tr("idle");
     dmem_box_->setToolTip(tr("Data memory — the load/store port used in MEM. Only lw/sw "
                              "class instructions touch it.\nMEM: %1 — %2")
-                              .arg(instr_line(s_mem), mem_act));
+                              .arg(instr_label(s_mem, dec3), mem_act));
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────

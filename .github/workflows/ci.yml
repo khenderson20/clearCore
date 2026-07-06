@@ -5,6 +5,8 @@
 #                pre-commit hook and editors; annotates violations on PRs).
 #   coverage   : core-only build instrumented with --coverage; gcovr report
 #                uploaded to codecov.io via OIDC (no token needed).
+#                Runs on push and on PRs from this repo (not forks — OIDC
+#                requires the same-repo token context).
 #   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
 #                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
 #   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
@@ -63,11 +65,16 @@ jobs:
         run: exit 1
 
   coverage:
-    if: github.event_name == 'push'
+    # Push to main/develop always runs. PRs from forks lack the id-token needed
+    # for OIDC, so restrict to same-repo PRs only to avoid silent upload failures.
+    if: >
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # codecov OIDC upload (tokenless for public repos)
+      id-token: write       # codecov OIDC upload (tokenless for public repos)
+      pull-requests: write  # allow codecov-action to post PR diff comments
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
