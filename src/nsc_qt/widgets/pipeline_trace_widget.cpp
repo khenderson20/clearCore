@@ -9,6 +9,8 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <sstream>
+#include <string>
+#include <unordered_map>
 
 namespace nsc::qt {
 
@@ -140,18 +142,21 @@ void PipelineTraceWidget::rebuildTable() {
         lbl_item->setFont(scale::monoFont(scale::kFontSizeDense));
         table_->setItem(ri, 0, lbl_item);
 
+        // Build a cycle→stage lookup for this row so each column is O(1)
+        // instead of scanning the deque per column (O(n_cols × stages_per_row)).
+        std::unordered_map<uint64_t, const std::string*> stage_by_cycle;
+        stage_by_cycle.reserve(r.stages.size());
+        for (const auto& entry : r.stages)
+            stage_by_cycle.emplace(entry.first, &entry.second);
+
         // Stage columns -- look up by absolute cycle number so each column
         // always shows the entry that actually belongs under its header,
         // regardless of how many times the window has scrolled.
         for (int ci = 0; ci < n_cols; ++ci) {
             const uint64_t cycle = cycle_base_ + static_cast<uint64_t>(ci) + 1;
             std::string    stage_name;
-            for (const auto& entry : r.stages) {
-                if (entry.first == cycle) {
-                    stage_name = entry.second;
-                    break;
-                }
-            }
+            const auto     it = stage_by_cycle.find(cycle);
+            if (it != stage_by_cycle.end()) stage_name = *it->second;
 
             auto* item = new QTableWidgetItem(QString::fromStdString(stage_name));
             item->setTextAlignment(Qt::AlignCenter);

@@ -9,6 +9,9 @@
 
 #include <QChar>
 
+#include <memory>
+#include <utility>
+
 namespace nsc::quick {
 
 namespace {
@@ -63,26 +66,31 @@ QVariant RegisterModel::data(const QModelIndex& idx, int role) const {
 }
 
 QHash<int, QByteArray> RegisterModel::roleNames() const {
-    return {
+    static const QHash<int, QByteArray> kRoles = {
         {NumberRole, "number"}, {NameRole, "name"},       {HexRole, "hex"},
         {DecRole, "dec"},       {ChangedRole, "changed"},
     };
+    return kRoles;
 }
 
 void RegisterModel::refresh(const mips::RegisterFile& regs) {
-    const auto& raw     = regs.raw();
-    const int   written = regs.last_written();
+    const auto& raw          = regs.raw();
+    const int   written      = regs.last_written();
+    const int   prev_written = last_written_;
+
+    // Update last_written_ BEFORE emitting dataChanged so data(ChangedRole)
+    // is coherent when QML delegates re-read the model.
+    last_written_ = written;
 
     for (int i = 0; i < 32; ++i) {
         const bool value_changed = values_[static_cast<size_t>(i)] != raw[static_cast<size_t>(i)];
-        const bool mark_changed  = (i == written) != (i == last_written_);
+        const bool mark_changed  = (i == written) != (i == prev_written);
         values_[static_cast<size_t>(i)] = raw[static_cast<size_t>(i)];
         if (value_changed || mark_changed) {
             const QModelIndex mi = index(i);
             emit              dataChanged(mi, mi, {HexRole, DecRole, ChangedRole});
         }
     }
-    last_written_ = written;
 }
 
 void RegisterModel::resetAll() {
@@ -105,12 +113,14 @@ void QuickSimulator::rebuildController() {
 
     stats_ = {};
     trace_.clear();
+    trace_rows_cache_.clear();
     stages_.clear();
     hazards_.clear();
     reg_model_.resetAll();
 
     if (!last_program_.empty()) {
         program_loaded_ = ctl_->loadProgram(last_program_);
+        if (!program_loaded_) emit assemblyError(QStringLiteral("Program too large for memory."));
         emit programLoadedChanged();
     }
 
@@ -172,11 +182,15 @@ void QuickSimulator::reset() {
     ctl_->reset();
     stats_ = {};
     trace_.clear();
+    trace_rows_cache_.clear();
     stages_.clear();
     hazards_.clear();
     reg_model_.resetAll();
 
-    if (!last_program_.empty()) program_loaded_ = ctl_->loadProgram(last_program_);
+    if (!last_program_.empty()) {
+        program_loaded_ = ctl_->loadProgram(last_program_);
+        if (!program_loaded_) emit assemblyError(QStringLiteral("Program too large for memory."));
+    }
 
     emit statsChanged();
     emit traceChanged();
@@ -200,12 +214,20 @@ QString QuickSimulator::assembleAndLoad(const QString& source) {
 
     stats_ = {};
     trace_.clear();
+    trace_rows_cache_.clear();
     reg_model_.resetAll();
 
     emit programLoadedChanged();
     emit statsChanged();
     emit traceChanged();
     emit runningChanged();
+
+    if (!program_loaded_) {
+        const QString msg = QStringLiteral("Program too large for memory.");
+        emit          assemblyError(msg);
+        setStatus(msg);
+        return msg;
+    }
     setStatus(QStringLiteral("Loaded %1 instructions").arg(last_program_.size()));
     return {};
 }
@@ -247,7 +269,7 @@ QStringList QuickSimulator::memoryRows(quint32 base, int rows) const {
             }
             if (b == 7) hex += QLatin1Char(' ');
         }
-        out << QStringLiteral("%1  %2 |%3|").arg(addr, 8, 16, QLatin1Char('0')).arg(hex, ascii);
+        out << QStringLiteral("%1  %2 |%3|").arg(addr, 8, 16, QLatin1Char('0')).arg(hex).arg(ascii);
     }
     return out;
 }
@@ -332,7 +354,7 @@ void QuickSimulator::appendTrace(const mips::PipelineState& ps) {
         row.pc          = if_stage.pc;
         row.start_cycle = cycle;
         row.label =
-            QStringLiteral("%1  %2").arg(hex32(if_stage.pc), disasm(if_stage.raw, if_stage.pc));
+            QStringLiteral("%1  %2").arg(hex32(if_stage.pc)).arg(disasm(if_stage.raw, if_stage.pc));
         trace_.push_back(std::move(row));
         if (trace_.size() > kTraceMaxRows) trace_.erase(trace_.begin());
     }
@@ -357,19 +379,23 @@ void QuickSimulator::appendTrace(const mips::PipelineState& ps) {
             tag = QStringLiteral("**");
         row.cells << tag;
     }
-    emit traceChanged();
-}
 
-QVariantList QuickSimulator::traceRows() const {
-    QVariantList out;
+    // Rebuild the QML-facing cache once per cycle so traceRows() is a free
+    // getter (QML may evaluate the property multiple times per frame).
+    trace_rows_cache_.clear();
+    trace_rows_cache_.reserve(static_cast<qsizetype>(trace_.size()));
     for (const auto& row : trace_) {
         QVariantMap m;
         m.insert(QStringLiteral("label"), row.label);
         m.insert(QStringLiteral("start"), static_cast<qulonglong>(row.start_cycle));
         m.insert(QStringLiteral("cells"), row.cells);
-        out.append(m);
+        trace_rows_cache_.append(m);
     }
-    return out;
+    emit traceChanged();
+}
+
+QVariantList QuickSimulator::traceRows() const {
+    return trace_rows_cache_;
 }
 
 // ── Status ────────────────────────────────────────────────────────────────────

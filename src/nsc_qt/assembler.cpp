@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <charconv>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace nsc::qt {
 
@@ -85,6 +88,42 @@ static uint32_t enc_i(uint8_t op, uint8_t rs, uint8_t rt, uint16_t imm) {
 static uint32_t enc_j(uint8_t op, uint32_t target) {
     return (static_cast<uint32_t>(op & 0x3F) << 26) | (target & 0x03FFFFFF);
 }
+
+// ── Instruction encoding tables ───────────────────────────────────────────────
+// Defined once at file scope so they are constructed once, not on every pass-2
+// loop iteration (each unordered_map build is O(n) hash + allocation).
+
+static const std::unordered_map<std::string, uint8_t> kR3Map = {
+    {"add", 0x20}, {"addu", 0x21}, {"sub", 0x22}, {"subu", 0x23}, {"and", 0x24},
+    {"or", 0x25},  {"xor", 0x26},  {"nor", 0x27}, {"slt", 0x2A},  {"sltu", 0x2B},
+};
+static const std::unordered_map<std::string, uint8_t> kShiftMap = {
+    {"sll", 0x00},
+    {"srl", 0x02},
+    {"sra", 0x03},
+};
+static const std::unordered_map<std::string, uint8_t> kVShiftMap = {
+    {"sllv", 0x04},
+    {"srlv", 0x06},
+};
+static const std::unordered_map<std::string, uint8_t> kIArithMap = {
+    {"addi", 0x08}, {"addiu", 0x09}, {"slti", 0x0A}, {"sltiu", 0x0B},
+    {"andi", 0x0C}, {"ori", 0x0D},   {"xori", 0x0E},
+};
+static const std::unordered_map<std::string, uint8_t> kMemMap = {
+    {"lw", 0x23},
+    {"lbu", 0x24},
+    {"lhu", 0x25},
+    {"sw", 0x2B},
+};
+static const std::unordered_map<std::string, uint8_t> kBranchMap = {
+    {"beq", 0x04},
+    {"bne", 0x05},
+};
+static const std::unordered_map<std::string, uint8_t> kJumpMap = {
+    {"j", 0x02},
+    {"jal", 0x03},
+};
 
 // ── Tokeniser ─────────────────────────────────────────────────────────────────
 
@@ -200,27 +239,18 @@ AssemblerResult assemble(const std::string& source) {
         }
 
         // ── R-type: add addu sub subu and or xor nor slt sltu ─────────────────
-        const std::unordered_map<std::string, uint8_t> r3_map = {
-            {"add", 0x20}, {"addu", 0x21}, {"sub", 0x22}, {"subu", 0x23}, {"and", 0x24},
-            {"or", 0x25},  {"xor", 0x26},  {"nor", 0x27}, {"slt", 0x2A},  {"sltu", 0x2B},
-        };
-        if (r3_map.count(mn)) {
+        if (kR3Map.count(mn)) {
             if (!need(3)) return err("expected $rd, $rs, $rt");
             auto rd = parse_reg(ops[0]);
             auto rs = parse_reg(ops[1]);
             auto rt = parse_reg(ops[2]);
             if (!rd || !rs || !rt) return err("bad register");
-            result.words.push_back(enc_r(*rs, *rt, *rd, 0, r3_map.at(mn)));
+            result.words.push_back(enc_r(*rs, *rt, *rd, 0, kR3Map.at(mn)));
             continue;
         }
 
         // ── R-type shifts: sll srl sra ($rd, $rt, shamt) ──────────────────────
-        const std::unordered_map<std::string, uint8_t> shift_map = {
-            {"sll", 0x00},
-            {"srl", 0x02},
-            {"sra", 0x03},
-        };
-        if (shift_map.count(mn)) {
+        if (kShiftMap.count(mn)) {
             if (!need(3)) return err("expected $rd, $rt, shamt");
             auto rd  = parse_reg(ops[0]);
             auto rt  = parse_reg(ops[1]);
@@ -228,22 +258,18 @@ AssemblerResult assemble(const std::string& source) {
             if (!rd || !rt || !imm) return err("bad operands");
             if (*imm < 0 || *imm > 31) return err("shift amount out of range");
             result.words.push_back(
-                enc_r(0, *rt, *rd, static_cast<uint8_t>(*imm), shift_map.at(mn)));
+                enc_r(0, *rt, *rd, static_cast<uint8_t>(*imm), kShiftMap.at(mn)));
             continue;
         }
 
         // ── R-type var shifts: sllv srlv ($rd, $rt, $rs) ──────────────────────
-        const std::unordered_map<std::string, uint8_t> vshift_map = {
-            {"sllv", 0x04},
-            {"srlv", 0x06},
-        };
-        if (vshift_map.count(mn)) {
+        if (kVShiftMap.count(mn)) {
             if (!need(3)) return err("expected $rd, $rt, $rs");
             auto rd = parse_reg(ops[0]);
             auto rt = parse_reg(ops[1]);
             auto rs = parse_reg(ops[2]);
             if (!rd || !rt || !rs) return err("bad register");
-            result.words.push_back(enc_r(*rs, *rt, *rd, 0, vshift_map.at(mn)));
+            result.words.push_back(enc_r(*rs, *rt, *rd, 0, kVShiftMap.at(mn)));
             continue;
         }
 
@@ -267,17 +293,13 @@ AssemblerResult assemble(const std::string& source) {
         }
 
         // ── I-type arithmetic: addi addiu slti sltiu andi ori xori ──────────────
-        const std::unordered_map<std::string, uint8_t> iarith_map = {
-            {"addi", 0x08}, {"addiu", 0x09}, {"slti", 0x0A}, {"sltiu", 0x0B},
-            {"andi", 0x0C}, {"ori", 0x0D},   {"xori", 0x0E},
-        };
-        if (iarith_map.count(mn)) {
+        if (kIArithMap.count(mn)) {
             if (!need(3)) return err("expected $rt, $rs, imm");
             auto rt  = parse_reg(ops[0]);
             auto rs  = parse_reg(ops[1]);
             auto imm = parse_imm(ops[2]);
             if (!rt || !rs || !imm) return err("bad operands");
-            result.words.push_back(enc_i(iarith_map.at(mn), *rs, *rt,
+            result.words.push_back(enc_i(kIArithMap.at(mn), *rs, *rt,
                                          static_cast<uint16_t>(static_cast<int16_t>(*imm))));
             continue;
         }
@@ -294,13 +316,7 @@ AssemblerResult assemble(const std::string& source) {
         }
 
         // ── Memory: lw lbu lhu sw ($rt, imm($rs)) ─────────────────────────────
-        const std::unordered_map<std::string, uint8_t> mem_map = {
-            {"lw", 0x23},
-            {"lbu", 0x24},
-            {"lhu", 0x25},
-            {"sw", 0x2B},
-        };
-        if (mem_map.count(mn)) {
+        if (kMemMap.count(mn)) {
             if (!need(2)) return err("expected $rt, imm($rs)");
             auto rt = parse_reg(ops[0]);
             if (!rt) return err("bad register");
@@ -308,16 +324,12 @@ AssemblerResult assemble(const std::string& source) {
             if (!mem_op) return err("expected imm($rs)");
             auto [imm, rs] = *mem_op;
             result.words.push_back(
-                enc_i(mem_map.at(mn), rs, *rt, static_cast<uint16_t>(static_cast<int16_t>(imm))));
+                enc_i(kMemMap.at(mn), rs, *rt, static_cast<uint16_t>(static_cast<int16_t>(imm))));
             continue;
         }
 
         // ── beq bne $rs, $rt, label_or_offset ─────────────────────────────────
-        const std::unordered_map<std::string, uint8_t> branch_map = {
-            {"beq", 0x04},
-            {"bne", 0x05},
-        };
-        if (branch_map.count(mn)) {
+        if (kBranchMap.count(mn)) {
             if (!need(3)) return err("expected $rs, $rt, label");
             auto rs = parse_reg(ops[0]);
             auto rt = parse_reg(ops[1]);
@@ -334,17 +346,13 @@ AssemblerResult assemble(const std::string& source) {
                 // offset = (target_word_addr - (current_word_addr + 4)) / 4
                 offset = static_cast<int32_t>(it->second) - static_cast<int32_t>(idx + 1);
             }
-            result.words.push_back(enc_i(branch_map.at(mn), *rs, *rt,
+            result.words.push_back(enc_i(kBranchMap.at(mn), *rs, *rt,
                                          static_cast<uint16_t>(static_cast<int16_t>(offset))));
             continue;
         }
 
         // ── j jal target_or_label ─────────────────────────────────────────────
-        const std::unordered_map<std::string, uint8_t> jump_map = {
-            {"j", 0x02},
-            {"jal", 0x03},
-        };
-        if (jump_map.count(mn)) {
+        if (kJumpMap.count(mn)) {
             if (!need(1)) return err("expected target");
             uint32_t target = 0;
             auto     imm    = parse_imm(ops[0]);
@@ -355,7 +363,7 @@ AssemblerResult assemble(const std::string& source) {
                 if (it == labels.end()) return err("undefined label '" + ops[0] + "'");
                 target = it->second;  // word index; IProcessor::load_program handles byte address
             }
-            result.words.push_back(enc_j(jump_map.at(mn), target));
+            result.words.push_back(enc_j(kJumpMap.at(mn), target));
             continue;
         }
 

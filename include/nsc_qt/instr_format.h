@@ -14,15 +14,11 @@
 
 namespace nsc::qt {
 
-// Format a decoded instruction as a human-readable string. This is assembly
-// notation (mnemonics, register names), not natural-language UI copy, so it
-// intentionally is not routed through tr().
-inline std::string format_instr(uint32_t raw) {
+// Format an already-decoded instruction. Called by format_instr and also
+// directly in applyState/updateTooltips where the decode result is cached.
+inline std::string format_decoded(const mips::DecodedInstr& d) {
     using namespace mips;
-    auto decoded = Decoder::decode(raw);
-    if (!decoded) return "(?/?)";
-    const auto&        d  = *decoded;
-    std::string        mn = std::string(Decoder::mnemonic(d));
+    const std::string  mn = std::string(Decoder::mnemonic(d));
     std::ostringstream os;
     os << mn << " ";
     switch (d.format) {
@@ -70,6 +66,14 @@ inline std::string format_instr(uint32_t raw) {
         break;
     }
     return os.str();
+}
+
+// Format a raw instruction word as human-readable assembly. Uses decode then
+// delegates to format_decoded; call format_decoded directly when the decode
+// result is already cached.
+inline std::string format_instr(uint32_t raw) {
+    const auto decoded = mips::Decoder::decode(raw);
+    return decoded ? format_decoded(*decoded) : "(?/?)";
 }
 
 }  // namespace nsc::qt
