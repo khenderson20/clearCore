@@ -1,10 +1,12 @@
 # clearCore CI — build and test on every push/PR.
 #
 # Jobs:
-#   format     : clang-format check via cpp-linter (same .clang-format as the
-#                pre-commit hook and editors; annotates violations on PRs).
+#   format     : clang-format-22 check (same .clang-format as the pre-commit
+#                hook and editors; annotates violations on PRs).
 #   coverage   : core-only build instrumented with --coverage; gcovr report
 #                uploaded to codecov.io via OIDC (no token needed).
+#                Runs on push and on PRs from this repo (not forks — OIDC
+#                requires the same-repo token context).
 #   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
 #                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
 #   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
@@ -46,28 +48,46 @@ jobs:
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # cpp-linter-action (v2.20.0 and earlier) hard-codes uv 0.9.5 and always
+      # re-downloads it from GitHub releases, which produces intermittent 504
+      # failures. We only need clang-format for this job, so install it directly
+      # from the LLVM apt repository — no Python, no uv, no CDN dependency.
+      - name: Install clang-format-22
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y \
+            "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main"
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-22
+
       - name: Check clang-format
         id: linter
-        uses: cpp-linter/cpp-linter-action@8e85cd02c8c3fe3ae527c94b5683fe2366b144ed # v2.20.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          style: file          # use the repo's .clang-format
-          tidy-checks: '-*'    # formatting only; clang-tidy runs via builds/IDE
-          version: 22          # keep in sync with .pre-commit-config.yaml
-          files-changed-only: false
-          step-summary: true
+        run: |
+          failed=0
+          while IFS= read -r f; do
+            if ! clang-format-22 --dry-run --Werror "$f" 2>&1; then
+              echo "::error file=$f::clang-format violation"
+              failed=$((failed + 1))
+            fi
+          done < <(find src include tests qml -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \
+                   2>/dev/null | sort)
+          echo "clang-format-checks-failed=$failed" >> "$GITHUB_OUTPUT"
 
       - name: Fail on formatting violations
         if: steps.linter.outputs.clang-format-checks-failed > 0
         run: exit 1
 
   coverage:
-    if: github.event_name == 'push'
+    # Push to main/develop always runs. PRs from forks lack the id-token needed
+    # for OIDC, so restrict to same-repo PRs only to avoid silent upload failures.
+    if: >
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # codecov OIDC upload (tokenless for public repos)
+      id-token: write       # codecov OIDC upload (tokenless for public repos)
+      pull-requests: write  # allow codecov-action to post PR diff comments
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4

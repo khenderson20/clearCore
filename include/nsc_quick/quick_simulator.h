@@ -177,6 +177,7 @@ private:
     QVariantMap                  hazards_;
     nsc::qt::SimulatorStatistics stats_{};
     std::vector<TraceRow>        trace_;
+    QVariantList                 trace_rows_cache_;
     std::vector<uint32_t>        last_program_;
 
     QString status_         = QStringLiteral("Idle");
