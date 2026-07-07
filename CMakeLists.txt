@@ -334,6 +334,9 @@ endif ()
 
 if (BUILD_QT6_UI)
     message(STATUS "Qt6 found: Building desktop GUI")
+    # Configures AUTOMOC/AUTORCC and, on Windows, sets DLL runtime output
+    # directories so Qt6Core.dll is found by test runners in the build tree.
+    qt_standard_project_setup()
 
     # Qt Advanced Docking System (LGPL-2.1) — IDE-style dockable panels for
     # the GUI. Built as a shared library (QADS default), which is what keeps
