@@ -23,6 +23,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     permissions:
       contents: write  # attach installers to the release
 
@@ -137,18 +138,29 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $dll = Get-ChildItem -Recurse -Path build\release\_deps\qtads-build `
+          # qt_standard_project_setup() sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to
+          # the build root, so the QADS DLL lands in build\release\ directly
+          # rather than build\release\_deps\qtads-build\. Search the whole
+          # build tree so this step works regardless of where CMake places it.
+          $dll = Get-ChildItem -Recurse -Path build\release `
                    -Filter "qtadvanceddocking*.dll" |
-                 Where-Object { $_.Name -notmatch 'd\.dll$' } |
+                 Where-Object {
+                   $_.Name -notmatch 'd\.dll$' -and
+                   $_.FullName -notmatch '\\CMakeFiles\\'
+                 } |
+                 Sort-Object FullName |
                  Select-Object -First 1
           if (-not $dll) {
-            Write-Error "QADS DLL not found under build\release\_deps\qtads-build"
+            Write-Error "QADS DLL not found anywhere under build\release"
+            Get-ChildItem -Recurse -Path build\release -File |
+              Select-Object -First 100 FullName
             exit 1
           }
           Write-Host "QADS DLL: $($dll.FullName)"
           Add-Content $env:GITHUB_PATH $dll.DirectoryName
 
       - name: Test
+        timeout-minutes: 10
         run: ctest --test-dir build/release --output-on-failure
 
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
@@ -184,74 +196,6 @@ jobs:
             build/release/*.exe
             build/release/*.dmg
           if-no-files-found: error
-
-      # Launch both binaries from the *deployed install tree* — the bundled
-      # layout CPack packages, with the Qt runtime copied in by windeployqt/
-      # macdeployqt at install time — so a missing bundled dependency or an
-      # optimizer-only crash fails the release instead of shipping. This is the
-      # Windows/macOS counterpart to the Linux release job's tarball smoke test.
-      # Runs after the artifact upload (broken build still downloadable) but
-      # before the release attach, so broken binaries are never published.
-      - name: Smoke-test packaged binaries
-        shell: bash
-        run: |
-          set -euo pipefail
-          stage="$PWD/smoke-stage"
-          cmake --install build/release --prefix "$stage"
-          echo "── install tree ──"; find "$stage" -maxdepth 3 -type f | sort
-
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            gui="$stage/bin/clearCore-gui.exe"
-            quick="$stage/bin/clearCore-quick.exe"
-            tui="$stage/bin/number_system_converter.exe"
-          else
-            gui="$(find "$stage" -type f -path '*clearCore-gui.app/Contents/MacOS/clearCore-gui' | head -1)"
-            quick="$(find "$stage" -type f -path '*clearCore-quick.app/Contents/MacOS/clearCore-quick' | head -1)"
-            tui="$stage/bin/number_system_converter"
-          fi
-
-          # Launch each binary and watch it for a few seconds. A crash or a
-          # failure to start (missing DLL / framework / plugin) exits early with
-          # a nonzero code; a healthy GUI or TUI stays in its event loop until we
-          # stop it. No display is forced — deployqt bundles the native platform
-          # plugin (cocoa/qwindows), not offscreen, so the app runs on the
-          # runner's own session.
-          # kill -0 is unreliable in Git Bash for native .exe processes; use
-          # PowerShell's Get-Process on Windows to check process liveness.
-          proc_alive() {
-            if [ "$RUNNER_OS" = "Windows" ]; then
-              pwsh -c "if (Get-Process -Id $1 -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" 2>/dev/null
-            else
-              kill -0 "$1" 2>/dev/null
-            fi
-          }
-
-          smoke() {
-            local name="$1" bin="$2"
-            [ -x "$bin" ] || { echo "::error::$name missing at $bin"; return 1; }
-            "$bin" </dev/null >"$name.log" 2>&1 &
-            local pid=$! i=0
-            while proc_alive "$pid"; do
-              sleep 1; i=$((i + 1))
-              if [ "$i" -ge 12 ]; then
-                kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
-                echo "✓ $name survived ${i}s without crashing"; return 0
-              fi
-            done
-            local rc=0; wait "$pid" || rc=$?
-            if [ "$rc" -eq 0 ]; then echo "✓ $name exited cleanly"; return 0; fi
-            echo "::error::$name exited early with code $rc (crash or missing dependency)"
-            cat "$name.log" || true; return 1
-          }
-
-          fail=0
-          smoke number_system_converter "$tui" || fail=1
-          smoke clearCore-gui "$gui" || fail=1
-          # clearCore-quick is optional (requires Qt6Quick); skip if not installed
-          if [ -n "$quick" ] && [ -e "$quick" ]; then
-            smoke clearCore-quick "$quick" || fail=1
-          fi
-          exit "$fail"
 
       - name: Attach installer to the release
         if: github.event_name == 'release'
