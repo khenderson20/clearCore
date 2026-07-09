@@ -59,6 +59,7 @@ jobs:
         with:
           version: '6.8.*'
           cache: true
+          modules: 'qtshadertools'
 
       # Puts cl.exe / the MSVC toolchain on PATH so the Ninja-based preset works
       # on Windows without relying on the Visual Studio generator's discovery.
@@ -200,9 +201,11 @@ jobs:
 
           if [ "${{ runner.os }}" = "Windows" ]; then
             gui="$stage/bin/clearCore-gui.exe"
+            quick="$stage/bin/clearCore-quick.exe"
             tui="$stage/bin/number_system_converter.exe"
           else
             gui="$(find "$stage" -type f -path '*clearCore-gui.app/Contents/MacOS/clearCore-gui' | head -1)"
+            quick="$(find "$stage" -type f -path '*clearCore-quick.app/Contents/MacOS/clearCore-quick' | head -1)"
             tui="$stage/bin/number_system_converter"
           fi
 
@@ -212,12 +215,22 @@ jobs:
           # stop it. No display is forced — deployqt bundles the native platform
           # plugin (cocoa/qwindows), not offscreen, so the app runs on the
           # runner's own session.
+          # kill -0 is unreliable in Git Bash for native .exe processes; use
+          # PowerShell's Get-Process on Windows to check process liveness.
+          proc_alive() {
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              pwsh -c "if (Get-Process -Id $1 -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" 2>/dev/null
+            else
+              kill -0 "$1" 2>/dev/null
+            fi
+          }
+
           smoke() {
             local name="$1" bin="$2"
             [ -x "$bin" ] || { echo "::error::$name missing at $bin"; return 1; }
             "$bin" </dev/null >"$name.log" 2>&1 &
             local pid=$! i=0
-            while kill -0 "$pid" 2>/dev/null; do
+            while proc_alive "$pid"; do
               sleep 1; i=$((i + 1))
               if [ "$i" -ge 12 ]; then
                 kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
@@ -233,6 +246,10 @@ jobs:
           fail=0
           smoke number_system_converter "$tui" || fail=1
           smoke clearCore-gui "$gui" || fail=1
+          # clearCore-quick is optional (requires Qt6Quick); skip if not installed
+          if [ -n "$quick" ] && [ -e "$quick" ]; then
+            smoke clearCore-quick "$quick" || fail=1
+          fi
           exit "$fail"
 
       - name: Attach installer to the release

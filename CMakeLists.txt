@@ -334,6 +334,13 @@ endif ()
 
 if (BUILD_QT6_UI)
     message(STATUS "Qt6 found: Building desktop GUI")
+    # Configures AUTOMOC/AUTORCC and, on Windows, sets DLL runtime output
+    # directories so Qt6Core.dll is found by test runners in the build tree.
+    qt_standard_project_setup()
+    # This project has no .ui files; ui_scale.h is a hand-written header whose
+    # name accidentally matches AUTOUIC's ui_*.h pattern, triggering a spurious
+    # "missing .ui source" error. AUTOMOC and AUTORCC (set above) are sufficient.
+    set(CMAKE_AUTOUIC OFF)
 
     # Qt Advanced Docking System (LGPL-2.1) — IDE-style dockable panels for
     # the GUI. Built as a shared library (QADS default), which is what keeps
@@ -825,10 +832,11 @@ set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 set(CPACK_NSIS_URL_INFO_ABOUT "${CPACK_PACKAGE_HOMEPAGE_URL}")
 # Start-menu / desktop shortcuts. Pairs of <exe-without-extension> ; <label>.
 # The TUI is a console program, so it gets no GUI shortcut.
-set(CPACK_PACKAGE_EXECUTABLES
-        "clearCore-gui"   "clearCore (Qt Widgets)"
-        "clearCore-quick" "clearCore (QML)"
-)
+# clearCore-quick is optional — only include its shortcut when actually built.
+set(CPACK_PACKAGE_EXECUTABLES "clearCore-gui" "clearCore (Qt Widgets)")
+if (BUILD_QT6_QUICK_UI)
+    list(APPEND CPACK_PACKAGE_EXECUTABLES "clearCore-quick" "clearCore (QML)")
+endif ()
 set(CPACK_NSIS_CREATE_ICONS_EXTRA
         "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\clearCore (Qt Widgets).lnk' '$INSTDIR\\\\${CMAKE_INSTALL_BINDIR}\\\\clearCore-gui.exe'"
 )
