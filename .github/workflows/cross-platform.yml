@@ -137,12 +137,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $dll = Get-ChildItem -Recurse -Path build\release\_deps\qtads-build `
+          # qt_standard_project_setup() sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to
+          # the build root, so the QADS DLL lands in build\release\ directly
+          # rather than build\release\_deps\qtads-build\. Search the whole
+          # build tree so this step works regardless of where CMake places it.
+          $dll = Get-ChildItem -Recurse -Path build\release `
                    -Filter "qtadvanceddocking*.dll" |
-                 Where-Object { $_.Name -notmatch 'd\.dll$' } |
+                 Where-Object {
+                   $_.Name -notmatch 'd\.dll$' -and
+                   $_.FullName -notmatch '\\CMakeFiles\\'
+                 } |
+                 Sort-Object FullName |
                  Select-Object -First 1
           if (-not $dll) {
-            Write-Error "QADS DLL not found under build\release\_deps\qtads-build"
+            Write-Error "QADS DLL not found anywhere under build\release"
+            Get-ChildItem -Recurse -Path build\release -File |
+              Select-Object -First 100 FullName
             exit 1
           }
           Write-Host "QADS DLL: $($dll.FullName)"
