@@ -828,10 +828,11 @@ set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 set(CPACK_NSIS_URL_INFO_ABOUT "${CPACK_PACKAGE_HOMEPAGE_URL}")
 # Start-menu / desktop shortcuts. Pairs of <exe-without-extension> ; <label>.
 # The TUI is a console program, so it gets no GUI shortcut.
-set(CPACK_PACKAGE_EXECUTABLES
-        "clearCore-gui"   "clearCore (Qt Widgets)"
-        "clearCore-quick" "clearCore (QML)"
-)
+# clearCore-quick is optional — only include its shortcut when actually built.
+set(CPACK_PACKAGE_EXECUTABLES "clearCore-gui" "clearCore (Qt Widgets)")
+if (BUILD_QT6_QUICK_UI)
+    list(APPEND CPACK_PACKAGE_EXECUTABLES "clearCore-quick" "clearCore (QML)")
+endif ()
 set(CPACK_NSIS_CREATE_ICONS_EXTRA
         "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\clearCore (Qt Widgets).lnk' '$INSTDIR\\\\${CMAKE_INSTALL_BINDIR}\\\\clearCore-gui.exe'"
 )

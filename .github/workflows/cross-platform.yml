@@ -59,7 +59,7 @@ jobs:
         with:
           version: '6.8.*'
           cache: true
-          modules: 'qtshadertools qtdeclarative'
+          modules: 'qtshadertools'
 
       # Puts cl.exe / the MSVC toolchain on PATH so the Ninja-based preset works
       # on Windows without relying on the Visual Studio generator's discovery.
@@ -201,9 +201,11 @@ jobs:
 
           if [ "${{ runner.os }}" = "Windows" ]; then
             gui="$stage/bin/clearCore-gui.exe"
+            quick="$stage/bin/clearCore-quick.exe"
             tui="$stage/bin/number_system_converter.exe"
           else
             gui="$(find "$stage" -type f -path '*clearCore-gui.app/Contents/MacOS/clearCore-gui' | head -1)"
+            quick="$(find "$stage" -type f -path '*clearCore-quick.app/Contents/MacOS/clearCore-quick' | head -1)"
             tui="$stage/bin/number_system_converter"
           fi
 
@@ -244,6 +246,10 @@ jobs:
           fail=0
           smoke number_system_converter "$tui" || fail=1
           smoke clearCore-gui "$gui" || fail=1
+          # clearCore-quick is optional (requires Qt6Quick); skip if not installed
+          if [ -n "$quick" ] && [ -e "$quick" ]; then
+            smoke clearCore-quick "$quick" || fail=1
+          fi
           exit "$fail"
 
       - name: Attach installer to the release
