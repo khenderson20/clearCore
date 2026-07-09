@@ -337,6 +337,10 @@ if (BUILD_QT6_UI)
     # Configures AUTOMOC/AUTORCC and, on Windows, sets DLL runtime output
     # directories so Qt6Core.dll is found by test runners in the build tree.
     qt_standard_project_setup()
+    # This project has no .ui files; ui_scale.h is a hand-written header whose
+    # name accidentally matches AUTOUIC's ui_*.h pattern, triggering a spurious
+    # "missing .ui source" error. AUTOMOC and AUTORCC (set above) are sufficient.
+    set(CMAKE_AUTOUIC OFF)
 
     # Qt Advanced Docking System (LGPL-2.1) — IDE-style dockable panels for
     # the GUI. Built as a shared library (QADS default), which is what keeps
