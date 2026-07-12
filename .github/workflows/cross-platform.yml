@@ -87,11 +87,16 @@ jobs:
           # choco can return exit 0 even when the community feed is down (503),
           # leaving NSIS uninstalled and cpack unable to find makensis. Retry
           # until makensis actually exists on disk.
+          #
+          # Version pinned for Scorecard's Pinned-Dependencies check. Dependabot
+          # has no Chocolatey ecosystem, so this needs a manual bump occasionally
+          # — check https://community.chocolatey.org/packages/nsis for the
+          # current release.
           makensis="/c/Program Files (x86)/NSIS/makensis.exe"
           for attempt in 1 2 3 4 5; do
             [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
             echo "Installing NSIS (attempt $attempt)…"
-            choco install nsis --no-progress -y || true
+            choco install nsis --version=3.12.0 --no-progress -y || true
             [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
             sleep 20
           done
