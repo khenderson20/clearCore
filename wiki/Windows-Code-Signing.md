@@ -66,12 +66,31 @@ Signing activates only after all of the following are in place.
 
 ### <img src="assets/azure-icons/app-registrations.svg" width="22" align="top" alt=""> 2. Entra service principal + federated credential
 
-1. Create an **Entra app registration** (service principal).
-2. Grant it the **"Artifact Signing Certificate Profile Signer"** role on the Artifact Signing account.
-3. Add a **federated credential** for GitHub Actions with the subject:
-   ```
-   repo:khenderson20/clearCore:environment:release-signing
-   ```
+**Step 1 — Create the app registration.** Create an **Entra app registration** (service principal). Note its **client ID**, **tenant ID**, and the target **subscription ID** — these go into the GitHub secrets in section 3.
+
+**Step 2 — Assign the signing role.** Grant the app the **Artifact Signing Certificate Profile Signer** role on the Artifact Signing account. This authorizes the app to sign; the federated credential in step 3 only handles *login*.
+
+1. In the Azure portal, open your **Artifact Signing account**.
+2. In the left menu, select **Access control (IAM)**.
+3. Select **Add → Add role assignment**.
+4. On the **Role** tab, search for **Artifact Signing Certificate Profile Signer**, select it, then **Next**.
+5. On the **Members** tab, leave **Assign access to** as **User, group, or service principal**, select **+ Select members**, search for the app registration by name (e.g. *Code Sign Github*), select it, and click **Select**.
+6. Select **Review + assign** (twice) to finish.
+
+> The role can also be scoped to the resource group or a specific certificate profile instead of the whole account. Account scope is simplest; narrower scope works as long as it covers the profile named in `AZURE_SIGNING_PROFILE`. Role assignments can take a few minutes to propagate before signing succeeds.
+
+**Step 3 — Add a federated credential** so GitHub Actions can log in over OIDC without a stored secret. On the app registration, go to **Certificates & secrets → Federated credentials → Add credential**, choose the **GitHub Actions deploying Azure resources** scenario, and enter:
+
+- **Issuer** — `https://token.actions.githubusercontent.com` (auto-filled)
+- **Organization** — `khenderson20` (the repo owner; a personal account works here — no GitHub org is required)
+- **Repository** — `clearCore`
+- **Entity type** — **Environment**
+- **GitHub environment name** — `release-signing`
+- **Subject identifier** — auto-fills to `repo:khenderson20/clearCore:environment:release-signing`; confirm it matches exactly
+- **Name** — `clearCore-release-signing` (immutable after creation)
+- **Description** — `OIDC login for signing Windows release binaries via GitHub Actions.`
+
+> **Entity type must be Environment**, not Branch or Tag — the `windows-x64` job runs under `environment: release-signing`, so its OIDC token carries the `:environment:release-signing` subject. A Branch-scoped credential would produce a different subject and `azure/login` would fail with a mismatch.
 
 ### <img src="assets/azure-icons/gear.svg" width="22" align="top" alt=""> 3. GitHub repository configuration
 

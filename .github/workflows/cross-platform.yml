@@ -10,9 +10,10 @@ name: Cross-platform build
 on:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [ published ]
 
 permissions:
+  id-token: write
   contents: read
 
 concurrency:
