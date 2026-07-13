@@ -9,7 +9,7 @@ clearCore can now load real compiled MIPS binaries directly into the emulator's 
 | Architecture | EM_MIPS (8) |
 | Class | ELFCLASS32 (32-bit) |
 | Endianness | **ELFDATA2LSB (little-endian / mipsel only)** |
-| Type | ET_EXEC (static executable) |
+| Type | ET_EXEC (static executable) or ET_REL (relocatable object) |
 | Segments | All `PT_LOAD` segments are mapped; BSS (memsz > filesz) is zero-filled |
 
 Big-endian MIPS ELF files (`ELFDATA2MSB`) are rejected with a clear error message. The emulator's `Memory` model is little-endian, so loading a big-endian ELF without byte-swapping every instruction would produce garbage. Use a `mipsel` (little-endian) toolchain instead.
