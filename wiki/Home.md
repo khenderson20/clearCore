@@ -20,7 +20,7 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 - **CP0 exception model** — SYSCALL, BREAK, overflow, address errors, and reserved-instruction faults raise MIPS32r2 exceptions; Status, Cause, EPC, and BadVAddr are fully modelled; ERET/MFC0/MTC0 are supported
 - **ELF loader** — load `mipsel` (little-endian) ELF32 executables compiled with `mipsel-linux-gnu-gcc` or `mipsel-linux-musl-gcc` directly into the emulated address space
 - **GDB RSP stub** — attach `mipsel-linux-gnu-gdb` to port 1234 for breakpoints, single-step, register/memory inspection, and exception-driven stop signals
-- **Continuous fuzzing** — a libFuzzer harness (`fuzz_hex_loader`) runs on every PR via ClusterFuzzLite, exercising `mips::parse_hex_program` against arbitrary input
+- **Continuous fuzzing** — a libFuzzer harness (`fuzz_hex_loader`) runs via ClusterFuzzLite on PRs touching relevant paths, exercising `mips::parse_hex_program` against arbitrary input (see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger)
 
 ---
 

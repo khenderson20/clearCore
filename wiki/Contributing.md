@@ -9,6 +9,10 @@
 5. Run `ctest --preset debug` (or `ctest --preset asan`) to verify all tests pass
 6. Open a pull request targeting the `develop` branch
 
+## CI workflows
+
+This is the canonical list of what runs when — if you're checking a trigger condition, check here rather than README.md, which only summarizes.
+
 CI (`.github/workflows/ci.yml`) runs four jobs on every push and PR to `main` or `develop`: a `clang-format` check, a coverage build uploaded to Codecov (push events, or same-repo PRs — not fork PRs), a fast core-only test matrix (Debug and Debug+ASan/UBSan), and a full build exercising both Qt6 GUIs and Nyxstone (skipped for draft PRs). Additional workflows run under narrower conditions:
 
 | Workflow                    | Trigger                                                        | Purpose                                                                                  |
@@ -103,7 +107,7 @@ When adding a new instruction to the ISA:
 
 A libFuzzer harness lives at `tests/fuzz/fuzz_hex_loader.cpp`. It feeds arbitrary byte sequences to `mips::parse_hex_program`, which is the one function that accepts raw untrusted input (hex words from a file or the Program Loader tab). The harness is gated on `-DFUZZING_ENGINE=<engine>` at configure time and is never built by normal developer or CI builds.
 
-ClusterFuzzLite (`.clusterfuzzlite/`) provides the OSS-Fuzz-compatible project config, Dockerfile, and `build.sh`. The `cflite_pr.yml` workflow builds and runs `fuzz_hex_loader` for 120 seconds on every PR. Crashes or hangs are reported as CI failures.
+ClusterFuzzLite (`.clusterfuzzlite/`) provides the OSS-Fuzz-compatible project config, Dockerfile, and `build.sh`. The `cflite_pr.yml` workflow builds and runs `fuzz_hex_loader` for 120 seconds under the trigger listed in [CI workflows](#ci-workflows) above. Crashes or hangs are reported as CI failures.
 
 If you add a new function that parses untrusted text or binary input, consider adding a parallel harness in `tests/fuzz/` following the same pattern.
 

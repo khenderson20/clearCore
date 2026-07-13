@@ -111,7 +111,7 @@ ctest --preset debug    # all suites
 ctest --preset asan     # same suites under ASan + UBSan
 ```
 
-Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main`/`develop` runs Debug and ASan/UBSan builds via `ci.yml`; CodeQL and dependency-review additionally run on PRs to `main`, and libFuzzer fuzzing runs on PRs that touch `src/`, `include/`, or `fuzz/`. See [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing) for the full details.
+Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main`/`develop` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
 
 ## Interfaces
 

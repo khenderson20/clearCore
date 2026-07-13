@@ -171,7 +171,7 @@ This project uses a lightweight, dependency-free `CHECK()`-macro test harness th
 
 ### ClusterFuzzLite fuzzing (CI only)
 
-A libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targets `mips::parse_hex_program` — the hex text parser that accepts untrusted input. It is **not** built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs it for 120 seconds on every PR to `main` or `develop` via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer). To build it manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
+A libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targets `mips::parse_hex_program` — the hex text parser that accepts untrusted input. It is **not** built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs it for 120 seconds via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer) — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger. To build it manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
 
 ---
 
