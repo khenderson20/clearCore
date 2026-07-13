@@ -3,12 +3,15 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <gsl/gsl>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <system_error>
 
 // POSIX socket headers — supported on Linux and macOS.
 #include <arpa/inet.h>
@@ -82,7 +85,14 @@ void GdbStub::listen() {
     last_result_ = StepResult::Ok;
     std::string pkt;
     while (recv_packet(pkt)) {
-        dispatch(pkt);
+        // Defense in depth: the individual handlers are written not to throw on
+        // malformed input, but a single bad packet must never abort the whole
+        // emulator, so any stray exception degrades to an RSP error reply.
+        try {
+            dispatch(pkt);
+        } catch (const std::exception&) {
+            send_error(0);
+        }
     }
 }
 
@@ -221,8 +231,23 @@ std::string GdbStub::to_hex_le(uint32_t v) {
     return {buf};
 }
 
-uint32_t GdbStub::parse_hex(const std::string& s) {
-    return static_cast<uint32_t>(std::stoul(s, nullptr, 16));
+std::optional<uint32_t> GdbStub::parse_hex(const std::string& s) {
+    if (s.empty()) return std::nullopt;
+    uint32_t v         = 0;
+    const auto [p, ec] = std::from_chars(s.data(), s.data() + s.size(), v, 16);
+    // from_chars accepts neither sign nor "0x" prefix and never throws; require
+    // the whole string to be consumed so trailing garbage is rejected.
+    if (ec != std::errc{} || p != s.data() + s.size()) return std::nullopt;
+    return v;
+}
+
+std::optional<uint8_t> GdbStub::parse_hex_byte(const std::string& s, std::size_t off) {
+    if (off + 2 > s.size()) return std::nullopt;
+    uint32_t    v      = 0;
+    const char* first  = s.data() + off;
+    const auto [p, ec] = std::from_chars(first, first + 2, v, 16);
+    if (ec != std::errc{} || p != first + 2) return std::nullopt;
+    return static_cast<uint8_t>(v);
 }
 
 // ─── Stop signal ─────────────────────────────────────────────────────────────
@@ -262,12 +287,13 @@ std::string GdbStub::handle_read_regs() {
 bool GdbStub::handle_write_regs(const std::string& hex) {
     if (hex.size() < static_cast<size_t>(kNumRegs * 8)) return false;
     for (int i = 0; i < kNumRegs; ++i) {
-        const std::string chunk = hex.substr(static_cast<size_t>(i) * 8, 8);
         // Little-endian: LSB is at the lowest address in the hex string.
         uint32_t v = 0;
         for (int b = 0; b < 4; ++b) {
-            const std::string byte_str = chunk.substr(static_cast<size_t>(b) * 2, 2);
-            v |= static_cast<uint32_t>(std::stoul(byte_str, nullptr, 16)) << (b * 8);
+            const auto byte =
+                parse_hex_byte(hex, static_cast<size_t>(i) * 8 + static_cast<size_t>(b) * 2);
+            if (!byte) return false;
+            v |= static_cast<uint32_t>(*byte) << (b * 8);
         }
         write_gdb_reg(i, v);
     }
@@ -275,35 +301,43 @@ bool GdbStub::handle_write_regs(const std::string& hex) {
 }
 
 std::string GdbStub::handle_read_reg(const std::string& args) {
-    const int n = static_cast<int>(parse_hex(args));
-    if (n >= kNumRegs) return "E01";
-    return to_hex_le(read_gdb_reg(n));
+    const auto n = parse_hex(args);
+    if (!n || *n >= static_cast<uint32_t>(kNumRegs)) return "E01";
+    return to_hex_le(read_gdb_reg(static_cast<int>(*n)));
 }
 
 bool GdbStub::handle_write_reg(const std::string& args) {
     const size_t eq = args.find('=');
     if (eq == std::string::npos) return false;
-    const int n = static_cast<int>(parse_hex(args.substr(0, eq)));
-    if (n >= kNumRegs) return false;
-    const std::string& vs = args.substr(eq + 1);
-    uint32_t           v  = 0;
-    for (int b = 0; b < 4 && b * 2 + 1 < static_cast<int>(vs.size()); ++b)
-        v |=
-            static_cast<uint32_t>(std::stoul(vs.substr(static_cast<size_t>(b) * 2, 2), nullptr, 16))
-            << (b * 8);
-    write_gdb_reg(n, v);
+    const auto n = parse_hex(args.substr(0, eq));
+    if (!n || *n >= static_cast<uint32_t>(kNumRegs)) return false;
+    const std::string vs = args.substr(eq + 1);
+    uint32_t          v  = 0;
+    // GDB may send fewer than 4 bytes; consume what is present, stop at the first
+    // incomplete/invalid byte.
+    for (int b = 0; b < 4; ++b) {
+        const auto byte = parse_hex_byte(vs, static_cast<size_t>(b) * 2);
+        if (!byte) break;
+        v |= static_cast<uint32_t>(*byte) << (b * 8);
+    }
+    write_gdb_reg(static_cast<int>(*n), v);
     return true;
 }
 
 std::string GdbStub::handle_read_mem(const std::string& args) {
     const size_t comma = args.find(',');
     if (comma == std::string::npos) return "E01";
-    const uint32_t addr = parse_hex(args.substr(0, comma));
-    const uint32_t len  = parse_hex(args.substr(comma + 1));
+    const auto addr = parse_hex(args.substr(0, comma));
+    const auto len  = parse_hex(args.substr(comma + 1));
+    if (!addr || !len) return "E01";
+    // Clamp the requested length to the physical memory size: `len` is
+    // attacker-controlled, and reserving `len * 2` for a bogus value would
+    // otherwise drive a multi-gigabyte allocation before the bounds check runs.
+    const uint32_t n = std::min<uint32_t>(*len, static_cast<uint32_t>(cpu_.mem().size()));
     std::string    out;
-    out.reserve(len * 2);
-    for (uint32_t i = 0; i < len; ++i) {
-        const auto b = cpu_.mem().read_byte(addr + i);
+    out.reserve(static_cast<size_t>(n) * 2);
+    for (uint32_t i = 0; i < n; ++i) {
+        const auto b = cpu_.mem().read_byte(*addr + i);
         if (!b) return "E02";  // OOB
         out += hex_byte(*b);
     }
@@ -313,15 +347,15 @@ std::string GdbStub::handle_read_mem(const std::string& args) {
 bool GdbStub::handle_write_mem(const std::string& args) {
     const size_t colon = args.find(':');
     const size_t comma = args.find(',');
-    if (colon == std::string::npos || comma == std::string::npos) return false;
-    const uint32_t     addr = parse_hex(args.substr(0, comma));
-    const uint32_t     len  = parse_hex(args.substr(comma + 1, colon - comma - 1));
-    const std::string& hex  = args.substr(colon + 1);
-    for (uint32_t i = 0; i < len; ++i) {
-        if (i * 2 + 1 >= hex.size()) return false;
-        const uint8_t byte = static_cast<uint8_t>(
-            std::stoul(hex.substr(static_cast<size_t>(i) * 2, 2), nullptr, 16));
-        if (!cpu_.mem().write_byte(addr + i, byte)) return false;
+    if (colon == std::string::npos || comma == std::string::npos || comma > colon) return false;
+    const auto addr = parse_hex(args.substr(0, comma));
+    const auto len  = parse_hex(args.substr(comma + 1, colon - comma - 1));
+    if (!addr || !len) return false;
+    const std::string hex = args.substr(colon + 1);
+    for (uint32_t i = 0; i < *len; ++i) {
+        const auto byte = parse_hex_byte(hex, static_cast<size_t>(i) * 2);
+        if (!byte) return false;  // truncated or non-hex payload
+        if (!cpu_.mem().write_byte(*addr + i, *byte)) return false;
     }
     return true;
 }
@@ -365,13 +399,21 @@ void GdbStub::handle_breakpoint_set(const std::string& args) {
         send_error(1);
         return;
     }
-    const int type = static_cast<int>(parse_hex(args.substr(0, c1)));
-    if (type != 0) {
+    const auto type = parse_hex(args.substr(0, c1));
+    if (!type) {
+        send_error(1);
+        return;
+    }
+    if (*type != 0) {
         send_empty();
         return;
     }  // unsupported breakpoint type
-    const uint32_t addr = parse_hex(args.substr(c1 + 1, c2 - c1 - 1));
-    insert_breakpoint(addr) ? send_ok() : send_error(1);
+    const auto addr = parse_hex(args.substr(c1 + 1, c2 - c1 - 1));
+    if (!addr) {
+        send_error(1);
+        return;
+    }
+    insert_breakpoint(*addr) ? send_ok() : send_error(1);
 }
 
 void GdbStub::handle_breakpoint_clear(const std::string& args) {
@@ -385,19 +427,29 @@ void GdbStub::handle_breakpoint_clear(const std::string& args) {
         send_error(1);
         return;
     }
-    const int type = static_cast<int>(parse_hex(args.substr(0, c1)));
-    if (type != 0) {
+    const auto type = parse_hex(args.substr(0, c1));
+    if (!type) {
+        send_error(1);
+        return;
+    }
+    if (*type != 0) {
         send_empty();
         return;
     }
-    const uint32_t addr = parse_hex(args.substr(c1 + 1, c2 - c1 - 1));
-    remove_breakpoint(addr) ? send_ok() : send_error(1);
+    const auto addr = parse_hex(args.substr(c1 + 1, c2 - c1 - 1));
+    if (!addr) {
+        send_error(1);
+        return;
+    }
+    remove_breakpoint(*addr) ? send_ok() : send_error(1);
 }
 
 // ─── Continue / step ──────────────────────────────────────────────────────────
 
 void GdbStub::handle_continue(const std::string& args) {
-    if (!args.empty()) cpu_.set_pc(parse_hex(args));
+    if (!args.empty()) {
+        if (const auto pc = parse_hex(args)) cpu_.set_pc(*pc);
+    }
 
     running_ = true;
     while (running_) {
@@ -431,7 +483,9 @@ void GdbStub::handle_continue(const std::string& args) {
 }
 
 void GdbStub::handle_step(const std::string& args) {
-    if (!args.empty()) cpu_.set_pc(parse_hex(args));
+    if (!args.empty()) {
+        if (const auto pc = parse_hex(args)) cpu_.set_pc(*pc);
+    }
 
     last_result_ = cpu_.step();
     if (last_result_ == StepResult::Exception) {

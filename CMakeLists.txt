@@ -572,6 +572,11 @@ clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception 
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
 
+# ---- gdb_stub_test: RSP hex-parser robustness (only when the stub is built) ----
+if (BUILD_GDB_STUB)
+    clearcore_add_test(gdb_stub_test tests/mips/gdb_stub_test.cpp mips_core)
+endif ()
+
 # ---- nyxstone_test: differential Decoder/Disassembler vs LLVM (if enabled) ----
 # Only meaningful when Nyxstone was actually built; mips_core carries the
 # CLEARCORE_NYXSTONE_ENABLED definition either way, so the source also compiles
