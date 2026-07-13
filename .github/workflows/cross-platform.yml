@@ -10,9 +10,10 @@ name: Cross-platform build
 on:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [ published ]
 
 permissions:
+  id-token: write
   contents: read
 
 concurrency:
@@ -26,6 +27,12 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write  # attach installers to the release
+      id-token: write  # OIDC federated login for Azure Trusted Signing
+    # Scopes the OIDC token to a stable subject
+    # (repo:khenderson20/clearCore:environment:release-signing) so a single Entra
+    # federated credential covers every release regardless of tag name. Also the
+    # place to add a manual approval gate on signed releases later.
+    environment: release-signing
 
     strategy:
       fail-fast: false
@@ -80,11 +87,16 @@ jobs:
           # choco can return exit 0 even when the community feed is down (503),
           # leaving NSIS uninstalled and cpack unable to find makensis. Retry
           # until makensis actually exists on disk.
+          #
+          # Version pinned for Scorecard's Pinned-Dependencies check. Dependabot
+          # has no Chocolatey ecosystem, so this needs a manual bump occasionally
+          # — check https://community.chocolatey.org/packages/nsis for the
+          # current release.
           makensis="/c/Program Files (x86)/NSIS/makensis.exe"
           for attempt in 1 2 3 4 5; do
             [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
             echo "Installing NSIS (attempt $attempt)…"
-            choco install nsis --no-progress -y || true
+            choco install nsis --version=3.12.0 --no-progress -y || true
             [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
             sleep 20
           done
@@ -163,6 +175,39 @@ jobs:
         timeout-minutes: 10
         run: ctest --test-dir build/release --output-on-failure
 
+      # ── Code signing (Windows) ──────────────────────────────────────────────
+      # Defender's ASR rule "block executables unless they meet prevalence/age/
+      # trusted-list criteria" rejects freshly built, unsigned binaries with
+      # "Access is denied" — and it checks the *installed* clearCore-gui.exe, not
+      # just the installer. So the app executables must be signed HERE, before
+      # cpack copies them into the NSIS package; the installer itself is signed
+      # in a second pass after packaging. Gated on AZURE_SIGNING_ACCOUNT so the
+      # build still succeeds (shipping unsigned) until Trusted Signing is set up.
+      - name: Azure login (OIDC) for signing
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign application binaries (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/trusted-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          # All three app targets are declared at the top level, so Ninja emits
+          # them into the build root. Qt's own DLLs are already signed upstream.
+          files: |
+            ${{ github.workspace }}\build\release\clearCore-gui.exe
+            ${{ github.workspace }}\build\release\clearCore-quick.exe
+            ${{ github.workspace }}\build\release\number_system_converter.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
       # Versioned, arch-labelled filenames; version comes from the release tag
       # (published release) or a dev placeholder (push / manual dispatch).
@@ -187,6 +232,20 @@ jobs:
                 -D CPACK_PACKAGE_FILE_NAME="$name" -V
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
+
+      # Sign the NSIS installer itself so SmartScreen trusts the download and
+      # doesn't show an "unknown publisher" wall. Reuses the OIDC login above.
+      - name: Sign installer (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/trusted-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\release\${{ steps.package.outputs.name }}.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

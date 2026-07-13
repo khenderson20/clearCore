@@ -40,6 +40,7 @@
 #include "mips/processor.h"
 
 #include <cstdint>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -55,6 +56,10 @@ public:
 
     GdbStub(const GdbStub&)            = delete;
     GdbStub& operator=(const GdbStub&) = delete;
+
+    // Grants the unit test access to the private, non-throwing hex parsers so the
+    // malformed-input contract can be checked without standing up a TCP session.
+    friend struct GdbStubTestAccess;
 
     // Block until a GDB client connects, then run the RSP event loop.
     // Returns when GDB sends 'k'/'D', or the CPU halts, or the socket drops.
@@ -103,8 +108,12 @@ private:
     static uint8_t     checksum(const std::string& data) noexcept;
     static std::string to_hex_le(uint32_t v);  // 4-byte little-endian hex
     static uint32_t    from_hex_le(const std::string& s, size_t off = 0);
-    static uint32_t    parse_hex(const std::string& s);
-    static std::string hex_byte(uint8_t b);
+    // Non-throwing hex parsers: RSP payloads are attacker-controllable (the
+    // checksum is intentionally unverified), so a malformed field must yield
+    // nullopt rather than throw out of the packet loop and abort the process.
+    static std::optional<uint32_t> parse_hex(const std::string& s);
+    static std::optional<uint8_t>  parse_hex_byte(const std::string& s, std::size_t off);
+    static std::string             hex_byte(uint8_t b);
 
     // Signal number to send for a given StepResult / exception code.
     int stop_signal() const;
