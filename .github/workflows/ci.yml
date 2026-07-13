@@ -47,6 +47,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       # cpp-linter-action (v2.20.0 and earlier) hard-codes uv 0.9.5 and always
       # re-downloads it from GitHub releases, which produces intermittent 504
@@ -95,6 +97,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
@@ -138,6 +142,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build
@@ -169,6 +175,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: >
