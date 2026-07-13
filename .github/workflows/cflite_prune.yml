@@ -1,19 +1,30 @@
-name: ClusterFuzzLite PR fuzzing
+# ClusterFuzzLite corpus pruning.
+#
+# cflite_batch.yml accumulates redundant testcases in the corpus over time
+# (inputs that don't add new coverage). Mandatory companion to batch fuzzing
+# per ClusterFuzzLite's own guidance: prune daily to keep the corpus lean and
+# fuzzing efficient. Runs against the same `cifuzz-corpus` branch batch
+# fuzzing writes to.
+name: ClusterFuzzLite corpus pruning
+
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'fuzz/**'
+  schedule:
+    - cron: '0 4 * * *'  # nightly, after cflite_batch.yml's 03:00 UTC run
+  workflow_dispatch: { }
+
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
-  security-events: write
+
+concurrency:
+  group: cflite-corpus-${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
-  PR:
+  prune:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push the pruned corpus back to cifuzz-corpus
+      security-events: write # SARIF upload to code scanning
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -23,31 +34,23 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # Read-only clone of the corpus cflite_batch.yml builds up on the
-      # cifuzz-corpus branch (this is a public repo, so no token is needed to
-      # read it). Lets PR fuzzing start from a seeded corpus instead of empty,
-      # and — once the corpus has coverage data — fuzz only the targets a PR
-      # actually touches.
+
       - name: Build Fuzzers
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           language: c++
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          storage-repo: https://github.com/${{ github.repository }}.git
-          storage-repo-branch: cifuzz-corpus
+
       - name: Run Fuzzers
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 120
-          mode: 'code-change'
+          fuzz-seconds: 600
+          mode: 'prune'
           output-sarif: true
-          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           storage-repo-branch: cifuzz-corpus
 
-      # run_fuzzers only writes the SARIF file; it doesn't upload it. Without
-      # this step security-events:write above is requested but never used.
       - name: Upload crash SARIF
         if: always() && steps.build.outcome == 'success'
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3

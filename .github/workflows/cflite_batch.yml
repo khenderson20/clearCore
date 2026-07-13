@@ -1,19 +1,36 @@
-name: ClusterFuzzLite PR fuzzing
+# ClusterFuzzLite batch fuzzing.
+#
+# cflite_pr.yml only fuzzes code touched by a PR for 120s — bugs only surface
+# if a PR happens to touch the exact vulnerable path. This runs the existing
+# fuzz targets (tests/fuzz/) for much longer on a schedule, against the
+# current develop HEAD, so bugs pre-existing in the MIPS decoder/parser get
+# found even when no PR exercises them, and builds up a corpus for
+# cflite_pr.yml / cflite_cov.yml to reuse.
+#
+# Corpus storage: pushed to the `cifuzz-corpus` branch of this same repo
+# (rather than a separate storage repo) using the job's own GITHUB_TOKEN, so
+# no extra PAT/secret is needed. That branch carries no source code and isn't
+# covered by the main/develop branch rulesets, so direct pushes are fine.
+name: ClusterFuzzLite batch fuzzing
+
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'fuzz/**'
+  schedule:
+    - cron: '0 3 * * *'  # nightly, 03:00 UTC
+  workflow_dispatch: { }
+
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
-  security-events: write
+
+concurrency:
+  group: cflite-corpus-${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
-  PR:
+  batch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push the updated corpus to cifuzz-corpus
+      security-events: write # SARIF upload to code scanning
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -23,27 +40,21 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # Read-only clone of the corpus cflite_batch.yml builds up on the
-      # cifuzz-corpus branch (this is a public repo, so no token is needed to
-      # read it). Lets PR fuzzing start from a seeded corpus instead of empty,
-      # and — once the corpus has coverage data — fuzz only the targets a PR
-      # actually touches.
+
       - name: Build Fuzzers
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           language: c++
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          storage-repo: https://github.com/${{ github.repository }}.git
-          storage-repo-branch: cifuzz-corpus
+
       - name: Run Fuzzers
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 120
-          mode: 'code-change'
+          fuzz-seconds: 3600
+          mode: 'batch'
           output-sarif: true
-          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           storage-repo-branch: cifuzz-corpus
 
       # run_fuzzers only writes the SARIF file; it doesn't upload it. Without
