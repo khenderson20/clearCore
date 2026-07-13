@@ -36,6 +36,7 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 | [GDB Stub](GDB-Stub)                             | GDB RSP server — breakpoints, single-step, signals        |
 | [Terminal UI](Terminal-UI)                       | FTXUI interface — tabs, controls, visualizations          |
 | [Qt6 GUI](Qt6-GUI)                               | Desktop interface — views, signal flow, thread safety     |
+| [Windows Code Signing](Windows-Code-Signing)     | Azure Trusted Signing setup for release binaries          |
 | [Roadmap](Roadmap)                               | Stage-by-stage feature status and upcoming work            |
 | [Contributing](Contributing)                     | Code style, testing conventions, PR workflow                |
 

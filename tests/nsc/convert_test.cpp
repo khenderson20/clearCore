@@ -34,6 +34,21 @@ void parseTests() {
     EXPECT_EQ(nsc::parseBase("", 10).has_value(), false);     // empty
     EXPECT_EQ(nsc::parseBase("12x", 10).has_value(), false);  // trailing garbage
     EXPECT_EQ(nsc::parseBase("2", 2).has_value(), false);     // not a binary digit
+
+    // Regression (#124): stoull-lenient inputs the contract requires rejecting.
+    EXPECT_EQ(nsc::parseBase("-1", 10).has_value(), false);    // negative sign
+    EXPECT_EQ(nsc::parseBase("-0", 10).has_value(), false);    // negative zero
+    EXPECT_EQ(nsc::parseBase("+5", 10).has_value(), false);    // positive sign
+    EXPECT_EQ(nsc::parseBase(" 7", 10).has_value(), false);    // leading whitespace
+    EXPECT_EQ(nsc::parseBase("7 ", 10).has_value(), false);    // trailing whitespace
+    EXPECT_EQ(nsc::parseBase("0xFF", 16).has_value(), false);  // 0x prefix (base 16)
+    // Overflow past 64 bits must still be rejected.
+    EXPECT_EQ(nsc::parseBase("18446744073709551616", 10).has_value(), false);
+    // Valid inputs across bases remain accepted.
+    EXPECT_EQ(nsc::parseBase("FF", 16).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parseBase("ff", 16).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parseBase("18446744073709551615", 10).value_or(0),
+              std::uint64_t{18446744073709551615ULL});
 }
 
 void formatTests() {
