@@ -1,0 +1,42 @@
+# Static analysis for the workflows themselves — script injection, credential
+# leakage, and over-broad permissions across the 8+ files in this directory.
+# Complements Scorecard (repo-level supply-chain posture) and CodeQL (C++
+# source) with a check aimed specifically at GitHub Actions YAML.
+#
+# Advanced Security mode: findings surface in Security > Code scanning rather
+# than failing the run directly (GitHub's own guidance for SARIF-producing
+# tools — see the zizmor-action README). To make findings block a merge
+# instead of just being visible, enable code-scanning merge protection on the
+# `zizmor` tool in the repo's branch protection / ruleset settings.
+name: zizmor
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.github/workflows/**'
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
