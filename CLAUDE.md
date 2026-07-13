@@ -230,6 +230,9 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 | `scorecard.yml`         | push → `main`, weekly                 | OpenSSF supply-chain score (feeds README badge)                                                                     |
 | `dependency-review.yml` | PR that touches CMakeLists            | Checks for known-vulnerable dependency versions                                                                     |
 | `cflite_pr.yml`         | PR → `main` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing                                                                                    |
+| `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch                                      |
+| `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
+| `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage HTML report from `cifuzz-corpus`, uploaded as a workflow artifact                                  |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
 
 ### ci.yml job map

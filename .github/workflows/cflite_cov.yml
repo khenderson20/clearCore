@@ -1,0 +1,57 @@
+# ClusterFuzzLite fuzzing coverage reports.
+#
+# Builds an HTML coverage report from the corpus cflite_batch.yml has
+# accumulated on the `cifuzz-corpus` branch, showing which parts of the MIPS
+# decoder/parser fuzzing actually reaches. Also feeds cflite_pr.yml's
+# affected-fuzzers detection (which fuzzer(s) a given code change touches).
+#
+# The report is uploaded as a workflow artifact rather than published to a
+# gh-pages-style branch, keeping this workflow read-only against the repo.
+# To browse it: open the run summary -> Artifacts -> coverage-report.
+name: ClusterFuzzLite coverage report
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # nightly, after cflite_prune.yml's 04:00 UTC run
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: c++
+          sanitizer: coverage
+
+      - name: Run Fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          mode: 'coverage'
+          sanitizer: 'coverage'
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+
+      - name: Upload coverage report
+        if: always() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-report
+          path: out/report/linux
+          if-no-files-found: warn
