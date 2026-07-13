@@ -50,7 +50,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '13.3'
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         continue-on-error: true
         with:
           egress-policy: audit
@@ -185,7 +185,7 @@ jobs:
       # build still succeeds (shipping unsigned) until Trusted Signing is set up.
       - name: Azure login (OIDC) for signing
         if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
