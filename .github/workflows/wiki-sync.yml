@@ -41,12 +41,19 @@ jobs:
           path: main-repo
           sparse-checkout: |
             wiki
+          persist-credentials: false
 
       - name: Checkout wiki repo
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.repository }}.wiki
           path: wiki-repo
+          # persist-credentials stays true (default): the "Commit and push if
+          # changed" step below pushes to the wiki repo using the credential
+          # helper this checkout sets up. WIKI_SYNC_TOKEN is a classic PAT
+          # scoped to this one job (see the setup note at the top of this file
+          # for why it must be a classic, not fine-grained, token).
+          # zizmor: ignore[artipacked]
           token: ${{ secrets.WIKI_SYNC_TOKEN }}
 
       - name: Copy wiki/ pages into the wiki repo

@@ -62,6 +62,7 @@ jobs:
           # resource. A shallow, tagless checkout yields an empty version and a
           # malformed FILEVERSION that the resource compiler rejects (RC2127).
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Qt 6
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
@@ -218,7 +219,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
-            version="${{ github.event.release.tag_name }}"; version="${version#v}"
+            version="${GITHUB_EVENT_RELEASE_TAG_NAME}"; version="${version#v}"
           else
             version="0.0.0-dev"
           fi
@@ -232,6 +233,8 @@ jobs:
                 -D CPACK_PACKAGE_FILE_NAME="$name" -V
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 
       # Sign the NSIS installer itself so SmartScreen trusts the download and
       # doesn't show an "unknown publisher" wall. Reuses the OIDC login above.
@@ -261,7 +264,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          STEPS_PACKAGE_OUTPUTS_NAME: ${{ steps.package.outputs.name }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
-            "build/release/${{ steps.package.outputs.name }}".* \
+          gh release upload "${GITHUB_EVENT_RELEASE_TAG_NAME}" \
+            "build/release/${STEPS_PACKAGE_OUTPUTS_NAME}".* \
             --clobber --repo "${{ github.repository }}"
