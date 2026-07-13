@@ -17,3 +17,10 @@ updates:
     directory: /.clusterfuzzlite
     schedule:
       interval: weekly
+
+  # Keeps the gitleaks pre-commit hook's `rev:` current so it doesn't drift
+  # from GITLEAKS_VERSION in gitleaks.yml (the CI backstop for the same tool).
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
