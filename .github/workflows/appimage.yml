@@ -1,0 +1,169 @@
+# clearCore AppImage — self-contained Linux build of the Qt6 Widgets GUI.
+#
+# Unlike the CPack .tar.gz (which assumes Qt6 is installed), the AppImage
+# bundles Qt and the Qt Advanced Docking System, so a user can download one
+# file, chmod +x, and run it with nothing else installed. linuxdeploy reads the
+# .desktop file and icon that CMake installs, resolves the binary's shared-lib
+# dependencies, and packages them together.
+#
+# Trigger: a published GitHub release (attaches the .AppImage as a release
+# asset) or workflow_dispatch (uploads a workflow artifact for testing).
+name: AppImage
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appimage-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-appimage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # upload the AppImage to the release
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          ninja-build qt6-base-dev qt6-base-private-dev
+          libgl1-mesa-dev libglx-dev
+          libfuse2 xvfb desktop-file-utils
+
+      - name: Install KSyntaxHighlighting (optional)
+        run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
+
+      # Widgets GUI only: QML deployment and Nyxstone/LLVM are out of scope for
+      # the AppImage and only add size and failure surface.
+      - name: Configure (Release, Widgets GUI)
+        run: >
+          cmake -S . -B build/appimage -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_QT6_UI=ON -DBUILD_QT6_QUICK_UI=OFF
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build/appimage --target clearCore-gui number_system_converter
+
+      - name: Install into AppDir
+        run: |
+          DESTDIR="${{ github.workspace }}/AppDir" \
+            cmake --install build/appimage --prefix /usr
+          # Drop dev-only cruft that dependency projects (e.g. QADS) install:
+          # headers, CMake package files, pkg-config. The QADS LGPL license
+          # under usr/share/ads is kept for compliance; linuxdeploy bundles the
+          # QADS .so via the binary's ldd, not from these files.
+          rm -rf AppDir/usr/include \
+                 AppDir/usr/lib/cmake AppDir/usr/lib64/cmake \
+                 AppDir/usr/lib/pkgconfig AppDir/usr/lib64/pkgconfig
+
+      - name: Validate desktop entry
+        run: desktop-file-validate AppDir/usr/share/applications/clearCore.desktop
+
+      - name: Fetch linuxdeploy + Qt plugin
+        run: |
+          base=https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
+          qt=https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous
+          curl -fsSL -o linuxdeploy "$base/linuxdeploy-x86_64.AppImage"
+          curl -fsSL -o linuxdeploy-plugin-qt "$qt/linuxdeploy-plugin-qt-x86_64.AppImage"
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            V="${GITHUB_EVENT_RELEASE_TAG_NAME}"; V="${V#v}"
+          else
+            V="0.0.0-dev"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: Build AppImage
+        env:
+          QMAKE: /usr/bin/qmake6
+          APPIMAGE_EXTRACT_AND_RUN: "1"     # GitHub runners have no FUSE
+          OUTPUT: clearCore-${{ steps.ver.outputs.version }}-x86_64.AppImage
+        run: |
+          # Make the bundled QADS SONAME resolvable regardless of lib vs lib64.
+          export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib:$PWD/AppDir/usr/lib64:$LD_LIBRARY_PATH"
+          ./linuxdeploy --appdir AppDir --plugin qt --output appimage \
+            --desktop-file AppDir/usr/share/applications/clearCore.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/clearCore.png
+          ls -la "$OUTPUT"
+
+      - name: Smoke test under Xvfb
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          STEPS_VER_OUTPUTS_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          APPIMAGE="clearCore-${STEPS_VER_OUTPUTS_VERSION}-x86_64.AppImage"
+          set +e
+          xvfb-run -a --server-args="-screen 0 1280x1024x24" \
+            timeout 25 "./$APPIMAGE"
+          rc=$?
+          set -e
+          # `timeout` returns 124 when it has to kill a still-running process —
+          # i.e. the GUI launched and stayed alive. Anything else is a crash.
+          if [ "$rc" -eq 124 ]; then
+            echo "Smoke test passed: GUI stayed alive under Xvfb."
+          else
+            echo "Smoke test FAILED: process exited early (code $rc)"
+            exit 1
+          fi
+
+      # The AppImage's default entry point is the GUI, but the TUI
+      # (number_system_converter) ships inside it too — and it was the binary
+      # hit by the -O3 startup crash. Extract the AppImage and launch the bundled
+      # TUI directly so that class of bug is caught on this artifact as well. It
+      # needs no display; feed EOF on stdin and treat a timeout (still running)
+      # or a clean exit as healthy, any crash signal as failure.
+      - name: Smoke test the bundled TUI
+        run: |
+          APPIMAGE="clearCore-${STEPS_VER_OUTPUTS_VERSION}-x86_64.AppImage"
+          "./$APPIMAGE" --appimage-extract >/dev/null
+          tui="squashfs-root/usr/bin/number_system_converter"
+          [ -x "$tui" ] || { echo "::error::number_system_converter not bundled in the AppImage"; exit 1; }
+          set +e
+          timeout 20 "$tui" </dev/null >tui.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ge 128 ] && [ "$rc" -ne 124 ]; then
+            echo "::error::number_system_converter crashed on launch (signal $((rc - 128)))"
+            cat tui.log || true
+            exit 1
+          fi
+          echo "✓ number_system_converter launched without crashing (exit $rc)"
+        env:
+          STEPS_VER_OUTPUTS_VERSION: ${{ steps.ver.outputs.version }}
+
+      - name: Upload workflow artifact (always)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clearCore-appimage-${{ steps.ver.outputs.version }}
+          path: clearCore-*-x86_64.AppImage
+          if-no-files-found: error
+
+      - name: Attach to the GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "${GITHUB_EVENT_RELEASE_TAG_NAME}" \
+            clearCore-*-x86_64.AppImage --clobber --repo "${{ github.repository }}"

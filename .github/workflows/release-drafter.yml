@@ -1,0 +1,28 @@
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+  # NOTE: release-drafter needs write permissions; running on fork PRs will fail due to read-only tokens.
+  # The push-to-main trigger below updates the draft release after merge, so a PR trigger is unnecessary.
+
+permissions:
+  contents: read
+
+jobs:
+  update-release-draft:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: release-drafter/release-drafter@4d75298e00d9e34c483e5ff8c68d0ea1c1940c1e # v7
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

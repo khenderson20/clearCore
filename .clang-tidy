@@ -1,0 +1,31 @@
+# clearCore static-analysis profile.
+#
+# Focus: correctness checks that matter for an emulator doing constant bit
+# manipulation and memory indexing (bugprone-*, implicit conversions,
+# narrowing), plus modern-C++ hygiene. Deliberately excluded:
+#   - modernize-use-trailing-return-type   : stylistic churn
+#   - readability-magic-numbers            : opcode/funct tables are magic by nature
+#   - readability-identifier-length        : rs/rt/rd are the ISA's own names
+#   - braces / designated-init / anon-ns   : conflict with established house style
+#
+# Run: clang-tidy -p build/debug src/mips/*.cpp
+---
+Checks: >
+  bugprone-*,
+  cppcoreguidelines-narrowing-conversions,
+  cppcoreguidelines-init-variables,
+  misc-*,
+  modernize-*,
+  performance-*,
+  readability-container-size-empty,
+  readability-inconsistent-declaration-parameter-name,
+  -bugprone-easily-swappable-parameters,
+  -misc-non-private-member-variables-in-classes,
+  -misc-include-cleaner,
+  -misc-use-anonymous-namespace,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -modernize-use-designated-initializers
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/(mips|nsc|nsc_qt|nsc_quick)/.*'
+FormatStyle: file

@@ -1,0 +1,61 @@
+# CodeQL security scanning for the C++ code.
+#
+# Manual build mode: CodeQL only sees code that actually compiles, so we build
+# the release preset with both Qt6 GUIs to cover all first-party code.
+# Nyxstone stays off — it is third-party and just pulls in LLVM.
+#
+# Deliberately no ccache here: cache hits skip compilation and with it the
+# CodeQL extractor, leaving those files out of the analysis.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 6 * * 1'  # weekly, Monday 06:30 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: c-cpp
+          build-mode: manual
+          config: |
+            paths-ignore:
+              - build/**  # FetchContent third-party sources
+
+      - name: Build
+        run: |
+          cmake --preset release -DBUILD_NYXSTONE=OFF
+          cmake --build --preset release
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: '/language:c-cpp'

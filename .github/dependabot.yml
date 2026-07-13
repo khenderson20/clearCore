@@ -1,0 +1,26 @@
+# Keep GitHub Actions versions current (checkout, codeql-action, ccache-action,
+# cpp-linter-action, ...). Grouped so version bumps arrive as a single weekly PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  # The base-builder image is pinned by digest (see .clusterfuzzlite/Dockerfile)
+  # for Scorecard's Pinned-Dependencies check; without this, that digest would
+  # never move and the fuzzing environment would silently go stale.
+  - package-ecosystem: docker
+    directory: /.clusterfuzzlite
+    schedule:
+      interval: weekly
+
+  # Keeps the gitleaks pre-commit hook's `rev:` current so it doesn't drift
+  # from GITLEAKS_VERSION in gitleaks.yml (the CI backstop for the same tool).
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly

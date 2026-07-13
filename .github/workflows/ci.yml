@@ -1,0 +1,206 @@
+# clearCore CI — build and test on every push/PR.
+#
+# Jobs:
+#   format     : clang-format-22 check (same .clang-format as the pre-commit
+#                hook and editors; annotates violations on PRs).
+#   coverage   : core-only build instrumented with --coverage; gcovr report
+#                uploaded to codecov.io via OIDC (no token needed).
+#                Runs on push and on PRs from this repo (not forks — OIDC
+#                requires the same-repo token context).
+#   core-tests : fast path — core libraries + TUI + unit tests, no Qt/LLVM.
+#                Runs twice (Debug, Debug+ASan/UBSan) via the preset matrix.
+#   full-build : everything including both Qt6 GUIs and Nyxstone, Release.
+#                Catches Qt/moc/QML regressions that the core job can't see.
+#
+# Build jobs use ccache backed by the GitHub Actions cache; the configure
+# steps inject it via CMAKE_<LANG>_COMPILER_LAUNCHER so the presets stay
+# usable without ccache locally.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'tests/**'
+      - 'qml/**'
+      - '**/CMakeLists.txt'
+      - 'cmake/**'
+      - 'CMakePresets.json'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # cpp-linter-action (v2.20.0 and earlier) hard-codes uv 0.9.5 and always
+      # re-downloads it from GitHub releases, which produces intermittent 504
+      # failures. We only need clang-format for this job, so install it directly
+      # from the LLVM apt repository — no Python, no uv, no CDN dependency.
+      - name: Install clang-format-22
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y \
+            "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main"
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-22
+
+      - name: Check clang-format
+        id: linter
+        run: |
+          failed=0
+          while IFS= read -r f; do
+            if ! clang-format-22 --dry-run --Werror "$f" 2>&1; then
+              echo "::error file=$f::clang-format violation"
+              failed=$((failed + 1))
+            fi
+          done < <(find src include tests qml -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \
+                   2>/dev/null | sort)
+          echo "clang-format-checks-failed=$failed" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on formatting violations
+        if: steps.linter.outputs.clang-format-checks-failed > 0
+        run: exit 1
+
+  coverage:
+    # Push to main/develop always runs. PRs from forks lack the id-token needed
+    # for OIDC, so restrict to same-repo PRs only to avoid silent upload failures.
+    if: >
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write       # codecov OIDC upload (tokenless for public repos)
+      pull-requests: write  # allow codecov-action to post PR diff comments
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
+
+      # No ccache here: cached objects would skip --coverage instrumentation.
+      - name: Configure with coverage
+        run: >
+          cmake --preset core-only
+          -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage
+          -DCMAKE_EXE_LINKER_FLAGS=--coverage
+
+      - name: Build
+        run: cmake --build --preset core-only
+
+      - name: Test
+        run: ctest --preset core-only
+
+      - name: Generate coverage report
+        run: >
+          gcovr --root . build/core-only
+          --filter src/ --filter include/
+          --cobertura coverage.xml --print-summary
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: coverage.xml
+          use_oidc: true
+          fail_ci_if_error: false
+
+  core-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [core-only, asan]
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: ${{ matrix.preset }}
+
+      - name: Configure (sanitizer job disables the GUIs too)
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  full-build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          ninja-build qt6-base-dev qt6-base-private-dev qt6-declarative-dev
+          llvm-dev zlib1g-dev
+
+      # Only packaged from Ubuntu 25.10 on; the Code Editor falls back to
+      # plain text when the CMake find_package comes up empty.
+      - name: Install KSyntaxHighlighting (optional)
+        run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: full-build
+
+      - name: Configure
+        run: >
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --test-dir build/release --output-on-failure
