@@ -104,7 +104,7 @@ After each `step()` call, `PipelinedCpu::pipeline_state()` returns a `PipelineSt
 
 ## Execution trace
 
-The CPU maintains an 8-entry ring buffer of the last committed instructions (sourced at the WB stage). The TUI renders this as a scrolling execution history panel; the Qt6 GUI shows it in the Pipeline Trace tab.
+The TUI maintains an 8-entry ring buffer of the last committed instructions, built from the WB-stage entry of `PipelineState` after each `step()`, and renders it as a scrolling execution history panel. The CPU itself does not store this history — it only exposes the current cycle's `PipelineState`. The Qt6 GUI's Pipeline Trace tab is a related but separate view: it accumulates the full instruction × cycle grid for the run rather than a fixed 8-entry window (see [Qt6 GUI § Pipeline Trace](Qt6-GUI#pipeline-trace)).
 
 ---
 
