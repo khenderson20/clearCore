@@ -72,7 +72,7 @@ Prefer to build it yourself? Read on.
 
 ## Quick Start
 
-You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.25+**. The terminal UI pulls in its FTXUI dependency automatically. For the desktop GUIs, install Qt6 first (`qt6-qtbase-devel` on Fedora, `qt6-base-dev` on Ubuntu, `qt@6` via Homebrew). If you do not need Qt at all, the `core-only` preset skips it entirely.
+You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.20+** (3.25+ recommended). The terminal UI pulls in its FTXUI dependency automatically. For the desktop GUIs, install Qt6 first (`qt6-qtbase-devel` on Fedora, `qt6-base-dev` on Ubuntu, `qt@6` via Homebrew). If you do not need Qt at all, the `core-only` preset skips it entirely.
 
 ```bash
 cmake --preset debug
@@ -111,7 +111,7 @@ ctest --preset debug    # all suites
 ctest --preset asan     # same suites under ASan + UBSan
 ```
 
-Six CTest suites cover the decoder, disassembler, loader, both CPU backends, and the converter core. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. CI runs Debug and ASan/UBSan builds plus CodeQL, dependency review, and libFuzzer fuzzing on every PR. See [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing) for the full details.
+Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main`/`develop` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
 
 ## Interfaces
 

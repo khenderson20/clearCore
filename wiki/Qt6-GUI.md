@@ -63,13 +63,15 @@ The CPU does not run on the main Qt thread. The `SimulatorController` class medi
 CPU thread                          Main thread (UI)
 ─────────────────                   ─────────────────
 PipelinedCpu::step()
-  → emit pipelineStateChanged()  ──→  Datapath tab updates
-  → emit registersChanged()      ──→  Registers tab updates
-  → emit memoryChanged()         ──→  Memory tab updates
-  → emit traceRowAdded()         ──→  Pipeline Trace updates
-  → emit statisticsChanged()     ──→  Statistics tab updates
+  → emit cycleExecuted()         ──→  Cycle counter updates
+  → emit pipelineStateChanged()  ──→  Datapath / Registers / Memory / Pipeline Trace tabs update
+  → emit statisticsUpdated()     ──→  Statistics tab updates
   → emit breakpointHit()         ──→  Status bar message
+  → emit programLoaded()         ──→  Reset views for the new program
+  → emit halted() / faulted()    ──→  Stop auto-run, report status
 ```
+
+`SimulatorController` (`include/nsc_qt/simulator_controller.h`) has no separate `registersChanged`/`memoryChanged`/`traceRowAdded` signals — the Registers, Memory, and Pipeline Trace tabs all derive their view from the single `pipelineStateChanged(mips::PipelineState)` payload rather than getting dedicated signals of their own.
 
 Qt's event loop automatically marshals signals from the CPU thread to the UI thread. No mutexes are needed in widget code. The controller is the only object that touches the `IProcessor` from outside the CPU thread.
 
