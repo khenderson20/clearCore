@@ -9,3 +9,11 @@ updates:
     groups:
       actions:
         patterns: ['*']
+
+  # The base-builder image is pinned by digest (see .clusterfuzzlite/Dockerfile)
+  # for Scorecard's Pinned-Dependencies check; without this, that digest would
+  # never move and the fuzzing environment would silently go stale.
+  - package-ecosystem: docker
+    directory: /.clusterfuzzlite
+    schedule:
+      interval: weekly
