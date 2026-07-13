@@ -24,6 +24,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: develop
+          # persist-credentials stays true (default): the "Open a pull request"
+          # step below does `git push` using the credential helper this checkout
+          # sets up. Token is the job-scoped GITHUB_TOKEN (contents: write), not
+          # a long-lived secret.
+          # zizmor: ignore[artipacked]
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 

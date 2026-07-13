@@ -28,6 +28,17 @@ When reporting, include what's useful:
 
 This is a personal project, not a funded effort — response times depend on availability. There is no bug bounty program and no guaranteed turnaround, but reports will be acknowledged and taken seriously. Credit in the commit/advisory is offered by default; say if you'd rather stay anonymous.
 
+## Software Bill of Materials (SBOM)
+
+Every published GitHub release includes an SPDX 2.3 JSON SBOM
+(`clearcore-<version>.spdx.json`), generated from the Linux build tree via
+[anchore/sbom-action](https://github.com/anchore/sbom-action) in
+`release.yml`. It inventories the shipped binaries and bundled shared
+libraries (Qt6, the Qt Advanced Docking System, ...); as a CMake/FetchContent
+C++ project there's no package-manifest lockfile, so this is generated from
+the built artifacts rather than source manifests. Download it from the
+release's Assets section on GitHub.
+
 ## Scope
 
 clearCore simulates MIPS instructions in software; it doesn't execute host machine code, doesn't touch the network, and isn't intended to run untrusted/adversarial input in production. Given that, the realistic security concerns are things like:

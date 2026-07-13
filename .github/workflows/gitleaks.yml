@@ -1,0 +1,71 @@
+# CI-side secret-scanning backstop.
+#
+# The gitleaks pre-commit hook (.pre-commit-config.yaml) only protects a
+# developer who ran `pre-commit install`, didn't pass --no-verify, and only
+# scans the staged diff. It gives zero coverage to outside contributors, CI
+# pushes, or full-history leaks. This workflow runs the same tool server-side
+# against full git history and uploads findings to Code scanning so nothing
+# depends on a local hook actually running.
+#
+# The gitleaks CLI is fetched directly (not via gitleaks/gitleaks-action) and
+# checksum-verified against the release's published checksums.txt, keeping
+# this workflow auditable end-to-end instead of depending on a bundled,
+# closed-source Node action.
+name: Gitleaks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # SARIF upload to code scanning
+    env:
+      # Keep in sync with the `rev:` pinned for the gitleaks pre-commit hook
+      # in .pre-commit-config.yaml.
+      GITLEAKS_VERSION: '8.30.1'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0  # full history, not just the diff — see rationale above
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSLO "${base}/${asset}"
+          curl -sSLO "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          tar -xzf "$asset" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-format sarif \
+            --report-path results.sarif \
+            --no-banner \
+            --exit-code 1
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
+        with:
+          sarif_file: results.sarif

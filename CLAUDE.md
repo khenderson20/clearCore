@@ -222,7 +222,7 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 | `ci.yml`                | push/PR → `main`/`develop`            | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
 | `codeql.yml`            | push/PR → `main`, weekly              | CodeQL C++ security scan; no ccache (would hide code from extractor)                                                |
 | `cross-platform.yml`    | release publish, `workflow_dispatch`  | Windows NSIS installer + macOS universal DMG; bundles Qt via windeployqt/macdeployqt                                |
-| `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries                                                |
+| `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries; generates an SPDX SBOM                        |
 | `appimage.yml`          | release publish, `workflow_dispatch`  | Self-contained Linux AppImage via linuxdeploy; smoke-tests GUI + TUI                                                |
 | `release-pr.yml`        | push → `develop`                      | Keeps a standing `develop → main` release-promotion PR open                                                         |
 | `release-drafter.yml`   | push → `main`                         | Drafts the next GitHub release from merged PR titles                                                                |
@@ -230,6 +230,11 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 | `scorecard.yml`         | push → `main`, weekly                 | OpenSSF supply-chain score (feeds README badge)                                                                     |
 | `dependency-review.yml` | PR that touches CMakeLists            | Checks for known-vulnerable dependency versions                                                                     |
 | `cflite_pr.yml`         | PR → `main` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing                                                                                    |
+| `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch                                      |
+| `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
+| `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage HTML report from `cifuzz-corpus`, uploaded as a workflow artifact                                  |
+| `zizmor.yml`            | push/PR → `main`/`develop`            | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
+| `gitleaks.yml`          | push/PR → `main`/`develop`            | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
 
 ### ci.yml job map

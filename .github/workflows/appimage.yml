@@ -34,6 +34,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install build dependencies
         run: >
@@ -84,11 +86,13 @@ jobs:
         id: ver
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            V="${{ github.event.release.tag_name }}"; V="${V#v}"
+            V="${GITHUB_EVENT_RELEASE_TAG_NAME}"; V="${V#v}"
           else
             V="0.0.0-dev"
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 
       - name: Build AppImage
         env:
@@ -106,8 +110,9 @@ jobs:
       - name: Smoke test under Xvfb
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          STEPS_VER_OUTPUTS_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          APPIMAGE="clearCore-${{ steps.ver.outputs.version }}-x86_64.AppImage"
+          APPIMAGE="clearCore-${STEPS_VER_OUTPUTS_VERSION}-x86_64.AppImage"
           set +e
           xvfb-run -a --server-args="-screen 0 1280x1024x24" \
             timeout 25 "./$APPIMAGE"
@@ -130,7 +135,7 @@ jobs:
       # or a clean exit as healthy, any crash signal as failure.
       - name: Smoke test the bundled TUI
         run: |
-          APPIMAGE="clearCore-${{ steps.ver.outputs.version }}-x86_64.AppImage"
+          APPIMAGE="clearCore-${STEPS_VER_OUTPUTS_VERSION}-x86_64.AppImage"
           "./$APPIMAGE" --appimage-extract >/dev/null
           tui="squashfs-root/usr/bin/number_system_converter"
           [ -x "$tui" ] || { echo "::error::number_system_converter not bundled in the AppImage"; exit 1; }
@@ -144,6 +149,8 @@ jobs:
             exit 1
           fi
           echo "✓ number_system_converter launched without crashing (exit $rc)"
+        env:
+          STEPS_VER_OUTPUTS_VERSION: ${{ steps.ver.outputs.version }}
 
       - name: Upload workflow artifact (always)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -156,6 +163,7 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          gh release upload "${GITHUB_EVENT_RELEASE_TAG_NAME}" \
             clearCore-*-x86_64.AppImage --clobber --repo "${{ github.repository }}"
