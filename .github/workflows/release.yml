@@ -39,6 +39,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install build dependencies
         run: >
@@ -65,7 +67,7 @@ jobs:
         id: package
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${GITHUB_EVENT_RELEASE_TAG_NAME}"
             VERSION="${VERSION#v}"          # strip leading 'v' (v0.0.2 -> 0.0.2)
           else
             VERSION="0.0.0-dev"
@@ -80,6 +82,8 @@ jobs:
                 -B "${{ github.workspace }}/dist"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           ls -la "${{ github.workspace }}/dist"/*.tar.gz
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 
       # Inventories what actually ships: the built binaries and every bundled
       # shared library (Qt, QADS, ...) under build/release, via syft's binary
@@ -165,6 +169,7 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          gh release upload "${GITHUB_EVENT_RELEASE_TAG_NAME}" \
             dist/*.tar.gz --clobber --repo "${{ github.repository }}"
