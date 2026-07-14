@@ -33,10 +33,11 @@ jobs:
     permissions:
       contents: write  # upload assets to the release
     steps:
-      - name: Harden the runner (Audit all outbound calls)
+      - name: Harden the runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -90,7 +91,7 @@ jobs:
       # cataloger. A source-only scan would find little — this is a C++/CMake
       # project with no package-manifest lockfile for syft to read.
       - name: Generate SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: step-security/sbom-action@441a6c842e49122eed5d694f983ce4acae259c99 # v0.24.0
         with:
           path: build/release
           format: spdx-json
