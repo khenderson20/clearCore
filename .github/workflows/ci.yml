@@ -125,7 +125,7 @@ jobs:
           --cobertura coverage.xml --print-summary
 
       - name: Upload to Codecov
-        uses: step-security/codecov-action@87e66f47a0f8ab4cae465a323eb9ec63d8b6b875 # v6.0.1
+        uses: step-security/codecov-action@db5c3605ff3c9dc7f0b2791e6bea84a561bacab8 # v7.0.0
         with:
           files: coverage.xml
           use_oidc: true
