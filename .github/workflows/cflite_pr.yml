@@ -1,11 +1,11 @@
 name: ClusterFuzzLite PR fuzzing
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'src/**'
       - 'include/**'
-      - 'fuzz/**'
+      - 'tests/fuzz/**'
 permissions:
   contents: read
   actions: read
