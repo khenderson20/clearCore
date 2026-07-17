@@ -26,6 +26,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.5] - 2026-07-13
+
+---
+
 ## [0.3.4] - 2026-07-09
 
 
