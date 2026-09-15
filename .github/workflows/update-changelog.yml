@@ -13,6 +13,7 @@ permissions: read-all
 jobs:
   update-changelog:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write

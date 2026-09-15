@@ -22,22 +22,18 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'tests/**'
-      - 'qml/**'
-      - '**/CMakeLists.txt'
-      - 'cmake/**'
-      - 'CMakePresets.json'
-      - '.github/workflows/**'
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -86,6 +82,7 @@ jobs:
       github.event_name == 'push' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write       # codecov OIDC upload (tokenless for public repos)
@@ -131,6 +128,7 @@ jobs:
 
   core-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -168,6 +166,7 @@ jobs:
   full-build:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
