@@ -1,16 +1,29 @@
 name: Cross-platform build
 
-# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon), the
-# groundwork for shipping Windows/macOS release assets. Nyxstone (LLVM) and the
-# golden tests (JRE) are disabled — they are Linux-oriented dev/test tooling, not
-# user-facing, and painful to provision off-Linux.
+# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon).
 #
-# Triggers: pushes to the packaging branch (for iteration) and manual dispatch.
-# Packaging + release-asset upload are layered on in later steps.
+# Two jobs:
+#   core-only : fast pre-merge safety net. core-only preset (no Qt, no LLVM,
+#               configures in about a minute), build + test on every PR and
+#               push to main/develop. Catches MSVC/AppleClang divergences
+#               (narrowing conversions, two-phase lookup, /W4 vs -Wextra)
+#               on a PR instead of after a release is already published.
+#   build     : the full signed-installer matrix — Qt-bundled NSIS/DragNDrop
+#               packaging plus Azure Trusted Signing. Gated to
+#               release: published and workflow_dispatch only; it's too slow
+#               and needs signing secrets to run on every PR.
+#
+# Nyxstone (LLVM) and the golden tests (JRE) are disabled in both jobs — they
+# are Linux-oriented dev/test tooling, not user-facing, and painful to
+# provision off-Linux.
 on:
   workflow_dispatch:
   release:
     types: [ published ]
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
 
 permissions:
   id-token: write
@@ -21,7 +34,68 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Reduced pre-merge matrix: same OSes as the release build, but core-only
+  # (no Qt, no LLVM) so it's fast enough to run on every PR and doesn't need
+  # any signing secrets or environment approval.
+  core-only:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    name: core-only-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          - { name: macos-arm64, os: macos-14 }
+          - { name: macos-x86_64, os: macos-13 }
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        continue-on-error: true
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # Suppress Windows Error Reporting dialogs so a crashing test subprocess
+      # exits immediately instead of blocking on a modal "stopped working"
+      # prompt until the job hits its timeout.
+      - name: Suppress WER crash dialogs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-ItemProperty -Force -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" `
+            -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --preset core-only -DGOLDEN_TESTS=OFF
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --preset core-only -DGOLDEN_TESTS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+
+      - name: Build
+        run: cmake --build --preset core-only
+
+      - name: Test
+        run: ctest --preset core-only
+
   build:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
