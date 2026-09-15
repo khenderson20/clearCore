@@ -81,7 +81,7 @@ jobs:
             -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
 
       - name: Configure
-        run: cmake --preset core-only -DGOLDEN_TESTS=OFF
+        run: cmake --preset core-only -DGOLDEN_TESTS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
 
       - name: Build
         run: cmake --build --preset core-only
