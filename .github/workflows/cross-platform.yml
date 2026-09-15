@@ -50,6 +50,7 @@ jobs:
         include:
           - { name: windows-x64, os: windows-latest }
           - { name: macos-arm64, os: macos-14 }
+          - { name: macos-x86_64, os: macos-13 }
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
