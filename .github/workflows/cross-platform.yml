@@ -80,7 +80,12 @@ jobs:
           New-ItemProperty -Force -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" `
             -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
 
-      - name: Configure
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --preset core-only -DGOLDEN_TESTS=OFF
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
         run: cmake --preset core-only -DGOLDEN_TESTS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
 
       - name: Build
