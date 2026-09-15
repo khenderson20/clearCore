@@ -562,6 +562,7 @@ function(clearcore_add_test name source lib)
     target_link_libraries(${name} PRIVATE ${lib} Microsoft.GSL::GSL clearcore_warnings)
     target_compile_features(${name} PUBLIC cxx_std_20)
     add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endfunction()
 
 clearcore_add_test(decoder_test tests/mips/decoder_test.cpp mips_core)  # Instruction decoding
