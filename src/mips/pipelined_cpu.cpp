@@ -284,7 +284,7 @@ StepResult PipelinedCpu::step() {
                 }
             }
         }
-    ex_done: {}
+    ex_done:;
     }
 
     // ── ID stage ─────────────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ StepResult PipelinedCpu::step() {
             flush_from_id = true;
         }
     }
-id_done: {}
+id_done:;
 
     // ── IF stage ─────────────────────────────────────────────────────────────
     if (!stall_load_use) {
