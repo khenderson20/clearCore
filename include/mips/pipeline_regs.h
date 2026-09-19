@@ -48,7 +48,8 @@ struct IdEx {
 
 // ─── EX / MEM ────────────────────────────────────────────────────────────────
 struct ExMem {
-    uint32_t  pc = 0;
+    uint32_t  pc  = 0;
+    uint32_t  raw = 0;  // machine word, carried so MEM/WB snapshots can show a mnemonic
     Control   ctrl{};
     AluResult alu{};
     uint32_t  rt_val    = 0;                // forwarded rt, used by SW as the data to write
@@ -60,7 +61,8 @@ struct ExMem {
 
 // ─── MEM / WB ────────────────────────────────────────────────────────────────
 struct MemWb {
-    uint32_t pc = 0;
+    uint32_t pc  = 0;
+    uint32_t raw = 0;
     Control  ctrl{};
     uint32_t alu_val   = 0;
     uint32_t mem_val   = 0;  // populated only for loads

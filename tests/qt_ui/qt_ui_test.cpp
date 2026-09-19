@@ -7,6 +7,7 @@
 #include "nsc_qt/widgets/register_widget.h"
 
 #include "mips/pipelined_cpu.h"
+#include "mips/single_cycle_cpu.h"
 
 #include <DockAreaWidget.h>
 #include <DockManager.h>
@@ -14,6 +15,7 @@
 #include <QApplication>
 #include <QLabel>
 #include <QMainWindow>
+#include <QString>
 #include <cassert>
 #include <cstdio>
 #include <memory>
@@ -264,6 +266,56 @@ static void test_dock_panels_carry_content() {
     CHECK(manager->dockWidgetsMap().size() == 2);
 }
 
+// ── Statistics / exception reporting ─────────────────────────────────────────
+
+// The single-cycle model never fills the WB snapshot, so counting retired
+// instructions from that slot showed "Instructions: 0, CPI 0.0" in both GUIs.
+static void test_controller_single_cycle_stats() {
+    using namespace nsc::qt;
+
+    auto proc = std::make_unique<mips::SingleCycleCpu>();
+    // addi $t0,$zero,1 ; addi $t1,$zero,2 ; j 2 (self-loop halt)
+    CHECK(proc->load_program({0x20080001u, 0x20090002u, 0x08000002u}));
+
+    SimulatorController ctrl(std::move(proc));
+    ctrl.stepCycle();
+    ctrl.stepCycle();
+    ctrl.stepCycle();
+
+    const SimulatorStatistics st = ctrl.statistics();
+    CHECK(st.cycles_executed == 3);
+    CHECK(st.instructions_retired == 3);
+    CHECK(st.cpi() == 1.0);
+}
+
+static void test_controller_exception_signal() {
+    using namespace nsc::qt;
+
+    auto proc = std::make_unique<mips::PipelinedCpu>();
+    // addi $t0,$zero,1 ; syscall ; j 2
+    CHECK(proc->load_program({0x20080001u, 0x0000000Cu, 0x08000002u}));
+
+    SimulatorController ctrl(std::move(proc));
+
+    bool     fired = false;
+    uint32_t epc   = 0;
+    QString  name;
+    QObject::connect(&ctrl, &SimulatorController::exceptionRaised,
+                     [&](uint32_t e, const QString& n) {
+                         fired = true;
+                         epc   = e;
+                         name  = n;
+                     });
+
+    for (int i = 0; i < 10 && !fired; ++i)
+        ctrl.stepCycle();
+
+    CHECK(fired);
+    CHECK(epc == 4u);
+    CHECK(name == QStringLiteral("Sys"));
+    CHECK(!ctrl.isRunning());
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[]) {
@@ -275,6 +327,8 @@ int main(int argc, char* argv[]) {
     test_controller_step_signal();
     test_controller_breakpoint();
     test_controller_reset();
+    test_controller_single_cycle_stats();
+    test_controller_exception_signal();
     test_register_widget_clear();
     test_memory_widget_construct();
     test_trace_widget_clear();

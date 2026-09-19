@@ -52,7 +52,8 @@ public:
     static constexpr uint32_t kStatusEXL   = 1u << 1;  // Exception Level bit
 
     // Raise an exception.
-    //   • Writes faulting_pc to EPC.
+    //   • Writes faulting_pc to EPC — unless Status.EXL is already set, in
+    //     which case EPC keeps the original fault's address (MIPS32 PRA).
     //   • Encodes code into Cause.ExcCode[6:2].
     //   • Sets Status.EXL = 1.
     //   • Stores bad_addr in BadVAddr (for AdEL / AdES only).

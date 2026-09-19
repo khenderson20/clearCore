@@ -273,7 +273,8 @@ StepResult SingleCycleCpu::step() {
 
     if (exc == StepResult::Exception) return exc;
 
-    pc_ = next_pc;
+    ps_.retired = true;  // the whole instruction completed in this one cycle
+    pc_         = next_pc;
     return (next_pc == cur_pc) ? StepResult::Halt : StepResult::Ok;
 }
 

@@ -474,6 +474,8 @@ void MainWindow::setupConnections() {
             &MainWindow::onStatisticsUpdated);
     connect(controller_.get(), &SimulatorController::halted, this, &MainWindow::onHalted);
     connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
+    connect(controller_.get(), &SimulatorController::exceptionRaised, this,
+            &MainWindow::onExceptionRaised);
     connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
         events_widget_->logEvent(PipelineEventsWidget::Kind::Info, controller_->cycleCount(),
@@ -710,6 +712,18 @@ void MainWindow::onFaulted() {
     events_widget_->logEvent(PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
                              tr("processor fault"));
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
+}
+
+void MainWindow::onExceptionRaised(uint32_t epc, const QString& name) {
+    controller_->stop();
+    setRunState(false);
+    const QString where = QStringLiteral("0x%1").arg(epc, 8, 16, QChar('0'));
+    events_widget_->logEvent(
+        PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
+        tr("exception %1 at %2 — PC now at the exception vector").arg(name, where));
+    flashStatusBanner(
+        false,
+        tr("⚠ Exception %1 raised by the instruction at %2 (see CP0 EPC).").arg(name, where));
 }
 
 void MainWindow::flashStatusBanner(bool success, const QString& text) {

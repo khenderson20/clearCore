@@ -69,6 +69,7 @@ StepResult PipelinedCpu::step() {
     if (cur_ex.valid) {
         new_mem.valid     = true;
         new_mem.pc        = cur_ex.pc;
+        new_mem.raw       = cur_ex.raw;
         new_mem.ctrl      = cur_ex.ctrl;
         new_mem.alu_val   = cur_ex.alu.value;
         new_mem.write_reg = cur_ex.write_reg;
@@ -155,13 +156,23 @@ StepResult PipelinedCpu::step() {
 
         const DecodedInstr& dec = cur_id.decoded;
 
+        // Every instruction that is not squashed by an exception continues
+        // into EX/MEM — including branches, jumps, and CP0 ops that write no
+        // register. They travel through MEM and WB as no-ops, exactly as the
+        // hardware does, so the trace grid shows all five stages for them and
+        // they count as retired. Fill the common fields once; each case below
+        // only flips `valid` and sets what it produces. Exception paths leave
+        // `valid` false and the register is cleared to a bubble at the end.
+        new_ex.pc      = cur_id.pc;
+        new_ex.raw     = dec.raw;
+        new_ex.ctrl    = cur_id.ctrl;
+        new_ex.opcode  = dec.opcode;
+        new_ex.rt_val  = fwd_b;  // forwarded rt for SW
+        new_ex.is_halt = cur_id.is_halt;
+
         // ── J / JAL: jump was resolved in ID; EX just handles JAL link ───────
         if (dec.format == InstrFormat::J) {
-            new_ex.valid   = true;
-            new_ex.pc      = cur_id.pc;
-            new_ex.ctrl    = cur_id.ctrl;
-            new_ex.is_halt = cur_id.is_halt;
-            new_ex.opcode  = dec.opcode;
+            new_ex.valid = true;
             if (dec.opcode == Opcode::JAL) {
                 new_ex.alu.value = cur_id.pc4;  // return address
                 new_ex.write_reg = 31;          // $ra
@@ -177,21 +188,18 @@ StepResult PipelinedCpu::step() {
                 branch_pc         = cur_id.pc4 + (static_cast<uint32_t>(off) << 2);
                 flush_from_ex     = true;
             }
-            // No writeback for branch instructions; new_ex stays invalid.
+            new_ex.valid = true;  // no writeback; flows through MEM/WB as a no-op
         } else if (dec.format == InstrFormat::R &&
                    (dec.r().funct == FunctCode::JR || dec.r().funct == FunctCode::JALR)) {
             // ── JR / JALR: register jump resolved in EX, 2-cycle flush ────
             branch_pc     = fwd_a;  // rs, potentially forwarded
             flush_from_ex = true;
+            new_ex.valid  = true;
             if (dec.r().funct == FunctCode::JALR) {
-                new_ex.valid     = true;
-                new_ex.pc        = cur_id.pc;
-                new_ex.ctrl      = cur_id.ctrl;
                 new_ex.alu.value = cur_id.pc4;  // return address
                 new_ex.write_reg = dec.r().rd;
-                new_ex.is_halt   = cur_id.is_halt;
             }
-            // JR: no writeback; new_ex stays invalid.
+            // JR: no writeback; flows through MEM/WB as a no-op.
         } else if (dec.format == InstrFormat::R &&
                    (dec.r().funct == FunctCode::SYSCALL || dec.r().funct == FunctCode::BREAK)) {
             // ── SYSCALL / BREAK: raise CP0 exception, flush 2 stages ──────
@@ -204,15 +212,12 @@ StepResult PipelinedCpu::step() {
         } else if (dec.opcode == Opcode::COP0) {
             // ── COP0: MFC0 / MTC0 / ERET — execute in EX ─────────────────
             const uint8_t sub = dec.r().rs;
+            new_ex.valid      = true;
             if (sub == 0x00) {
                 // MFC0: read CP0 register, write to GPR in WB via alu_val path.
-                new_ex.valid          = true;
-                new_ex.pc             = cur_id.pc;
-                new_ex.ctrl           = cur_id.ctrl;
                 new_ex.ctrl.reg_write = true;
                 new_ex.alu.value      = cp0_.read(dec.r().rd);
                 new_ex.write_reg      = dec.r().rt;
-                new_ex.opcode         = dec.opcode;
             } else if (sub == 0x04) {
                 // MTC0: write forwarded GPR value to CP0 register.
                 cp0_.write(dec.r().rd, fwd_b);
@@ -250,22 +255,15 @@ StepResult PipelinedCpu::step() {
                 const AluResult alu_res = Alu::execute(*aluop, fwd_a, alu_b, shamt);
 
                 // Signed overflow on ADD/SUB/ADDI raises Ov (ADDU/SUBU/ADDIU do not).
-                if (alu_res.overflow) {
-                    const auto funct =
-                        (dec.format == InstrFormat::R) ? dec.r().funct : FunctCode::SLL;
-                    const bool is_signed_op =
-                        (funct == FunctCode::ADD || funct == FunctCode::SUB) ||
-                        (dec.opcode == Opcode::ADDI);
-                    if (is_signed_op) {
-                        branch_pc     = cp0_.raise(ExceptionCode::Ov, cur_id.pc);
-                        flush_from_ex = true;
-                        result        = StepResult::Exception;
-                        // Skip normal writeback.
-                        goto ex_done;
-                    }
-                }
-
-                {
+                const auto funct = (dec.format == InstrFormat::R) ? dec.r().funct : FunctCode::SLL;
+                const bool is_signed_op = (funct == FunctCode::ADD || funct == FunctCode::SUB) ||
+                                          (dec.opcode == Opcode::ADDI);
+                if (alu_res.overflow && is_signed_op) {
+                    branch_pc     = cp0_.raise(ExceptionCode::Ov, cur_id.pc);
+                    flush_from_ex = true;
+                    result        = StepResult::Exception;
+                    // new_ex stays invalid — no writeback for the trapping instruction.
+                } else {
                     // Destination register: rd (R-type), rt (I-type).
                     uint8_t write_reg = 0;
                     if (cur_id.ctrl.reg_dst && dec.format == InstrFormat::R)
@@ -274,17 +272,15 @@ StepResult PipelinedCpu::step() {
                         write_reg = dec.i().rt;
 
                     new_ex.valid     = true;
-                    new_ex.pc        = cur_id.pc;
-                    new_ex.ctrl      = cur_id.ctrl;
                     new_ex.alu       = alu_res;
-                    new_ex.rt_val    = fwd_b;  // forwarded rt for SW
                     new_ex.write_reg = write_reg;
-                    new_ex.opcode    = dec.opcode;
-                    new_ex.is_halt   = cur_id.is_halt;
                 }
             }
         }
-    ex_done: {}
+
+        // An instruction that trapped in EX is squashed: leave a clean bubble
+        // rather than a half-filled register carrying stale pc/raw fields.
+        if (!new_ex.valid) new_ex = {};
     }
 
     // ── ID stage ─────────────────────────────────────────────────────────────
@@ -385,7 +381,7 @@ StepResult PipelinedCpu::step() {
             flush_from_id = true;
         }
     }
-id_done: {}
+id_done:;
 
     // ── IF stage ─────────────────────────────────────────────────────────────
     if (!stall_load_use) {
@@ -464,8 +460,8 @@ id_done: {}
                      new_if.pc, new_if.instr};
     ps_.stages[1] = {"ID", cur_if.valid, stall_load_use, flush_from_ex, cur_if.pc, cur_if.instr};
     ps_.stages[2] = {"EX", cur_id.valid, false, false, cur_id.pc, cur_id.decoded.raw};
-    ps_.stages[3] = {"MEM", cur_ex.valid, false, false, cur_ex.pc, 0};
-    ps_.stages[4] = {"WB", cur_mem.valid, false, false, cur_mem.pc, 0};
+    ps_.stages[3] = {"MEM", cur_ex.valid, false, false, cur_ex.pc, cur_ex.raw};
+    ps_.stages[4] = {"WB", cur_mem.valid, false, false, cur_mem.pc, cur_mem.raw};
 
     ps_.fwd_ex_to_ex_a  = fwd_ex_a;
     ps_.fwd_ex_to_ex_b  = fwd_ex_b;
@@ -473,6 +469,7 @@ id_done: {}
     ps_.fwd_mem_to_ex_b = fwd_mem_b;
     ps_.load_stall      = stall_load_use;
     ps_.branch_flush    = flush_from_ex;
+    ps_.retired         = cur_mem.valid;  // WB ran on a real instruction this cycle
     ps_.cycle           = cycle_;
 
     return result;

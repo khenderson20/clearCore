@@ -25,7 +25,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
-
+- **Statistics for the single-cycle model**: Instructions and CPI read 0 in both Qt GUIs whenever
+  the single-cycle CPU was selected, because retirement was counted from the WB slot that model
+  never fills. Retirement is now a backend-defined `PipelineState::retired` flag shared by every
+  front end (the TUI's CPI gauge uses it too).
+- **Branches and jumps now travel through MEM and WB** in the pipelined model instead of vanishing
+  after EX, so the Pipeline Trace grid shows all five stages for them and they count as retired.
+- **MEM and WB stage labels** no longer read "nop" for every instruction: the pipeline registers
+  now carry the machine word into those stages.
+- **Exceptions are visible**: a new `exceptionRaised` signal names the trap and its EPC in the
+  Widgets status bar and Pipeline Events log, the QML status pill, and the TUI status line. A
+  nested exception while `Status.EXL` is set (e.g. the vector being unmapped in a small address
+  space) no longer overwrites EPC, matching the MIPS32 PRA.
 - Hex program listings now parse identically on every platform. `parse_hex_program` used
   `std::stoul`, whose `unsigned long` is 64-bit on Linux/macOS but 32-bit on Windows, so a token
   wider than 32 bits was silently truncated and accepted on LP64 and rejected on Windows. Replaced
@@ -33,7 +44,6 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by return value rather than by exception.
 
 ### CI / Internal
-
 - MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
   the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
   catching but previously did not.

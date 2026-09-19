@@ -52,6 +52,7 @@ private slots:
     void onStatisticsUpdated(nsc::qt::SimulatorStatistics stats);
     void onHalted();
     void onFaulted();
+    void onExceptionRaised(uint32_t epc, const QString& name);
     void onBreakpointToggle(uint32_t pc);
     void onStageDetailRequested(int stage_index, uint32_t pc, uint32_t raw);
 
