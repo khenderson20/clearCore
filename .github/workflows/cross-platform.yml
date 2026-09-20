@@ -1,6 +1,8 @@
 name: Cross-platform build
 
-# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon).
+# Builds and tests clearCore on Windows and macOS. Nothing is tested on Intel
+# macOS any more — the release build ships an Intel slice via a universal
+# binary, but every macOS job runs on Apple Silicon (see the core-only matrix).
 #
 # Two jobs:
 #   core-only : fast pre-merge safety net. core-only preset (no Qt, no LLVM,
