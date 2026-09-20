@@ -337,6 +337,13 @@ StepResult PipelinedCpu::step() {
             default:
                 break;  // J/JAL: reads nothing
             }
+            // COP0 decodes as R-format, but rs is the sub-op selector (MFC0/MTC0/
+            // ERET), not a register, and MFC0 writes rt rather than reading it.
+            // Only MTC0 reads a GPR (rt).
+            if (d.opcode == Opcode::COP0) {
+                src_a = -1;
+                src_b = (d.r().rs == 0x04) ? static_cast<int>(d.r().rt) : -1;
+            }
         }
         const int load_dst = static_cast<int>(cur_id.rt);  // $zero is never a dependency
         if (load_dst != 0 && (load_dst == src_a || load_dst == src_b)) stall_load_use = true;
