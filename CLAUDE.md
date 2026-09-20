@@ -253,44 +253,22 @@ push/PR ──┬── format       (cpp-linter clang-format; annotates PR viol
 
 ### Codecov
 
-Coverage is already fully wired in `ci.yml`. The `coverage` job:
+Coverage is wired end to end; there is no outstanding setup. The `coverage` job in `ci.yml`:
 
-- Builds the `core-only` preset with `--coverage` flags (no ccache — cached objects skip instrumentation)
-- Runs `gcovr` with `--filter src/ --filter include/` → `coverage.xml` (Cobertura format)
-- Uploads via `codecov/codecov-action` with `use_oidc: true` — **no `CODECOV_TOKEN` secret needed**
-  for public repos; the workflow already has `id-token: write` permission
-- Scope: `mips_core` + `nsc_core` only (Qt GUI code is excluded by design)
-- Runs on **push** events only, not PRs (so PRs don't produce coverage diff comments by default)
+- Builds the `core-only` preset with `--coverage` (no ccache — cached objects would skip
+  instrumentation)
+- Runs `gcovr --root . build/core-only --filter src/ --filter include/` → `coverage.xml`
+  (Cobertura format)
+- Uploads via `codecov/codecov-action` with `use_oidc: true` — **no `CODECOV_TOKEN` secret is
+  needed**; the job already holds `id-token: write`
+- Runs on pushes to `main`/`develop` and on PRs from this repo. Fork PRs are skipped on purpose:
+  they have no OIDC token, so the upload would fail silently
 
-**To complete your Codecov setup:**
-
-1. Confirm uploads are arriving at `https://codecov.io/gh/khenderson20/clearCore`
-   (should appear after the next push to `main` or `develop`)
-2. Copy the badge Markdown from the Codecov dashboard and add it to `README.md`
-3. Optionally create `codecov.yml` in the repo root to set thresholds:
-   ```yaml
-   coverage:
-     status:
-       project:
-         default:
-           target: 70%        # fail CI if overall drops below this
-           threshold: 2%      # allow small drops without failing
-       patch:
-         default:
-           target: 60%        # new code added in a PR must be ≥60% covered
-   comment:
-     layout: "diff, files"
-     behavior: default
-   ```
-4. To get coverage diff comments on PRs, change the `coverage` job condition from
-   `if: github.event_name == 'push'` to run on both push and pull_request events.
-
-**Should you use Codecov for this project?** Yes — it's a strong fit:
-
-- `mips_core` has many independent code paths (32 opcodes × 2 CPU models × hazard cases ×
-  exception paths) that benefit from tracking; coverage gaps reveal untested instruction combinations
-- Gives contributors a concrete quality signal before merging
-- Already integrated, operational cost is zero
+Gates and scope live in `codecov.yml` at the repo root — project 60 % (2 % drop tolerated), patch
+60 % on newly added lines (5 % tolerance), and an `ignore` list covering `tests/`, `.github/`,
+both Qt front ends, and `src/nsc/ui.cpp` + `src/nsc/main.cpp`. The Qt GUIs are excluded by design:
+the `core-only` coverage job never compiles them, so they produce no `.gcno` files and counting
+them would understate how well the core is covered. The badge is in `README.md`.
 
 ### Windows / macOS release workflow (cross-platform.yml)
 

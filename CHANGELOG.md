@@ -43,6 +43,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with `std::from_chars` into a `uint32_t`, which rejects overflow everywhere and reports failure
   by return value rather than by exception.
 
+### Documentation
+- CLAUDE.md's Codecov section no longer ends with a four-step "to complete your setup" checklist
+  for work that is already done, one step of which pointed at a `ci.yml` condition that no longer
+  exists. Replaced with a factual description of the `coverage` job, the gates and `ignore` list in
+  `codecov.yml`, and why the Qt front ends are out of scope. (#174)
+
 ### CI / Internal
 - MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
   the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
