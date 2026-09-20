@@ -203,8 +203,12 @@ ctest --preset core-only      # TUI + core only, no Qt
   `feature`, `enhancement`, `bug`, `security`, `documentation`, `dependencies`, `ci`.
 - **Strict SemVer**: new user-visible capability → `MINOR` bump; bug fix → `PATCH` bump.
   Never bump only PATCH for a feature.
-- When updating README/About framing, also update `CITATION.cff` and the BibTeX title in the
-  same commit before pushing.
+- **Version numbers are automated.** `update-changelog.yml` aligns `CHANGELOG.md`,
+  `CITATION.cff` (`version` + `date-released`) and the README BibTeX `version` with the tag on
+  `release: published`, and opens a PR into `develop`. Do not bump them by hand.
+  The `doi:` field is Zenodo's **concept** DOI — version-independent by design, never bumped.
+- Prose still needs a human: when updating README/About framing, update the `CITATION.cff`
+  title and abstract and the BibTeX title in the same commit before pushing.
 
 ---
 
