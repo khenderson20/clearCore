@@ -113,7 +113,9 @@ StepResult PipelinedCpu::step() {
     }
 
     // ── EX stage ─────────────────────────────────────────────────────────────
-    if (cur_id.valid) {
+    // flush_from_ex is only set by MEM at this point: an older instruction has
+    // faulted, so the one in EX is squashed and must not trap or touch CP0.
+    if (cur_id.valid && !flush_from_ex) {
         // ── Forwarding unit ──────────────────────────────────────────────────
         // Priority: EX/MEM > MEM/WB (H&H Figure 8.38).
         // Note: cur_mem is the MEM/WB register BEFORE WB wrote to the register
@@ -340,7 +342,9 @@ StepResult PipelinedCpu::step() {
         if (load_dst != 0 && (load_dst == src_a || load_dst == src_b)) stall_load_use = true;
     }
 
-    if (!stall_load_use && cur_if.valid) {
+    // An older stage that redirected this cycle squashes the instruction in ID:
+    // a wrong-path word must not raise RI or override the redirect target.
+    if (!stall_load_use && !flush_from_ex && cur_if.valid) {
         const auto dec_opt = Decoder::decode(cur_if.instr);
         if (!dec_opt) {
             // Unrecognised instruction: raise Reserved Instruction exception.
@@ -384,7 +388,9 @@ StepResult PipelinedCpu::step() {
 id_done:;
 
     // ── IF stage ─────────────────────────────────────────────────────────────
-    if (!stall_load_use) {
+    // Likewise a redirect squashes the fetch: skip it so a wrong-path address
+    // past the end of memory cannot raise AdEL.
+    if (!stall_load_use && !flush_from_ex) {
         if (const auto fetched = mem_.read_word(pc_)) {
             new_if.valid = true;
             new_if.pc    = pc_;
