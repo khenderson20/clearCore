@@ -182,7 +182,7 @@ jobs:
           makensis="/c/Program Files (x86)/NSIS/makensis.exe"
           for attempt in 1 2 3 4 5; do
             [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
-            echo "Installing NSIS (attempt $attempt)…"
+            echo "Installing NSIS (attempt $attempt)â€¦"
             if curl -fsSL "https://downloads.sourceforge.net/project/nsis/NSIS%203/${NSIS_VERSION}/nsis-${NSIS_VERSION}-setup.exe" -o nsis-setup.exe                && echo "${NSIS_SHA256}  nsis-setup.exe" | sha256sum -c -; then
               ./nsis-setup.exe /S || true
             fi
