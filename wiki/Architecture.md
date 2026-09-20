@@ -6,33 +6,45 @@ clearCore is organized into independent libraries and interface layers that shar
 
 ## Module overview
 
-```
-  nsc_ui                    nsc_qt                    nsc_quick
-  (FTXUI TUI)               (Qt6 Widgets)             (Qt Quick / QML)
-  number_system_converter   clearCore-gui             clearCore-quick
-     │     │                     │                         │
-     │     │                     │   reuses nsc_qt::SimulatorController
-     │     └─────────────────────┴─────────────────────────┘
-     │                           │
-     │                           ▼
-     │   ┌───────────────────────────────────────────────────────────────┐
-     │   │ mips_core                                                     │
-     │   │   isa::   IProcessor · Memory · RegisterFile · PipelineState  │
-     │   │           StepResult · StageSnapshot                          │
-     │   │           headers in include/isa/ — no separate CMake target  │
-     │   │                                                               │
-     │   │   mips::  IMipsProcessor ◄── SingleCycleCpu · PipelinedCpu    │
-     │   │           Decoder · ALU · Control · CP0 · Disassembler        │
-     │   │           ELF loader · program loader · trace (spdlog)        │
-     │   │           GdbStub         (BUILD_GDB_STUB, POSIX only)        │
-     │   │           NyxstoneBackend (BUILD_NYXSTONE, LLVM 15–20)        │
-     │   └───────────────────────────────────────────────────────────────┘
-     │
-     ▼
-  ┌──────────────────────────┐
-  │ nsc_core                 │   linked by the TUI only — neither Qt GUI
-  │ number-system converter  │   depends on it
-  └──────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph UI["UI layer — the only place Qt and FTXUI appear"]
+        direction LR
+        TUI["<b>nsc_ui</b><br/>FTXUI TUI<br/>number_system_converter"]
+        QT["<b>nsc_qt</b><br/>Qt6 Widgets<br/>clearCore-gui"]
+        QML["<b>nsc_quick</b><br/>Qt Quick / QML<br/>clearCore-quick"]
+    end
+
+    subgraph CORE["mips_core — pure C++20, zero UI headers"]
+        direction TB
+        ISA["<b>isa::</b> — ISA-agnostic contract<br/>IProcessor · Memory · RegisterFile<br/>PipelineState · StepResult · StageSnapshot<br/>headers in include/isa/ · no separate CMake target"]
+        MIPS["<b>mips::</b> — MIPS backend<br/>IMipsProcessor · SingleCycleCpu · PipelinedCpu<br/>Decoder · ALU · Control · CP0 · Disassembler<br/>ELF loader · program loader · trace"]
+        OPT["GdbStub — BUILD_GDB_STUB, POSIX only<br/>NyxstoneBackend — BUILD_NYXSTONE, LLVM 15-20"]
+    end
+
+    NSC["<b>nsc_core</b><br/>number-system converter"]
+
+    QML -. "reuses nsc_qt::SimulatorController" .-> QT
+    TUI --> CORE
+    QT --> CORE
+    QML --> CORE
+    TUI --> NSC
+    MIPS --> ISA
+    OPT --> MIPS
+
+    classDef ui   fill:#1f4d3d,stroke:#6ee7b7,stroke-width:2px,color:#ffffff
+    classDef isa  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef mips fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+    classDef nsc  fill:#4a3410,stroke:#fbbf24,stroke-width:2px,color:#ffffff
+    classDef opt  fill:#333a45,stroke:#9aa4b2,stroke-width:2px,color:#ffffff,stroke-dasharray:4 3
+    classDef zone fill:none,stroke:#8b949e,stroke-width:1px,color:#8b949e
+
+    class TUI,QT,QML ui
+    class ISA isa
+    class MIPS mips
+    class NSC nsc
+    class OPT opt
+    class UI,CORE zone
 ```
 
 | Library / target | Responsibility                                                                     |

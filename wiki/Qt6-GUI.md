@@ -59,21 +59,45 @@ A post-run summary dashboard: total cycles, committed instructions, CPI, and sta
 
 The simulation runs **on the GUI thread**, driven by a zero-interval `QTimer` rather than a worker thread. `SimulatorController` mediates between the CPU and the widgets:
 
-```
-GUI thread — the only thread; no worker thread exists anywhere in the Qt layer
+```mermaid
+flowchart TD
+    subgraph GUI["GUI thread — the only thread; no worker thread exists"]
+        direction TB
+        TIMER["run_timer_<br/>QTimer, interval 0"]
+        SLOT["SimulatorController::onRunTimer()"]
+        STEP["PipelinedCpu::step()"]
+        TIMER -- timeout --> SLOT --> STEP
+    end
 
-  run_timer_ (QTimer, interval 0) ──timeout──► onRunTimer() ──► PipelinedCpu::step()
+    STEP --> THROTTLED
+    STEP --> ALWAYS
 
-  per-cycle signals — while running at interval 0, emitted only every 5000th cycle
-    cycleExecuted(count)         ──►  Cycle counter
-    pipelineStateChanged(state)  ──►  Datapath · Registers · Memory · Pipeline Trace
-    statisticsUpdated(stats)     ──►  Statistics tab
+    subgraph THROTTLED["per-cycle signals — at interval 0, emitted only every 5000th cycle"]
+        direction LR
+        S1["cycleExecuted(count)"] --> W1["Cycle counter"]
+        S2["pipelineStateChanged(state)"] --> W2["Datapath · Registers<br/>Memory · Pipeline Trace"]
+        S3["statisticsUpdated(stats)"] --> W3["Statistics tab"]
+    end
 
-  event signals — never throttled
-    exceptionRaised(epc, name)   ──►  Status-bar banner + Pipeline Events entry
-    breakpointHit(pc)            ──►  Status-bar message
-    halted() / faulted()         ──►  Stop auto-run, report status
-    programLoaded(count)         ──►  Reset views for the new program
+    subgraph ALWAYS["event signals — never throttled"]
+        direction LR
+        E1["exceptionRaised(epc, name)"] --> V1["Status-bar banner<br/>Pipeline Events entry"]
+        E2["breakpointHit(pc)"] --> V2["Status-bar message"]
+        E3["halted() / faulted()"] --> V3["Stop auto-run, report status"]
+        E4["programLoaded(count)"] --> V4["Reset views for the new program"]
+    end
+
+    classDef drive  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef sig    fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+    classDef evt    fill:#5c2331,stroke:#fca5a5,stroke-width:2px,color:#ffffff
+    classDef widget fill:#1f4d3d,stroke:#6ee7b7,stroke-width:2px,color:#ffffff
+    classDef zone   fill:none,stroke:#8b949e,stroke-width:1px,color:#8b949e
+
+    class TIMER,SLOT,STEP drive
+    class S1,S2,S3 sig
+    class E1,E2,E3,E4 evt
+    class W1,W2,W3,V1,V2,V3,V4 widget
+    class GUI,THROTTLED,ALWAYS zone
 ```
 
 `SimulatorController` (`include/nsc_qt/simulator_controller.h`) has no separate `registersChanged`/`memoryChanged`/`traceRowAdded` signals — the Registers, Memory, and Pipeline Trace tabs all derive their view from the single `pipelineStateChanged(mips::PipelineState)` payload rather than getting dedicated signals of their own.

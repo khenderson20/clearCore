@@ -251,11 +251,22 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 
 ### ci.yml job map
 
-```
-push/PR ──┬── format       (cpp-linter clang-format; annotates PR violations)
-          ├── coverage      (push + same-repo PRs; gcovr → Codecov OIDC upload; core-only)
-          ├── core-tests    (matrix: core-only, asan; fast; no Qt/LLVM)
-          └── full-build    (release preset; both Qt6 GUIs + Nyxstone; skipped on draft PRs)
+```mermaid
+flowchart LR
+    TRIG["push / PR<br/>main · develop"]
+
+    TRIG --> FMT["<b>format</b><br/>clang-format-22<br/>annotates PR violations"]
+    TRIG --> COV["<b>coverage</b><br/>push + same-repo PRs<br/>gcovr → Codecov OIDC<br/>core-only preset"]
+    TRIG --> CT["<b>core-tests</b><br/>matrix: core-only, asan<br/>fast; no Qt or LLVM"]
+    TRIG --> FB["<b>full-build</b><br/>release preset<br/>both Qt6 GUIs + Nyxstone<br/>skipped on draft PRs"]
+
+    classDef trig  fill:#4a3410,stroke:#fbbf24,stroke-width:2px,color:#ffffff
+    classDef gate  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef heavy fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+
+    class TRIG trig
+    class FMT,COV,CT gate
+    class FB heavy
 ```
 
 ### Codecov
