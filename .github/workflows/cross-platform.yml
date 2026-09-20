@@ -1,6 +1,8 @@
 name: Cross-platform build
 
-# Builds and tests clearCore on Windows and macOS (Intel + Apple Silicon).
+# Builds and tests clearCore on Windows and macOS. Nothing is tested on Intel
+# macOS any more — the release build ships an Intel slice via a universal
+# binary, but every macOS job runs on Apple Silicon (see the core-only matrix).
 #
 # Two jobs:
 #   core-only : fast pre-merge safety net. core-only preset (no Qt, no LLVM,
@@ -49,8 +51,17 @@ jobs:
       matrix:
         include:
           - { name: windows-x64, os: windows-latest }
+          # Apple Silicon only. The Intel leg ran on macos-13, which GitHub
+          # retired on 2025-12-08; no runner ever claims that label again, so
+          # the job sat queued forever (timeout-minutes bounds execution, not
+          # queue time, so nothing self-cancelled). Deliberately not swapped
+          # for macos-15-intel: the only coverage an Intel macOS leg adds over
+          # macos-14 plus ci.yml's Linux x86_64 legs is AppleClang + libc++ on
+          # x86_64, and a bit-exact integer emulator exercises none of what
+          # differs there. Dropping it also restores this job's stated
+          # invariant — same OSes as the release build, which dropped its own
+          # Intel runner for the same reason. (#169)
           - { name: macos-arm64, os: macos-14 }
-          - { name: macos-x86_64, os: macos-13 }
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -115,7 +126,8 @@ jobs:
           - { name: windows-x64, os: windows-latest }
           # One universal (arm64 + x86_64) macOS build on Apple Silicon. Qt's
           # official macOS binaries are universal (since 6.2), so a single Qt
-          # install covers both slices — no scarce Intel (macos-13) runner needed.
+          # install covers both slices — no Intel runner needed, which is just
+          # as well: macos-13 is retired and macos-15-intel goes away in 2027.
           - { name: macos-universal, os: macos-14 }
     env:
       # macOS minimum: std::format's to_chars backend is only available in
