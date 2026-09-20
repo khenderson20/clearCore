@@ -54,7 +54,10 @@ enable_testing()
 add_library(clearcore_warnings INTERFACE)
 target_compile_options(clearcore_warnings INTERFACE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -pedantic>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        # /permissive- is what actually enables two-phase name lookup and the
+        # rest of MSVC's conformance checking; without it the Windows CI leg
+        # accepts non-conformant template code that GCC/Clang reject.
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
 )
 
 # Sanitizers are applied globally (before FetchContent) so dependencies are

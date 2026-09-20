@@ -146,6 +146,45 @@ static void test_loader_trailing_garbage_rejected() {
     CHECK(!p.ok());
 }
 
+static void test_loader_full_width_word_accepted() {
+    // 0xFFFFFFFF is the widest valid 32-bit word — must parse on every platform.
+    std::istringstream in("0xFFFFFFFF\nFFFFFFFF\n");
+    const HexProgram   p = parse_hex_program(in);
+    CHECK(p.ok());
+    CHECK_EQ(p.words.size(), std::size_t{2});
+    CHECK_EQ(p.words[0], 0xFFFF'FFFFu);
+    CHECK_EQ(p.words[1], 0xFFFF'FFFFu);
+}
+
+static void test_loader_overwide_word_rejected() {
+    // Regression: std::stoul parsed this into a 64-bit `unsigned long` on LP64
+    // (Linux/macOS) and the cast to uint32_t silently truncated it to
+    // 0xFFFFFFFF, while on Windows (LLP64, 32-bit long) it threw out_of_range
+    // and was rejected. Must now be rejected everywhere.
+    std::istringstream in("1FFFFFFFF\n");
+    const HexProgram   p = parse_hex_program(in);
+    CHECK(!p.ok());
+    CHECK(p.words.empty());
+    CHECK(p.error.has_value());
+    CHECK(p.error->find("line 1") != std::string::npos);
+}
+
+static void test_loader_negative_rejected() {
+    // std::stoul accepted a leading '-' and wrapped it; a hex word listing has
+    // no sign, so it must be a parse error.
+    std::istringstream in("-1\n");
+    const HexProgram   p = parse_hex_program(in);
+    CHECK(!p.ok());
+    CHECK(p.words.empty());
+}
+
+static void test_loader_bare_prefix_rejected() {
+    // "0x" with no digits is not a word.
+    std::istringstream in("0x\n");
+    const HexProgram   p = parse_hex_program(in);
+    CHECK(!p.ok());
+}
+
 static void test_loader_empty_is_valid() {
     std::istringstream in("# only comments\n\n");
     const HexProgram   p = parse_hex_program(in);
@@ -162,6 +201,10 @@ int main() {
     test_loader_comments_and_blanks();
     test_loader_bad_hex_reports_line();
     test_loader_trailing_garbage_rejected();
+    test_loader_full_width_word_accepted();
+    test_loader_overwide_word_rejected();
+    test_loader_negative_rejected();
+    test_loader_bare_prefix_rejected();
     test_loader_empty_is_valid();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);

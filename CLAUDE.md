@@ -207,7 +207,9 @@ ctest --preset core-only      # TUI + core only, no Qt
 - `cppcheck` and `clang-tidy` are available locally. `libasan`/`clang++` are **not** available on
   this machine — use the `asan` preset only on machines where those are present.
 - `clang-format` is required; the PR checklist enforces a clean diff. Format before committing.
-- Compiler warnings are errors in the `clearcore_warnings` interface target (`-Wall -Wextra -pedantic`).
+- The `clearcore_warnings` interface target raises the warning level per compiler —
+  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. It does **not** set
+  `-Werror`/`/WX`, so warnings do not fail the build; treat them as errors by convention.
   Never suppress a warning without a comment explaining why.
 
 ---
@@ -287,42 +289,40 @@ Coverage is already fully wired in `ci.yml`. The `coverage` job:
 - Gives contributors a concrete quality signal before merging
 - Already integrated, operational cost is zero
 
-### Broken Windows workflow (cross-platform.yml — windows-x64)
+### Windows / macOS release workflow (cross-platform.yml)
 
-The `windows-x64` job in `cross-platform.yml` builds the NSIS installer and runs smoke tests.
-Known fragile points (check the Actions log to confirm which step fails):
+`cross-platform.yml` has two jobs: `core-only` (fast pre-merge matrix on every PR/push) and
+`build` (the full Qt-bundled installer matrix, gated to `release: published` and
+`workflow_dispatch`). The `build` job has been green since v0.3.4 — it is **not** a known-broken
+workflow. Because it never runs on a PR, a regression in it only surfaces at release time, so run
+it via `workflow_dispatch` before cutting a release.
 
-1. **`install-qt-action` missing `modules:`** — the action installs only the Qt base package
-   by default; `qtdeclarative` (Qt Quick/QML) is a separate aqtinstall module and may not be
-   present. Qt gracefully skips `clearCore-quick` when Quick isn't found, so this won't fail the
-   build outright, but the QML GUI won't be in the installer. Fix:
-   ```yaml
-   - name: Install Qt 6
-     uses: jurplel/install-qt-action@...
-     with:
-       version: '6.8.*'
-       cache: true
-       modules: 'qtshadertools qtdeclarative'
-   ```
+Windows-specific hazards, all currently handled in-file:
 
-2. **NSIS install via choco** — `choco install nsis` can silently fail even with the retry loop
-   (503 from the community feed), leaving `makensis.exe` absent and causing `cpack -G NSIS` to
-   fail. The retry loop has 5 attempts + 20 s sleeps — check if the `Ensure NSIS` step shows
-   repeated failures in the log.
+1. **NSIS install via choco** — `choco install nsis` can return exit 0 even when the community
+   feed 503s, leaving `makensis.exe` absent and `cpack -G NSIS` unable to find it. The `Ensure
+   NSIS` step retries 5× and verifies the binary on disk. Version-pinned (3.12.0) for Scorecard's
+   Pinned-Dependencies check; Dependabot has no Chocolatey ecosystem, so bump it manually from
+   <https://community.chocolatey.org/packages/nsis>.
 
-3. **Smoke-test `kill -0` on Windows Git Bash** — `kill -0 $pid` in Git Bash on Windows is
-   unreliable for detecting whether a native `.exe` process is still alive; it may return non-zero
-   immediately, making the smoke test misreport a healthy GUI as crashed. Replace the polling loop
-   with a PowerShell-aware check or use `tasklist` in the Windows branch.
+2. **QADS DLL not on PATH** — `qt_ui_test` links the Qt Advanced Docking System as a shared
+   library (LGPL; cannot be static). Windows' loader blocks on a missing-library dialog rather
+   than exiting, so the test hits its timeout instead of failing fast. The `Add QADS DLL to PATH`
+   step locates the DLL anywhere under the build tree and appends its directory.
 
-4. **`qt_standard_project_setup()` absent** — not currently called in `CMakeLists.txt`. On
-   Windows, this means DLL runtime output directories are not configured by Qt; build-tree test
-   runs may fail to find `Qt6Core.dll`. If the `Test` step fails (not the build or package step),
-   this is the likely cause. Fix: add `qt_standard_project_setup()` after the first
-   `find_package(Qt6 ...)` call in `CMakeLists.txt`.
+3. **Defender ASR rejects unsigned fresh binaries** — the "block executables unless they meet
+   prevalence/age/trusted-list criteria" rule returns "Access is denied" for the *installed*
+   `clearCore-gui.exe`, not just the installer. App binaries are therefore signed before cpack
+   packages them, and the installer is signed in a second pass. Both steps are gated on
+   `vars.AZURE_SIGNING_ACCOUNT`, so the build still succeeds unsigned until Trusted Signing is set
+   up. **If you add a fourth executable, add it to the `files:` list of `Sign application
+   binaries`** — that list is hardcoded and a missing file fails the signing step.
 
-**To diagnose:** open the failed workflow run on GitHub → expand each step → the first red step
-is the cause. Share the error text to get a targeted fix.
+4. **WER crash dialogs** — suppressed via `HKCU:\...\Windows Error Reporting\DontShowUI` so a
+   crashing test subprocess exits instead of blocking on a modal prompt until the job times out.
+
+**To diagnose a failure:** open the run on GitHub → expand each step → the first red step is the
+cause. `gh run view <id> --log | grep "^windows-x64"` filters to the Windows leg.
 
 ---
 
