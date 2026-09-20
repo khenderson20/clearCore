@@ -35,6 +35,13 @@ using namespace ftxui;
 // ─── CPU mode ─────────────────────────────────────────────────────────────────
 enum class CpuMode { SingleCycle, Pipelined };
 
+// ─── Golden ratio ─────────────────────────────────────────────────────────────
+// Detunes the second wave of the Core Pulse surface so the three sine terms
+// have no common repeat period.  At namespace scope because it is only ever
+// read as a constant inside a lambda, which is not an odr-use — as a local,
+// MSVC reports C4189 "initialized but not referenced" despite the use.
+static constexpr float kPhi = 1.61803398875f;
+
 // ─── MIPS ABI register names ──────────────────────────────────────────────────
 static constexpr std::array<std::string_view, 32> kRegNames = {
     "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3", "t0", "t1", "t2",
@@ -308,7 +315,10 @@ static Element render_exec_trace(const std::deque<TraceEntry>& trace) {
 static Element render_registers(const mips::IProcessor& cpu) {
     Elements col_l, col_r;
     for (int i = 0; i < 32; ++i) {
-        uint32_t val     = cpu.regs().read(i);
+        // read() takes the 5-bit index as uint8_t.  The loop bounds i to 0-31,
+        // so the narrowing is safe — made explicit so /W4 does not flag it as
+        // the kind of silent int->uint8_t truncation the matrix exists to catch.
+        uint32_t val     = cpu.regs().read(static_cast<uint8_t>(i));
         bool     changed = (i != 0 && i == cpu.regs().last_written());
         bool     nonzero = (val != 0);
 
@@ -873,8 +883,7 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
         // outward ripple. Driven by anim_time so motion stays smooth even when
         // the CPU is paused; cycle_counter only nudges phase so stepping still
         // visibly perturbs the field without owning the animation clock.
-        constexpr float kPhi           = 1.61803398875f;
-        auto            surface_height = [&](float x, float y) -> float {
+        auto surface_height = [&](float x, float y) -> float {
             const float dx      = x - smoothed_mx;
             const float dy      = y - smoothed_my;
             const float dist_sq = dx * dx + dy * dy;

@@ -45,11 +45,14 @@ constexpr uint32_t I(uint32_t op, uint32_t rs, uint32_t rt, uint16_t imm) {
 constexpr uint32_t J(uint32_t op, uint32_t target) {
     return (op << 26) | (target & 0x03FF'FFFFu);
 }
-constexpr uint32_t ADDI = 0x08, ADDIU = 0x09, ORI = 0x0D, LUI = 0x0F, LW = 0x23, SW = 0x2B,
-                   BEQ = 0x04, BNE = 0x05, JOP = 0x02, JAL = 0x03;
-constexpr uint32_t F_ADD = 0x20, F_SUB = 0x22, F_AND = 0x24, F_OR = 0x25, F_SLT = 0x2A, F_JR = 0x08;
-constexpr uint32_t zero = 0, v0 = 2, a0 = 4, t0 = 8, t1 = 9, t2 = 10, t3 = 11, t4 = 12, t5 = 13,
-                   t6 = 14, t7 = 15, s0 = 16, ra = 31;
+// These are complete MIPS encoding tables kept whole for readability; not every
+// entry is used by every test, which -Wunused-const-variable flags on Clang.
+[[maybe_unused]] constexpr uint32_t ADDI = 0x08, ADDIU = 0x09, ORI = 0x0D, LUI = 0x0F, LW = 0x23,
+                                    SW = 0x2B, BEQ = 0x04, BNE = 0x05, JOP = 0x02, JAL = 0x03;
+[[maybe_unused]] constexpr uint32_t F_ADD = 0x20, F_SUB = 0x22, F_AND = 0x24, F_OR = 0x25,
+                                    F_SLT = 0x2A, F_JR = 0x08;
+[[maybe_unused]] constexpr uint32_t zero = 0, v0 = 2, a0 = 4, t0 = 8, t1 = 9, t2 = 10, t3 = 11,
+                                    t4 = 12, t5 = 13, t6 = 14, t7 = 15, s0 = 16, ra = 31;
 }  // namespace enc
 
 // ─── Tests — each operates through the abstract interface ─────────────────────

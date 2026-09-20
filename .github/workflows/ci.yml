@@ -154,11 +154,14 @@ jobs:
         with:
           key: ${{ matrix.preset }}
 
+      # CLEARCORE_WERROR is CI-only: it defaults to OFF in CMakeLists.txt so a
+      # local build never breaks because a newer compiler added a diagnostic.
       - name: Configure (sanitizer job disables the GUIs too)
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -201,6 +204,7 @@ jobs:
         run: >
           cmake --preset release
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset release

@@ -16,7 +16,19 @@ namespace {
 // a typo would silently disable logging entirely; guard against that by only
 // honouring `off` when the text literally says "off".
 spdlog::level::level_enum level_from_env() {
+    // MSVC deprecates std::getenv in favour of its non-portable _dupenv_s.  The
+    // standard function is not deprecated, the value is only read (never held
+    // across an environment mutation), and this runs once from a function-local
+    // static, so the suppression is scoped to this one call rather than being
+    // turned off for the translation unit.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
     const char* env = std::getenv("CLEARCORE_LOG_LEVEL");
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
     if (env == nullptr || *env == '\0') return spdlog::level::warn;
 
     const auto level = spdlog::level::from_str(env);

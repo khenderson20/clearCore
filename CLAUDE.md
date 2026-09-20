@@ -218,9 +218,12 @@ ctest --preset core-only      # TUI + core only, no Qt
   this machine — use the `asan` preset only on machines where those are present.
 - `clang-format` is required; the PR checklist enforces a clean diff. Format before committing.
 - The `clearcore_warnings` interface target raises the warning level per compiler —
-  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. It does **not** set
-  `-Werror`/`/WX`, so warnings do not fail the build; treat them as errors by convention.
-  Never suppress a warning without a comment explaining why.
+  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. `-Werror`/`/WX` is behind
+  the `CLEARCORE_WERROR` option, **OFF by default** so a local build never breaks because a newer
+  compiler added a diagnostic, and **ON in CI**: the `core-tests` and `full-build` jobs in
+  `ci.yml`, and the pre-merge `core-only` matrix in `cross-platform.yml`. The release `build` job
+  in `cross-platform.yml` deliberately leaves it off. A new warning therefore fails CI, not your
+  local build. Never suppress a warning without a comment explaining why.
 
 ---
 

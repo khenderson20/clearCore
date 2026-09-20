@@ -70,6 +70,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `codecov.yml`, and why the Qt front ends are out of scope. (#174)
 
 ### CI / Internal
+- **Warnings are now errors in CI.** `clearcore_warnings` raised the warning level but set no
+  `-Werror`/`/WX`, so warnings had been accumulating unnoticed — there were eleven across the three
+  compilers. All are fixed: MSVC's `int -> uint8_t` narrowing on `regs().read(i)` (now an explicit
+  `static_cast` with a comment), `kPhi` moved to namespace scope (it *is* used, inside a lambda,
+  but reading a `constexpr` as a constant is not an odr-use so MSVC reported C4189), a scoped
+  C4996 suppression for `std::getenv` (which the standard does not deprecate — only MSVC does),
+  two dead stage bindings in `schematic_datapath_widget.cpp`, and `[[maybe_unused]]` on the
+  complete MIPS encoding tables in three tests that Clang flagged. The new `CLEARCORE_WERROR`
+  option is **OFF by default** so a local build never breaks on a newer compiler's diagnostic, and
+  ON in the `core-tests` and `full-build` jobs plus the pre-merge `core-only` matrix on Windows and
+  macOS. The release build job leaves it off on purpose. (#173)
 - `update-changelog.yml` also aligns `wiki/Home.md`'s version, which the previous pass missed — it
   read `v0.1.0` against a released 0.3.5. The pattern is anchored on `MIT license · v` so it cannot
   match the dependency versions on the next line.
