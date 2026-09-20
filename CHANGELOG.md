@@ -58,6 +58,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of `tests/mips/` follows. A loader regression reported as `disasm_test` failing, which points at
   the wrong translation unit, and `ctest -R program_loader` selected nothing. Pure move: all 42
   assertions preserved — 15 in the disassembler file, 27 in the new one. (#172)
+- `ENABLE_SANITIZERS=ON` no longer emits GNU-style `-fsanitize` flags under MSVC, where `cl.exe`
+  does not accept them and the build silently comes out uninstrumented. The MSVC branch uses
+  `/fsanitize=address`; UBSan has no MSVC equivalent, so that branch is ASan-only. The GCC/Clang
+  path is unchanged, so the `asan` CI leg is unaffected. (#171)
 
 ---
 
