@@ -37,6 +37,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
   the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
   catching but previously did not.
+- Dropped the `macos-x86_64` leg from `cross-platform.yml`'s pre-merge `core-only` matrix. It ran on
+  the `macos-13` image, which GitHub retired on 2025-12-08, so the job queued forever and left every
+  PR showing a permanently-pending check (`timeout-minutes` bounds execution, not queue time). Not
+  replaced with `macos-15-intel`: the release `build` job already dropped its Intel runner because
+  Qt's macOS binaries are universal, and an Intel macOS leg adds only AppleClang + libc++ on x86_64
+  over the remaining `macos-14` and Linux legs. (#169)
 
 ---
 
