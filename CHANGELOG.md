@@ -55,6 +55,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `codecov.yml`, and why the Qt front ends are out of scope. (#174)
 
 ### CI / Internal
+- `update-changelog.yml` now aligns every version-bearing file with the release tag, not just the
+  CHANGELOG: `CITATION.cff`'s `version` and `date-released` and the README BibTeX `version` move
+  too, in the same PR. Nothing had ever updated those two, so at v0.3.5 the citation metadata said
+  0.3.4 and the README BibTeX said 0.1.0. The Zenodo `doi:` is deliberately left alone — it is the
+  concept DOI, which resolves to the latest version and is version-independent by design. Each
+  substitution fails the job if its target is missing, so the drift cannot quietly return. (#211)
 - MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
   the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
   catching but previously did not.

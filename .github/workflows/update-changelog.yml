@@ -1,8 +1,16 @@
-name: Update CHANGELOG on release
+name: Update release metadata
 
-# Triggers when a GitHub Release is published (not a draft).
-# Converts the [Unreleased] section in CHANGELOG.md to the released version,
-# inserts a fresh [Unreleased] header, and commits back to develop.
+# Triggers when a GitHub Release is published (not a draft), and brings every
+# version-bearing file in the repo into line with the tag:
+#
+#   CHANGELOG.md  [Unreleased] -> the released version, plus a fresh [Unreleased]
+#   CITATION.cff  version + date-released
+#   README.md     the BibTeX block's version field
+#
+# The result is opened as a PR into develop (the ruleset blocks direct pushes).
+#
+# Before this existed the metadata drifted silently: at v0.3.5 the CITATION.cff
+# still said 0.3.4 and the README BibTeX said 0.1.0 (#211).
 
 on:
   release:
@@ -65,7 +73,47 @@ jobs:
           print(f"Promoted [Unreleased] -> [{tag}] - {date}")
           EOF
 
-      - name: Open a pull request with the CHANGELOG promotion
+      - name: Align CITATION.cff and README BibTeX with the release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_DATE: ${{ github.event.release.published_at }}
+        run: |
+          python3 - <<'EOF'
+          import os, re
+
+          tag_raw = os.environ["RELEASE_TAG"]
+          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw
+          date    = os.environ["RELEASE_DATE"][:10]
+
+          def patch(path, edits):
+              with open(path, encoding="utf-8") as f:
+                  text = f.read()
+              for pattern, repl, what in edits:
+                  text, n = re.subn(pattern, repl, text, count=1)
+                  if n == 0:
+                      # Fail loudly. A silently-skipped substitution is exactly how the
+                      # drift this step exists to prevent would creep back in.
+                      raise SystemExit(f"error: {path}: found no {what} to update")
+              with open(path, "w", encoding="utf-8") as f:
+                  f.write(text)
+              print(f"{path}: aligned to {tag}")
+
+          # `^version:` is anchored so it cannot also match `cff-version:` on line 1.
+          # `doi:` is deliberately NOT touched: it is Zenodo's *concept* DOI, which
+          # always resolves to the latest version and is version-independent by
+          # design. Per-version DOIs exist but are not what this file cites.
+          patch("CITATION.cff", [
+              (r"(?m)^version:.*$",       f"version: {tag}",          "`version:` line"),
+              (r"(?m)^date-released:.*$", f"date-released: '{date}'", "`date-released:` line"),
+          ])
+
+          patch("README.md", [
+              (r"(\n\s*version\s*=\s*\{)[^}]*(\})", rf"\g<1>{tag}\g<2>",
+               "BibTeX `version =` field"),
+          ])
+          EOF
+
+      - name: Open a pull request with the release-metadata updates
         # The develop branch ruleset forbids direct pushes ("changes must be made
         # through a pull request"), so open a PR instead of pushing to develop.
         env:
@@ -74,19 +122,20 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "No CHANGELOG changes to commit"; exit 0
+          files="CHANGELOG.md CITATION.cff README.md"
+          if git diff --quiet -- $files; then
+            echo "No release-metadata changes to commit"; exit 0
           fi
-          branch="chore/changelog-${RELEASE_TAG}"
+          branch="chore/release-metadata-${RELEASE_TAG}"
           git switch -c "$branch"
-          git add CHANGELOG.md
-          git commit -m "chore: promote [Unreleased] to ${RELEASE_TAG} in CHANGELOG"
+          git add $files
+          git commit -m "chore: align release metadata with ${RELEASE_TAG}"
           git push --force-with-lease origin "$branch"
           # skip-changelog: this promotion PR should not appear in the next release's notes.
           gh pr create \
             --base develop \
             --head "$branch" \
-            --title "chore: promote CHANGELOG for ${RELEASE_TAG}" \
-            --body "Automated CHANGELOG promotion for the ${RELEASE_TAG} release, opened by \`update-changelog.yml\` (direct pushes to \`develop\` are blocked by the branch ruleset). Review and merge to record the release in CHANGELOG.md." \
+            --title "chore: align release metadata for ${RELEASE_TAG}" \
+            --body "Automated release-metadata update for ${RELEASE_TAG}, opened by \`update-changelog.yml\` (direct pushes to \`develop\` are blocked by the branch ruleset). Promotes the CHANGELOG's [Unreleased] section and aligns \`CITATION.cff\` and the README BibTeX with the tag. The Zenodo concept DOI is intentionally left unchanged." \
             --label skip-changelog \
             || echo "PR already exists for $branch"
