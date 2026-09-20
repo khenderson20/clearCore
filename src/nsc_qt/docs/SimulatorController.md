@@ -31,7 +31,7 @@ Build requirement: compiled into both the `nsc_qt_ui` object library and the `cl
 | Variable | Type | Description |
 |----------|------|-------------|
 | `cycles_executed` | `uint64_t` | Total simulator cycles executed since the last `reset()`. |
-| `instructions_retired` | `uint64_t` | Instructions that completed WB without being stalled or flushed. |
+| `instructions_retired` | `uint64_t` | Cycles in which the backend flagged `PipelineState::retired`: an instruction left WB (pipelined) or a step completed without trapping (single-cycle). Branches and jumps count; bubbles and trapping instructions do not. |
 | `data_hazards` | `uint64_t` | Count of load-use stalls detected. |
 | `control_hazards` | `uint64_t` | Count of taken branches/jumps that caused a pipeline flush. |
 | `forwarding_events` | `uint64_t` | Count of cycles where EX/MEM→EX or MEM/WB→EX forwarding fired. |
@@ -62,6 +62,9 @@ Emitted from `doStep()` when the processor reports `mips::StepResult::Halt` (spi
 
 #### `faulted()`
 Emitted from `doStep()` when the processor reports `mips::StepResult::Fault` (an invalid or unsupported instruction execution). The run timer is stopped before this signal fires.
+
+#### `exceptionRaised(uint32_t epc, QString name)`
+Emitted from `doStep()` when the processor reports `mips::StepResult::Exception` (SYSCALL, BREAK, overflow, address error, reserved instruction). `epc` is the address of the trapping instruction (CP0 EPC) and `name` the MIPS mnemonic from `mips::exception_name()`. The run timer is stopped before this signal fires and the PC now points at the exception vector. For a non-MIPS backend the name is `"exception"` and `epc` is the current PC.
 
 ## 6. Public Methods
 

@@ -991,7 +991,7 @@ int runApp() {
     std::size_t anim_frame = 0;
 
     // Telemetry
-    std::size_t tel_cycles = 0, tel_stalls = 0, tel_forwards = 0, tel_flushes = 0;
+    std::size_t tel_cycles = 0, tel_stalls = 0, tel_forwards = 0, tel_flushes = 0, tel_retired = 0;
 
     // Execution trace (last 8 committed instructions)
     std::deque<TraceEntry> exec_trace;
@@ -1025,7 +1025,7 @@ int runApp() {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     auto reset_tel = [&] {
-        tel_cycles = tel_stalls = tel_forwards = tel_flushes = 0;
+        tel_cycles = tel_stalls = tel_forwards = tel_flushes = tel_retired = 0;
         exec_trace.clear();
     };
 
@@ -1034,18 +1034,15 @@ int runApp() {
         auto result = cpu->step();
         ++tel_cycles;
         const auto& ps = cpu->pipeline_state();
+        if (ps.retired) ++tel_retired;
 
         // Execution trace: WB stage for pipelined, EX for single-cycle
         bool        is_pl = (cpu_mode == CpuMode::Pipelined);
         const auto& ts    = ps.stages[is_pl ? 4 : 2];
         if (ts.valid && !ts.stalled) {
-            uint32_t tpc = ts.pc;
-            // WB stage raw is 0; look up from memory (instruction still there)
-            if (auto w = cpu->mem().read_word(tpc)) {
-                exec_trace.push_back({tpc, *w});
-                while (exec_trace.size() > 8)
-                    exec_trace.pop_front();
-            }
+            exec_trace.push_back({ts.pc, ts.raw});
+            while (exec_trace.size() > 8)
+                exec_trace.pop_front();
         }
 
         if (ps.load_stall) ++tel_stalls;
@@ -1053,6 +1050,18 @@ int runApp() {
         if (ps.fwd_ex_to_ex_a || ps.fwd_ex_to_ex_b || ps.fwd_mem_to_ex_a || ps.fwd_mem_to_ex_b)
             ++tel_forwards;
         if (result != mips::StepResult::Ok) auto_run.store(false);
+        if (result == mips::StepResult::Exception) {
+            // Surface the trap where the loader/config status line already
+            // lives, otherwise a SYSCALL or overflow just silently stops Run.
+            std::string name = "exception";
+            uint32_t    epc  = cpu->pc();
+            if (const auto* m = dynamic_cast<const mips::IMipsProcessor*>(cpu.get())) {
+                name = std::string(mips::exception_name(m->cp0().last_exception()));
+                epc  = m->cp0().epc();
+            }
+            loader_status =
+                std::format("Exception {} at 0x{:08X} — PC at exception vector.", name, epc);
+        }
         return result;
     };
 
@@ -1422,10 +1431,11 @@ int runApp() {
             float flush_pct = tel_cycles > 0
                                   ? static_cast<float>(tel_flushes) / static_cast<float>(tel_cycles)
                                   : 0.0f;
-            double cpi =
-                (tel_cycles > 0 && tel_cycles > tel_stalls)
-                    ? static_cast<double>(tel_cycles) / static_cast<double>(tel_cycles - tel_stalls)
-                    : 1.0;
+            // cycles / retired instructions, the same definition both Qt GUIs
+            // use; 1.0 until anything has retired so the gauge has a value.
+            double cpi = tel_retired > 0
+                             ? static_cast<double>(tel_cycles) / static_cast<double>(tel_retired)
+                             : 1.0;
 
             auto tel_cell = [](const char* lbl, std::size_t n, float pct, Color col) {
                 Elements e;

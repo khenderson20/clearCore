@@ -230,6 +230,74 @@ static void test_pipelined_break() {
     CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::Bp);
 }
 
+// ─── Nested exceptions / EPC preservation ────────────────────────────────────
+
+static void test_cp0_nested_raise_keeps_epc() {
+    mips::Cp0 cp0;
+    cp0.raise(mips::ExceptionCode::Sys, 0x1000);
+    // A second exception while EXL=1 (e.g. the vector itself is unmapped)
+    // must not overwrite EPC; Cause and BadVAddr still reflect the new trap.
+    cp0.raise(mips::ExceptionCode::AdEL, mips::kExceptionVector, mips::kExceptionVector);
+    CHECK(cp0.epc() == 0x1000u);
+    CHECK(cp0.last_exception() == mips::ExceptionCode::AdEL);
+    CHECK((cp0.cause() & 0x7Cu) == (4u << 2));
+    CHECK(cp0.bad_vaddr() == mips::kExceptionVector);
+    // Once ERET clears EXL the next raise writes EPC again.
+    cp0.eret();
+    cp0.raise(mips::ExceptionCode::Ov, 0x2000);
+    CHECK(cp0.epc() == 0x2000u);
+}
+
+// With the default 64 KiB address space the vector at 0x8000_0180 is unmapped,
+// so the step after a trap raises AdEL on the fetch. The original EPC must
+// survive that, or every front end would blame the vector instead of the
+// instruction that actually trapped.
+static void test_single_epc_survives_unmapped_vector() {
+    mips::SingleCycleCpu cpu(1u << 16);
+    cpu.load_program({enc::I(enc::ADDI, enc::zero, enc::t0, 1), enc::SYSCALL, enc::HALT_AT_0}, 0);
+    CHECK(cpu.step() == mips::StepResult::Ok);
+    CHECK(cpu.step() == mips::StepResult::Exception);
+    CHECK(cpu.cp0().epc() == 4u);
+    CHECK(cpu.pc() == mips::kExceptionVector);
+    CHECK(cpu.step() == mips::StepResult::Exception);  // fetch from the vector fails
+    CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::AdEL);
+    CHECK(cpu.cp0().epc() == 4u);
+}
+
+static void test_pipelined_epc_survives_unmapped_vector() {
+    mips::PipelinedCpu cpu(1u << 16);
+    cpu.load_program({enc::I(enc::ADDI, enc::zero, enc::t0, 1), enc::SYSCALL, enc::HALT_AT_0}, 0);
+    mips::StepResult r = mips::StepResult::Ok;
+    for (int i = 0; i < 10 && r == mips::StepResult::Ok; ++i)
+        r = cpu.step();
+    CHECK(r == mips::StepResult::Exception);
+    CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::Sys);
+    CHECK(cpu.cp0().epc() == 4u);
+    CHECK(cpu.step() == mips::StepResult::Exception);  // fetch from the vector fails
+    CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::AdEL);
+    CHECK(cpu.cp0().epc() == 4u);
+}
+
+// A trapping instruction never retires, on either model: only the ADDI before
+// the SYSCALL counts, however many cycles the pipeline needs to drain it.
+static void test_trap_does_not_retire() {
+    const std::vector<uint32_t> prog = {enc::I(enc::ADDI, enc::zero, enc::t0, 1), enc::SYSCALL,
+                                        enc::HALT_AT_0};
+    mips::SingleCycleCpu        sc(1u << 16);
+    mips::PipelinedCpu          pl(1u << 16);
+    for (mips::IProcessor* cpu :
+         {static_cast<mips::IProcessor*>(&sc), static_cast<mips::IProcessor*>(&pl)}) {
+        CHECK(cpu->load_program(prog, 0));
+        std::size_t retired = 0;
+        for (int i = 0; i < 10; ++i) {
+            (void)cpu->step();
+            if (cpu->pipeline_state().retired) ++retired;
+        }
+        CHECK(retired == 1);
+        CHECK(cpu->regs().read(enc::t0) == 1);
+    }
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -251,6 +319,12 @@ int main() {
     // PipelinedCpu exception tests
     test_pipelined_syscall();
     test_pipelined_break();
+
+    // Nested exceptions and retirement accounting
+    test_cp0_nested_raise_keeps_epc();
+    test_single_epc_survives_unmapped_vector();
+    test_pipelined_epc_survives_unmapped_vector();
+    test_trap_does_not_retire();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

@@ -3,6 +3,7 @@
 #include "mips/processor.h"
 #include <QMutex>
 #include <QObject>
+#include <QString>
 #include <QTimer>
 #include <cstdint>
 #include <memory>
@@ -65,6 +66,11 @@ signals:
     void programLoaded(int instructionCount);
     void halted();
     void faulted();
+    // The processor took an ISA trap (StepResult::Exception). `epc` is the
+    // address of the instruction that trapped and `name` the MIPS exception
+    // mnemonic ("Sys", "Ov", "AdEL", …). The run timer is stopped first; the
+    // PC now points at the exception vector.
+    void exceptionRaised(uint32_t epc, QString name);
 
 private slots:
     void onRunTimer();
