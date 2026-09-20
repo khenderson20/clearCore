@@ -7,10 +7,14 @@
 # Docs: https://docs.codecov.com/docs/codecov-yaml
 
 codecov:
-  # Wait up to 60 s for all flags to arrive before posting a status check.
-  # With one uploader (core-only), this is effectively instant.
-  wait_for_ci: true
+  # Both of these live under `notify`. `wait_for_ci` at the top level is not a
+  # recognised key, and Codecov discards the *entire* file when validation
+  # fails — which silently disabled the ignore list and both gates below.
+  # Check changes with: curl -X POST --data-binary @codecov.yml   #   https://codecov.io/validate
   notify:
+    # Wait for CI to finish before posting a status, and post once the single
+    # uploader (core-only) has reported.
+    wait_for_ci: true
     after_n_builds: 1
 
 coverage:

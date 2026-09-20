@@ -90,6 +90,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `codecov.yml`, and why the Qt front ends are out of scope. (#174)
 
 ### CI / Internal
+- **The TUI tab-count invariant is enforced by the compiler, not a comment.** `Container::Tab`
+  selects `children()[*selector % children().size()]`, so a child list shorter than the label list
+  makes high tab indices alias onto an earlier tab's live components — tab 4 wrapped to the
+  Converter and tab 5 to the CPU controls, where Enter could fire Run/Reset. The labels are now a
+  `constexpr` array and the child list's size is deduced from its own initialiser, so a
+  `static_assert` fails the build if either list grows without the other. The message names the
+  aliasing bug and says to add a placeholder container. (#195)
 - `update-changelog.yml` also aligns `wiki/Home.md`'s version, which the previous pass missed — it
   read `v0.1.0` against a released 0.3.5. The pattern is anchored on `MIT license · v` so it cannot
   match the dependency versions on the next line.
