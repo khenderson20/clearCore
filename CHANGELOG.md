@@ -24,14 +24,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Hex program listings now parse identically on every platform. `parse_hex_program` used
+  `std::stoul`, whose `unsigned long` is 64-bit on Linux/macOS but 32-bit on Windows, so a token
+  wider than 32 bits was silently truncated and accepted on LP64 and rejected on Windows. Replaced
+  with `std::from_chars` into a `uint32_t`, which rejects overflow everywhere and reports failure
+  by return value rather than by exception.
+
 ### CI / Internal
 
-- Dropped the `macos-x86_64` leg from `cross-platform.yml`'s pre-merge `core-only` matrix. It ran on
-  the `macos-13` image, which GitHub retired on 2025-12-08, so the job queued forever and left every
-  PR showing a permanently-pending check (`timeout-minutes` bounds execution, not queue time). Not
-  replaced with `macos-15-intel`: the release `build` job already dropped its Intel runner because
-  Qt's macOS binaries are universal, and an Intel macOS leg adds only AppleClang + libc++ on x86_64
-  over the remaining `macos-14` and Linux legs. (#169)
+- MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
+  the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
+  catching but previously did not.
 
 ---
 
