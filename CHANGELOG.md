@@ -70,6 +70,21 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `codecov.yml`, and why the Qt front ends are out of scope. (#174)
 
 ### CI / Internal
+- **Codecov was configured but inert.** `codecov.yml` failed Codecov's schema validation
+  (`codecov.wait_for_ci` belongs under `codecov.notify`), and Codecov discards the whole file when
+  validation fails — so the `ignore` list, both coverage gates and the comment settings had never
+  taken effect. Separately, the upload action's `files:` input *adds to* the reports it discovers
+  rather than restricting them, so the raw gcov data left by the `--coverage` build was uploaded
+  alongside `coverage.xml`, pulling in the `tests/` files that `gcovr --filter src/ --filter
+  include/` had excluded. gcovr reported 36.1 % of 2868 lines; Codecov recorded 44.03 % of 3384
+  across 40 files. Both are fixed, so the report is now the gcovr output alone with `src/nsc/ui.cpp`
+  (1243 lines, 0 % — the TUI is interactive and untested) and `src/nsc/main.cpp` excluded, which is
+  the scope the file always described. The reported percentage and the README badge will move as a
+  result. Validate changes with
+  `curl -X POST --data-binary @codecov.yml https://codecov.io/validate`.
+- The Codecov patch gate no longer fails a PR that has no coverable lines. A change touching only
+  ignored paths or only docs leaves Codecov with no patch data, and its default for missing data is
+  a red check — the wrong reading of "nothing to cover". `if_not_found: success`.
 - **Warnings are now errors in CI.** `clearcore_warnings` raised the warning level but set no
   `-Werror`/`/WX`, so warnings had been accumulating unnoticed — there were eleven across the three
   compilers. All are fixed: MSVC's `int -> uint8_t` narrowing on `regs().read(i)` (now an explicit
