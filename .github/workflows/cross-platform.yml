@@ -183,6 +183,15 @@ jobs:
           # check requires. To bump: fetch the new nsis-<ver>-setup.exe from
           # https://sourceforge.net/projects/nsis/files/NSIS%203/ and update both
           # values below (`sha256sum nsis-<ver>-setup.exe`).
+          #
+          # The silent flag MUST be written `//S`, not `/S`. Under Git Bash, MSYS
+          # rewrites a lone `/S` into a Windows path (C:/Program Files/Git/S), so
+          # the installer never sees the flag, opens its GUI and blocks forever.
+          # On a workflow_dispatch run it consumed the full 60-minute job timeout
+          # on attempt 1 and was reaped as an orphan process, so Configure/Build/
+          # Sign/Package never ran. `//S` collapses to a literal `/S` with no path
+          # conversion. The `timeout` is a backstop: any future hang costs two
+          # minutes and still leaves retries, instead of the entire job.
           NSIS_VERSION=3.12
           NSIS_SHA256=3bc2b06253a7e4957111be152ac6a536e0c7478a706e19da814038db5d706495
           makensis="/c/Program Files (x86)/NSIS/makensis.exe"
@@ -190,7 +199,7 @@ jobs:
             [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
             echo "Installing NSIS (attempt $attempt)…"
             if curl -fsSL "https://downloads.sourceforge.net/project/nsis/NSIS%203/${NSIS_VERSION}/nsis-${NSIS_VERSION}-setup.exe" -o nsis-setup.exe                && echo "${NSIS_SHA256}  nsis-setup.exe" | sha256sum -c -; then
-              ./nsis-setup.exe /S || true
+              timeout 120 ./nsis-setup.exe //S || echo "installer failed or timed out"
             fi
             [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
             sleep 20
