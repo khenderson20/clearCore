@@ -195,6 +195,9 @@ ctest --preset core-only      # TUI + core only, no Qt
 ## Git Workflow
 
 - **Always branch from `develop`**; PRs target `develop`, not `main`.
+- `Closes #N` in a PR body does **not** close the issue: GitHub only auto-closes on a merge to the
+  default branch, and PRs here target `develop` while `main` is the default. Close the issue by hand
+  when the fix lands on `develop`, or let the release-promotion PR close it.
 - Branch naming: `feature/`, `fix/`, `chore/`, `refactor/`, `docs/` prefixes.
 - Label PRs so release-drafter categorises them:
   `feature`, `enhancement`, `bug`, `security`, `documentation`, `dependencies`, `ci`.
@@ -308,6 +311,9 @@ cause. `gh run view <id> --log | grep "^windows-x64"` filters to the Windows leg
 ---
 
 ## RISC-V Roadmap (in progress)
+
+Tracked as [Milestone: RV32I Backend](https://github.com/khenderson20/clearCore/milestone/4) — decoder, single-cycle and pipelined
+backends, `EM_RISCV` ELF support, and the GDB register map / CSR trap model.
 
 Phase 1 (`feature/isa-core-riscv-prep`): `Memory` and `RegisterFile` moved to `isa::` namespace.
 Phase 2 (upcoming): RV32I decoder + single-cycle backend deriving from `isa::IProcessor`.

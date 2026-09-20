@@ -44,6 +44,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by return value rather than by exception.
 
 ### Documentation
+- Roadmap, README and CLAUDE.md now point at the GitHub milestones that track each stage, and two
+  stale claims are corrected: the Qt6 assembler was described as single-pass with backpatched labels
+  when it has been two-pass since it shipped, and the TUI was described as lacking a performance
+  panel when it has had a live `Telemetry` panel all along. CLAUDE.md also records why `Closes #N`
+  never fires on this repo. (#183)
 - CLAUDE.md's Codecov section no longer ends with a four-step "to complete your setup" checklist
   for work that is already done, one step of which pointed at a `ci.yml` condition that no longer
   exists. Replaced with a factual description of the `coverage` job, the gates and `ignore` list in
