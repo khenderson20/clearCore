@@ -7,6 +7,7 @@ clearCore is organized into independent libraries and interface layers that shar
 ## Module overview
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TD
     subgraph UI["UI layer — the only place Qt and FTXUI appear"]
         direction LR
@@ -17,33 +18,28 @@ flowchart TD
 
     subgraph CORE["mips_core — pure C++20, zero UI headers"]
         direction TB
-        ISA["<b>isa::</b> — ISA-agnostic contract<br/>IProcessor · Memory · RegisterFile<br/>PipelineState · StepResult · StageSnapshot<br/>headers in include/isa/ · no separate CMake target"]
-        MIPS["<b>mips::</b> — MIPS backend<br/>IMipsProcessor · SingleCycleCpu · PipelinedCpu<br/>Decoder · ALU · Control · CP0 · Disassembler<br/>ELF loader · program loader · trace"]
-        OPT["GdbStub — BUILD_GDB_STUB, POSIX only<br/>NyxstoneBackend — BUILD_NYXSTONE, LLVM 15-20"]
+        MIPS["<b>mips::</b> — MIPS backend<br/>IMipsProcessor · SingleCycleCpu · PipelinedCpu<br/>Decoder · ALU · Control · CP0 · Disassembler<br/>ELF loader · program loader · trace<br/><i>optional:</i> GdbStub · NyxstoneBackend"]
+        ISA["<b>isa::</b> — ISA-agnostic contract<br/>IProcessor · Memory · RegisterFile<br/>PipelineState · StepResult · StageSnapshot<br/><i>include/isa/ — no separate CMake target</i>"]
+        MIPS --> ISA
     end
 
     NSC["<b>nsc_core</b><br/>number-system converter"]
 
-    QML -. "reuses nsc_qt::SimulatorController" .-> QT
     TUI --> CORE
     QT --> CORE
     QML --> CORE
     TUI --> NSC
-    MIPS --> ISA
-    OPT --> MIPS
 
     classDef ui   fill:#1f4d3d,stroke:#6ee7b7,stroke-width:2px,color:#ffffff
     classDef isa  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
     classDef mips fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
     classDef nsc  fill:#4a3410,stroke:#fbbf24,stroke-width:2px,color:#ffffff
-    classDef opt  fill:#333a45,stroke:#9aa4b2,stroke-width:2px,color:#ffffff,stroke-dasharray:4 3
     classDef zone fill:none,stroke:#8b949e,stroke-width:1px,color:#8b949e
 
     class TUI,QT,QML ui
     class ISA isa
     class MIPS mips
     class NSC nsc
-    class OPT opt
     class UI,CORE zone
 ```
 
