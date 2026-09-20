@@ -210,12 +210,12 @@ Two pure-logic core libraries (`mips_core` and `nsc_core`) sit under three UI la
 
 Stages 1 through 2.6 are complete, covering the converter core, pipelined CPU, Qt6 GUIs, CP0, ELF loading, and GDB support. The most recent work split the simulator into an ISA-agnostic core, which opens the door for a second instruction set. Here is what is coming next:
 
-- [ ] **RISC-V (RV32I)** — a second ISA backend on the shared `isa::` core: decoder, single-cycle, 5-stage pipeline, ELF, and GDB, reusing every existing front end and visualizer
-- [ ] **Stage 3** — a two-pass assembler with a full symbol table and pseudo-instruction expansion
-- [ ] **Stage 4** — per-stage TUI telemetry and CPI analysis, matching the GUI's Pipeline Trace and Statistics tabs
-- [ ] **Stage 5** — branch prediction and speculative execution
+- [ ] **[RISC-V (RV32I)](https://github.com/khenderson20/clearCore/milestone/4)** — a second ISA backend on the shared `isa::` core: decoder, single-cycle, 5-stage pipeline, ELF, and GDB, reusing every existing front end and visualizer
+- [ ] **[Stage 3](https://github.com/khenderson20/clearCore/milestone/1)** — pseudo-instruction expansion, assembler directives, a richer symbol table, and bringing the assembler to the TUI
+- [ ] **[Stage 4](https://github.com/khenderson20/clearCore/milestone/2)** — per-stage TUI telemetry and CPI analysis, matching the GUI’s Pipeline Trace and Statistics tabs
+- [ ] **[Stage 5](https://github.com/khenderson20/clearCore/milestone/3)** — branch prediction and speculative execution
 
-See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
+Each stage above is a GitHub milestone with its work broken into issues; [Quality & Hardening](https://github.com/khenderson20/clearCore/milestone/5) carries correctness and tooling work that sits outside the staged plan. See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
 
 ## Documentation
 
