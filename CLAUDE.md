@@ -298,9 +298,9 @@ it via `workflow_dispatch` before cutting a release.
 
 Windows-specific hazards, all currently handled in-file:
 
-1. **NSIS install** — the installer is downloaded from SourceForge and verified against a pinned
+1. **NSIS install** â€” the installer is downloaded from SourceForge and verified against a pinned
    SHA-256 (choco can return exit 0 when its feed 503s, and cannot pin by hash, which Scorecard's
-   Pinned-Dependencies check needs). The `Ensure NSIS` step retries 5× and verifies `makensis.exe`
+   Pinned-Dependencies check needs). The `Ensure NSIS` step retries 5Ã— and verifies `makensis.exe`
    on disk. Dependabot cannot bump it, so update `NSIS_VERSION` and `NSIS_SHA256` in that step
    manually.
 
