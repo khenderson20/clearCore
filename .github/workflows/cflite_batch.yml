@@ -28,6 +28,7 @@ concurrency:
 jobs:
   batch:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
       contents: write        # push the updated corpus to cifuzz-corpus
       security-events: write # SARIF upload to code scanning

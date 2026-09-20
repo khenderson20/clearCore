@@ -30,6 +30,7 @@ concurrency:
 jobs:
   linux-package:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write  # upload assets to the release
     steps:

@@ -148,7 +148,7 @@ ctest --preset asan               # same suites under ASan/UBSan
 Or manually:
 
 ```bash
-cmake --build cmake-build-debug --target decoder_test cpu_test processor_test disasm_test nsc_tests qt_ui_test
+cmake --build cmake-build-debug --target decoder_test cpu_test processor_test disasm_test cp0_test elf_loader_test nsc_tests qt_ui_test
 ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
@@ -158,9 +158,12 @@ The suite covers:
 - `cpu_test` — CPU execution against known programs (both models)
 - `processor_test` — polymorphic harness running both `SingleCycleCpu` and `PipelinedCpu` through identical programs via the `IProcessor` contract
 - `disasm_test` — disassembler and hex program loader
+- `cp0_test` — Coprocessor 0 exception model (SYSCALL/BREAK/overflow/address errors, MFC0/MTC0/ERET)
+- `elf_loader_test` — MIPS ELF32 parsing and segment mapping
 - `nyxstone_test` — differential validation of the Decoder + Disassembler against Nyxstone (LLVM's assembler): our disassembly of each corpus word is re-encoded by LLVM and asserted bit-identical. Built only when `BUILD_NYXSTONE=ON` and an in-range LLVM was found; self-skips otherwise.
 - `nsc_tests` — number system converter (`parseBase`, conversions)
 - `qt_ui_test` — Qt6 assembler/controller/widget smoke tests (built only when `BUILD_QT6_UI=ON`; runs headless via `QT_QPA_PLATFORM=offscreen`)
+- `gdb_stub_test` — GDB RSP stub protocol handling (built only when `BUILD_GDB_STUB=ON`)
 
 **MARS golden tests** (`golden_arith_single`, `golden_fib_pipelined`, etc.) run each program in `tests/golden/` through MARS — the classroom-standard reference MIPS simulator — and both clearCore CPU models, and assert the register files match exactly. These require a JRE and Python 3; CMake downloads MARS automatically and verifies its checksum, and quietly skips the suite if the runtime isn't available or the download fails.
 
@@ -168,7 +171,7 @@ This project uses a lightweight, dependency-free `CHECK()`-macro test harness th
 
 ### ClusterFuzzLite fuzzing (CI only)
 
-A libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targets `mips::parse_hex_program` — the hex text parser that accepts untrusted input. It is **not** built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs it for 120 seconds on every PR to `main` or `develop` via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer). To build it manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
+A libFuzzer harness (`tests/fuzz/fuzz_hex_loader.cpp`) targets `mips::parse_hex_program` — the hex text parser that accepts untrusted input. It is **not** built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs it for 120 seconds via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer) — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger. To build it manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
 
 ---
 

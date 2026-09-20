@@ -268,6 +268,70 @@ static void test_forwarding(IProcessor& cpu, std::string_view label) {
     (void)label;
 }
 
+// ─── Retirement accounting ───────────────────────────────────────────────────
+// Both backends must flag exactly one retired instruction per instruction that
+// completes — including branches and jumps, which write no register but still
+// flow through MEM/WB in the pipeline. Squashed instructions and bubbles never
+// retire. The statistics panels divide cycles by this count to get CPI.
+static void test_retired_count(IProcessor& cpu, std::string_view label) {
+    using namespace enc;
+    cpu.reset(true);
+    std::vector<uint32_t> prog = {
+        I(ADDI, zero, t0, 1),   // 0
+        I(BEQ, zero, zero, 1),  // 1: always taken → skips word 2
+        I(ADDI, zero, t1, 99),  // 2: skipped, must not retire
+        I(ADDI, zero, t2, 3),   // 3
+        J(JOP, 4),              // 4: halt
+    };
+    CHECK(cpu.load_program(prog));
+
+    std::size_t retired = 0;
+    StepResult  r       = StepResult::Ok;
+    for (int i = 0; i < 100 && r == StepResult::Ok; ++i) {
+        r = cpu.step();
+        if (cpu.pipeline_state().retired) ++retired;
+    }
+    CHECK(r == StepResult::Halt);
+    CHECK(retired == 4);  // addi, beq, addi, j
+    CHECK(cpu.regs().read(t1) == 0);
+    CHECK(cpu.regs().read(t2) == 3);
+    (void)label;
+}
+
+// Pipelined only: a branch occupies MEM and WB like any other instruction, and
+// every MEM/WB snapshot carries the instruction's machine word so the
+// visualisers can label those stages (they used to receive raw == 0).
+static void test_branch_flows_to_wb(PipelinedCpu& cpu) {
+    using namespace enc;
+    cpu.reset(true);
+    const uint32_t beq = I(BEQ, zero, zero, 1);
+    cpu.load_program({beq, I(ADDI, zero, t1, 99), I(ADDI, zero, t2, 3), J(JOP, 3)});
+
+    bool       beq_in_mem = false, beq_in_wb = false, skipped_in_wb = false;
+    bool       raw_matches_memory = true;
+    StepResult r                  = StepResult::Ok;
+    for (int i = 0; i < 50 && r == StepResult::Ok; ++i) {
+        r                       = cpu.step();
+        const PipelineState& ps = cpu.pipeline_state();
+        for (std::size_t s = 3; s < 5; ++s) {
+            const StageSnapshot& st = ps.stages[s];
+            if (!st.valid) continue;
+            if (cpu.mem().read_word(st.pc) != std::optional<uint32_t>{st.raw})
+                raw_matches_memory = false;
+        }
+        if (ps.stages[3].valid && ps.stages[3].pc == 0) beq_in_mem = (ps.stages[3].raw == beq);
+        if (ps.stages[4].valid && ps.stages[4].pc == 0) beq_in_wb = (ps.stages[4].raw == beq);
+        if (ps.stages[4].valid && ps.stages[4].pc == 4) skipped_in_wb = true;
+    }
+    CHECK(r == StepResult::Halt);
+    CHECK(beq_in_mem);
+    CHECK(beq_in_wb);
+    CHECK(!skipped_in_wb);
+    CHECK(raw_matches_memory);
+    CHECK(cpu.regs().read(t1) == 0);
+    CHECK(cpu.regs().read(t2) == 3);
+}
+
 // ─── Backward-compat check: `Cpu` alias still works ─────────────────────────
 static void test_cpu_alias() {
     using namespace enc;
@@ -296,6 +360,7 @@ int main() {
     run_on_both(test_fault_oob, "fault_oob");
     run_on_both(test_load_use_hazard, "load_use_hazard");
     run_on_both(test_forwarding, "forwarding");
+    run_on_both(test_retired_count, "retired_count");
 
     // Implementation-specific checks
     {
@@ -305,6 +370,7 @@ int main() {
     {
         PipelinedCpu pl;
         test_pipeline_state_pipelined(pl);
+        test_branch_flows_to_wb(pl);
     }
 
     test_cpu_alias();

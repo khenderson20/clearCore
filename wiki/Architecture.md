@@ -6,39 +6,54 @@ clearCore is organized into independent libraries and interface layers that shar
 
 ## Module overview
 
-```
-┌──────────────────────┬───────────────────────┬──────────────────────────┐
-│ nsc_ui (FTXUI TUI)    │ nsc_qt (Qt6 Widgets)  │ nsc_quick (Qt Quick/QML) │
-└──────────┬────────────┴───────────┬───────────┴────────────┬─────────────┘
-           │                        │                        │
-           ▼                        ▼                        ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│                               mips_core                               │
-│  ┌─────────────────────────── isa:: (ISA-agnostic core) ────────────┐ │
-│  │  IProcessor · Memory · RegisterFile · PipelineState · StepResult │ │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│   mips::IMipsProcessor ◄── SingleCycleCpu / PipelinedCpu (adds CP0/HI/LO)│
-│   Decoder · ALU · Control · CP0 · Disassembler · trace (spdlog)        │
-│   (optional) NyxstoneBackend (LLVM-based assembler/disassembler)      │
-└──────────────────────────────┬────────────────────────────────────────┘
-                                │
-                    ┌───────────┘
-                    ▼
-        ┌─────────────────────────┐
-        │        nsc_core         │
-        │  Number system converter│
-        └─────────────────────────┘
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart TD
+    subgraph UI["UI layer — the only place Qt and FTXUI appear"]
+        direction LR
+        TUI["<b>nsc_ui</b><br/>FTXUI TUI<br/>number_system_converter"]
+        QT["<b>nsc_qt</b><br/>Qt6 Widgets<br/>clearCore-gui"]
+        QML["<b>nsc_quick</b><br/>Qt Quick / QML<br/>clearCore-quick"]
+    end
+
+    subgraph CORE["mips_core — pure C++20, zero UI headers"]
+        direction TB
+        MIPS["<b>mips::</b> — MIPS backend<br/>IMipsProcessor · SingleCycleCpu · PipelinedCpu<br/>Decoder · ALU · Control · CP0 · Disassembler<br/>ELF loader · program loader · trace<br/><i>optional:</i> GdbStub · NyxstoneBackend"]
+        ISA["<b>isa::</b> — ISA-agnostic contract<br/>IProcessor · Memory · RegisterFile<br/>PipelineState · StepResult · StageSnapshot<br/><i>include/isa/ — no separate CMake target</i>"]
+        MIPS --> ISA
+    end
+
+    NSC["<b>nsc_core</b><br/>number-system converter"]
+
+    TUI --> CORE
+    QT --> CORE
+    QML --> CORE
+    TUI --> NSC
+
+    classDef ui   fill:#1f4d3d,stroke:#6ee7b7,stroke-width:2px,color:#ffffff
+    classDef isa  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef mips fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+    classDef nsc  fill:#4a3410,stroke:#fbbf24,stroke-width:2px,color:#ffffff
+    classDef zone fill:none,stroke:#8b949e,stroke-width:1px,color:#8b949e
+
+    class TUI,QT,QML ui
+    class ISA isa
+    class MIPS mips
+    class NSC nsc
+    class UI,CORE zone
 ```
 
 | Library / target | Responsibility                                                                     |
 |-------------------|-------------------------------------------------------------------------------------|
 | `nsc_core`        | Real-time binary/hex/decimal conversion around a `uint64_t` value                   |
-| `mips_core`       | CPU simulation: the ISA-agnostic `isa::` core (`IProcessor`, `Memory`, `RegisterFile`, `PipelineState`) plus the MIPS backend — decoder, ALU, disassembler, both CPU models |
-| `nsc_ui`          | FTXUI terminal interface (`number_system_converter` binary) — depends only on public `mips_core` headers |
+| `mips_core`       | CPU simulation: the ISA-agnostic `isa::` core (`IProcessor`, `Memory`, `RegisterFile`, `PipelineState`) plus the MIPS backend — decoder, ALU, disassembler, both CPU models, CP0, ELF loader, and optionally the GDB stub and Nyxstone bridge |
+| `nsc_ui`          | FTXUI terminal interface (`number_system_converter` binary) — the only target that links `nsc_core`, alongside `mips_core` |
 | `nsc_qt`          | Qt6 Widgets layer (`clearCore-gui` binary) — `SimulatorController` bridges CPU state to Qt signals, plus an in-app MIPS assembler |
 | `nsc_quick`       | Qt Quick / QML layer (`clearCore-quick` binary) — same `IProcessor` backend, declarative UI in `qml/ClearCore/` |
 
-**Rule:** `nsc_core` and `mips_core` must never include UI headers. This boundary is enforced in `CMakeLists.txt` through target link dependencies.
+**Rule:** `nsc_core` and `mips_core` must never include UI headers. `CMakeLists.txt` enforces this structurally rather than by policy: neither library links a UI target, so Qt and FTXUI include directories are never propagated onto their compile lines and a stray `#include <QObject>` fails to compile.
+
+> **Caveat on the `isa::` boundary.** The `isa::` headers are genuinely ISA-agnostic — `include/isa/*.h` include nothing from `mips/`. The *implementation* is not separated, though: `isa::Memory` is defined in `src/mips/memory.cpp` and `isa::RegisterFile` in `src/mips/registers.cpp`, which also defines `namespace mips` in the same translation unit. There is no `isa_core` CMake target, so the layer is a source-level convention with no link-time boundary. Worth knowing before the RV32I backend lands.
 
 All three UI targets, plus `BUILD_NYXSTONE` (LLVM-based assembler/disassembler, LLVM 15–20) and `GOLDEN_TESTS` (MARS differential testing), default to **ON** and degrade gracefully — the build still configures and the TUI still builds even if Qt6, an in-range LLVM, or a JRE is missing. See [Getting Started](Getting-Started) for the CMake options.
 
@@ -138,9 +153,9 @@ Widget code never touches the CPU directly and never needs a mutex. `nsc_qt` als
 
 ## Testing architecture
 
-Beyond the six core CTest suites (one, `nyxstone_test`, built only when Nyxstone is enabled) and the Qt smoke-test suite (see [Getting Started](Getting-Started)), `tests/golden/` runs **differential tests**: each `.asm` program in that directory is assembled and executed independently by MARS (a Java-based reference MIPS simulator) and by both clearCore CPU models via `golden_runner`, and the resulting register files are compared for an exact match. This is separate from — and a stronger correctness signal than — the polymorphic `IProcessor` contract tests, which only check the two clearCore backends against each other rather than against an external reference. Golden tests are skipped automatically if no JRE or Python 3 is available.
+Beyond the seven core CTest suites — `decoder_test`, `cpu_test`, `processor_test`, `disasm_test`, `cp0_test`, `elf_loader_test`, `nsc_tests`, always built — plus two conditionally-built suites (`gdb_stub_test` when `BUILD_GDB_STUB=ON`, `nyxstone_test` when `BUILD_NYXSTONE=ON` with an in-range LLVM found) and the Qt smoke-test suite (see [Getting Started](Getting-Started)), `tests/golden/` runs **differential tests**: each `.asm` program in that directory is assembled and executed independently by MARS (a Java-based reference MIPS simulator) and by both clearCore CPU models via `golden_runner`, and the resulting register files are compared for an exact match. This is separate from — and a stronger correctness signal than — the polymorphic `IProcessor` contract tests, which only check the two clearCore backends against each other rather than against an external reference. Golden tests are skipped automatically if no JRE or Python 3 is available.
 
-**Fuzz testing**: `tests/fuzz/fuzz_hex_loader.cpp` is a libFuzzer harness targeting `mips::parse_hex_program`. It is not part of the normal CTest runs; it is built and exercised by the ClusterFuzzLite CI workflow (`.github/workflows/cflite_pr.yml`) on every PR. See [Contributing § Fuzzing](Contributing#fuzzing) for how to add new harnesses.
+**Fuzz testing**: `tests/fuzz/fuzz_hex_loader.cpp` is a libFuzzer harness targeting `mips::parse_hex_program`. It is not part of the normal CTest runs; it is built and exercised by the ClusterFuzzLite CI workflow (`.github/workflows/cflite_pr.yml`). See [Contributing § CI workflows](Contributing#ci-workflows) for its trigger condition and [Contributing § Fuzzing](Contributing#fuzzing) for how to add new harnesses.
 
 ---
 

@@ -72,7 +72,7 @@ Prefer to build it yourself? Read on.
 
 ## Quick Start
 
-You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.25+**. The terminal UI pulls in its FTXUI dependency automatically. For the desktop GUIs, install Qt6 first (`qt6-qtbase-devel` on Fedora, `qt6-base-dev` on Ubuntu, `qt@6` via Homebrew). If you do not need Qt at all, the `core-only` preset skips it entirely.
+You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.20+** (3.25+ recommended). The terminal UI pulls in its FTXUI dependency automatically. For the desktop GUIs, install Qt6 first (`qt6-qtbase-devel` on Fedora, `qt6-base-dev` on Ubuntu, `qt@6` via Homebrew). If you do not need Qt at all, the `core-only` preset skips it entirely.
 
 ```bash
 cmake --preset debug
@@ -111,7 +111,7 @@ ctest --preset debug    # all suites
 ctest --preset asan     # same suites under ASan + UBSan
 ```
 
-Six CTest suites cover the decoder, disassembler, loader, both CPU backends, and the converter core. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. CI runs Debug and ASan/UBSan builds plus CodeQL, dependency review, and libFuzzer fuzzing on every PR. See [Contributing](https://github.com/khenderson20/clearCore/wiki/Contributing) for the full details.
+Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main`/`develop` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
 
 ## Interfaces
 
@@ -210,12 +210,12 @@ Two pure-logic core libraries (`mips_core` and `nsc_core`) sit under three UI la
 
 Stages 1 through 2.6 are complete, covering the converter core, pipelined CPU, Qt6 GUIs, CP0, ELF loading, and GDB support. The most recent work split the simulator into an ISA-agnostic core, which opens the door for a second instruction set. Here is what is coming next:
 
-- [ ] **RISC-V (RV32I)** — a second ISA backend on the shared `isa::` core: decoder, single-cycle, 5-stage pipeline, ELF, and GDB, reusing every existing front end and visualizer
-- [ ] **Stage 3** — a two-pass assembler with a full symbol table and pseudo-instruction expansion
-- [ ] **Stage 4** — per-stage TUI telemetry and CPI analysis, matching the GUI's Pipeline Trace and Statistics tabs
-- [ ] **Stage 5** — branch prediction and speculative execution
+- [ ] **[RISC-V (RV32I)](https://github.com/khenderson20/clearCore/milestone/4)** — a second ISA backend on the shared `isa::` core: decoder, single-cycle, 5-stage pipeline, ELF, and GDB, reusing every existing front end and visualizer
+- [ ] **[Stage 3](https://github.com/khenderson20/clearCore/milestone/1)** — pseudo-instruction expansion, assembler directives, a richer symbol table, and bringing the assembler to the TUI
+- [ ] **[Stage 4](https://github.com/khenderson20/clearCore/milestone/2)** — per-stage TUI telemetry and CPI analysis, matching the GUI’s Pipeline Trace and Statistics tabs
+- [ ] **[Stage 5](https://github.com/khenderson20/clearCore/milestone/3)** — branch prediction and speculative execution
 
-See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
+Each stage above is a GitHub milestone with its work broken into issues; [Quality & Hardening](https://github.com/khenderson20/clearCore/milestone/5) carries correctness and tooling work that sits outside the staged plan. See the [Roadmap wiki page](https://github.com/khenderson20/clearCore/wiki/Roadmap) for the full breakdown.
 
 ## Documentation
 
@@ -243,7 +243,7 @@ GitHub's **"Cite this repository"** button in the top-right sidebar generates AP
   author  = {Henderson, Kevin},
   title   = {{clearCore}: An educational {CPU}-architecture simulator with live 5-stage pipeline visualization},
   year    = {2026},
-  version = {0.1.0},
+  version = {0.3.5},
   doi     = {10.5281/zenodo.21194876},
   url     = {https://github.com/khenderson20/clearCore}
 }

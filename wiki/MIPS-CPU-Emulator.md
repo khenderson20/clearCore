@@ -50,11 +50,17 @@ The control unit generates all signals (`RegWrite`, `MemRead`, `MemWrite`, `Bran
 `PipelinedCpu` runs five instructions concurrently, one per stage:
 
 ```
-Cycle N:    IF      ID      EX      MEM     WB
-Cycle N+1:  IF      ID      EX      MEM     WB
-              ↑       ↑       ↑       ↑       ↑
-          instr5  instr4  instr3  instr2  instr1
+cycle:        1     2     3     4     5     6     7     8     9
+           ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+instr 1    │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │     │     │
+instr 2    │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │     │
+instr 3    │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │
+instr 4    │     │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │
+instr 5    │     │     │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │
+           └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
 ```
+
+At cycle 5 the pipeline is full: instr 5 is in IF while instr 1 is in WB.
 
 Each stage reads from a pipeline register (a struct holding the outputs of the previous stage) and writes into the next one. Between cycles, the pipeline registers shift forward.
 
@@ -104,7 +110,7 @@ After each `step()` call, `PipelinedCpu::pipeline_state()` returns a `PipelineSt
 
 ## Execution trace
 
-The CPU maintains an 8-entry ring buffer of the last committed instructions (sourced at the WB stage). The TUI renders this as a scrolling execution history panel; the Qt6 GUI shows it in the Pipeline Trace tab.
+The TUI maintains an 8-entry ring buffer of the last committed instructions, built from the WB-stage entry of `PipelineState` after each `step()`, and renders it as a scrolling execution history panel. The CPU itself does not store this history — it only exposes the current cycle's `PipelineState`. The Qt6 GUI's Pipeline Trace tab is a related but separate view: it accumulates the full instruction × cycle grid for the run rather than a fixed 8-entry window (see [Qt6 GUI § Pipeline Trace](Qt6-GUI#pipeline-trace)).
 
 ---
 

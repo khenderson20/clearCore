@@ -24,6 +24,89 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Statistics for the single-cycle model**: Instructions and CPI read 0 in both Qt GUIs whenever
+  the single-cycle CPU was selected, because retirement was counted from the WB slot that model
+  never fills. Retirement is now a backend-defined `PipelineState::retired` flag shared by every
+  front end (the TUI's CPI gauge uses it too).
+- **Branches and jumps now travel through MEM and WB** in the pipelined model instead of vanishing
+  after EX, so the Pipeline Trace grid shows all five stages for them and they count as retired.
+- **MEM and WB stage labels** no longer read "nop" for every instruction: the pipeline registers
+  now carry the machine word into those stages.
+- **Exceptions are visible**: a new `exceptionRaised` signal names the trap and its EPC in the
+  Widgets status bar and Pipeline Events log, the QML status pill, and the TUI status line. A
+  nested exception while `Status.EXL` is set (e.g. the vector being unmapped in a small address
+  space) no longer overwrites EPC, matching the MIPS32 PRA.
+- Hex program listings now parse identically on every platform. `parse_hex_program` used
+  `std::stoul`, whose `unsigned long` is 64-bit on Linux/macOS but 32-bit on Windows, so a token
+  wider than 32 bits was silently truncated and accepted on LP64 and rejected on Windows. Replaced
+  with `std::from_chars` into a `uint32_t`, which rejects overflow everywhere and reports failure
+  by return value rather than by exception.
+
+### Documentation
+- The three diagrams that are genuinely graphs — the Architecture module overview, the Qt6
+  `SimulatorController` signal flow, and the `ci.yml` job map — are now Mermaid rather than hand-drawn
+  box art, which GitHub renders natively in both wikis and repo files. Colour carries meaning rather
+  than decoration: the `isa::` contract, the `mips::` backend, the UI layer and `nsc_core` each get
+  their own, so the layer rule CLAUDE.md calls hard is visible instead of only stated. Dark fills with
+  light strokes keep them legible under both GitHub themes. The pipelined-CPU instruction × cycle
+  chart stays ASCII deliberately — it is a fixed grid, which Mermaid renders worse than a table.
+- Wiki diagrams re-synced with the code they describe. The Qt6 GUI page documented a worker-thread
+  model that does not exist — there is no `QThread` or `moveToThread` anywhere in the Qt layer, and
+  the repo's own `src/nsc_qt/docs/SimulatorController.md` already said so; the page now describes the
+  zero-interval `QTimer` on the GUI thread, the 5000-cycle update throttle, and `exceptionRaised`.
+  The Architecture module diagram had the `nsc_core` dependency arrow backwards (only the TUI links
+  it; neither Qt GUI does) and its box edges did not line up. The pipelined-CPU diagram drew two
+  identical cycle rows and is now a proper instruction × cycle chart. CLAUDE.md's `ci.yml` job map
+  still said coverage was push-only and full-build was PR-only.
+- Roadmap, README and CLAUDE.md now point at the GitHub milestones that track each stage, and two
+  stale claims are corrected: the Qt6 assembler was described as single-pass with backpatched labels
+  when it has been two-pass since it shipped, and the TUI was described as lacking a performance
+  panel when it has had a live `Telemetry` panel all along. CLAUDE.md also records why `Closes #N`
+  never fires on this repo. (#183)
+- CLAUDE.md's Codecov section no longer ends with a four-step "to complete your setup" checklist
+  for work that is already done, one step of which pointed at a `ci.yml` condition that no longer
+  exists. Replaced with a factual description of the `coverage` job, the gates and `ignore` list in
+  `codecov.yml`, and why the Qt front ends are out of scope. (#174)
+
+### CI / Internal
+- `update-changelog.yml` also aligns `wiki/Home.md`'s version, which the previous pass missed — it
+  read `v0.1.0` against a released 0.3.5. The pattern is anchored on `MIT license · v` so it cannot
+  match the dependency versions on the next line.
+- `update-changelog.yml` now aligns every version-bearing file with the release tag, not just the
+  CHANGELOG: `CITATION.cff`'s `version` and `date-released` and the README BibTeX `version` move
+  too, in the same PR. Nothing had ever updated those two, so at v0.3.5 the citation metadata said
+  0.3.4 and the README BibTeX said 0.1.0. The Zenodo `doi:` is deliberately left alone — it is the
+  concept DOI, which resolves to the latest version and is version-independent by design. Each
+  substitution fails the job if its target is missing, so the drift cannot quietly return. (#211)
+- MSVC builds now compile with `/permissive-` alongside `/W4`, enabling two-phase name lookup and
+  the rest of MSVC's conformance checking — the divergence the Windows CI leg documents itself as
+  catching but previously did not.
+- Dropped the `macos-x86_64` leg from `cross-platform.yml`'s pre-merge `core-only` matrix. It ran on
+  the `macos-13` image, which GitHub retired on 2025-12-08, so the job queued forever and left every
+  PR showing a permanently-pending check (`timeout-minutes` bounds execution, not queue time). Not
+  replaced with `macos-15-intel`: the release `build` job already dropped its Intel runner because
+  Qt's macOS binaries are universal, and an Intel macOS leg adds only AppleClang + libc++ on x86_64
+  over the remaining `macos-14` and Linux legs. (#169)
+- Split the hex program loader's tests out of `tests/mips/disasm_test.cpp` into
+  `tests/mips/program_loader_test.cpp`, matching the one-test-file-per-module convention the rest
+  of `tests/mips/` follows. A loader regression reported as `disasm_test` failing, which points at
+  the wrong translation unit, and `ctest -R program_loader` selected nothing. Pure move: all 42
+  assertions preserved — 15 in the disassembler file, 27 in the new one. (#172)
+- `ENABLE_SANITIZERS=ON` no longer emits GNU-style `-fsanitize` flags under MSVC, where `cl.exe`
+  does not accept them and the build silently comes out uninstrumented. The MSVC branch uses
+  `/fsanitize=address`; UBSan has no MSVC equivalent, so that branch is ASan-only. The GCC/Clang
+  path is unchanged, so the `asan` CI leg is unaffected. (#171)
+- Added a repo-root `.clangd` pointing at `build/debug`. clangd searches a source file's own
+  directory and its parents for `compile_commands.json`; `build/<preset>/` is neither, so every
+  translation unit was parsed standalone with no include paths — real headers reported "file not
+  found", core types reported "unknown type name", and cross-file navigation returned nothing.
+  (#170)
+
+---
+
+## [0.3.5] - 2026-07-13
+
 ---
 
 ## [0.3.4] - 2026-07-09

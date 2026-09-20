@@ -78,9 +78,14 @@ Refactor-only step (no user-facing change) that carves the ISA-neutral parts of 
 
 ### Stage 3 — Assembler & Program Composition
 
+> Tracked as [Milestone: Stage 3](https://github.com/khenderson20/clearCore/milestone/1).
+
 The Qt6 Code Editor's in-app assembler (above) already covers labels and branch/jump resolution for the existing ISA subset. What's left to reach full Stage 3 scope:
 
-- [ ] Two-pass assembler with a full symbol table (EduMIPS64 pattern) — current assembler is effectively single-pass with backpatched labels
+- [ ] Richer symbol table (EduMIPS64 pattern). The assembler is **already two-pass** — pass 1 collects
+      labels, pass 2 encodes, with no backpatching (`src/nsc_qt/assembler.cpp:174`, `:215`). What is
+      missing is what the table *holds*: symbols are `label → word index` with no type or section, duplicate
+      definitions silently overwrite, and label case rules are unspecified
 - [ ] Pseudo-instructions: `li`, `move`, `la`, `nop`-as-macro, with expansion rules
 - [ ] Directive support: `.word`, `.ascii`, `.data`, `.text`
 - [ ] Bring the same assembler to the TUI (currently GUI-only) — likely landing on the Tab 5 "Utility" placeholder
@@ -92,10 +97,14 @@ The Qt6 Code Editor's in-app assembler (above) already covers labels and branch/
 
 ### Stage 4 — Advanced Visualizations & Telemetry (TUI/GUI parity)
 
+> Tracked as [Milestone: Stage 4](https://github.com/khenderson20/clearCore/milestone/2).
+
 The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this for the desktop; the TUI is catching up:
 
 - [ ] Instruction × Cycle Grid in the TUI (WebRISC-V pattern) — the Qt6 GUI already has this via Pipeline Trace
-- [ ] Performance Summary Panel in the TUI — the Qt6 GUI already has this via Statistics
+- [ ] *Post-run* performance summary in the TUI. The TUI already has a live `Telemetry` panel
+      (`src/nsc/ui.cpp:1450`) showing stalls/forwards/flushes with percentages and a CPI gauge; what it
+      lacks is the end-of-run totals and the data-vs-control hazard split the Qt6 Statistics tab reports
 - [ ] Per-instruction-type hazard breakout (not just per-cycle totals), in both UIs
 - [ ] Cycle-by-cycle breakdown panel — annotate each cycle with reason (normal / stall type / flush type)
 - [ ] "Squashed Loops" mode (WebRISC-V) — compact view for repetitive loop execution
@@ -103,6 +112,8 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 ---
 
 ### Stage 5 — Branch Prediction & Speculative Execution
+
+> Tracked as [Milestone: Stage 5](https://github.com/khenderson20/clearCore/milestone/3).
 
 - [ ] 1-bit predictor (always predict not-taken, flip on misprediction)
 - [ ] 2-bit saturating counter predictor (Patterson & Hennessy §4.7)
@@ -119,6 +130,8 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 ## Stretch goals
 
 ### Core extensibility
+
+> The RV32I backend is tracked as [Milestone: RV32I Backend](https://github.com/khenderson20/clearCore/milestone/4).
 
 - [~] **RISC-V (RV32I) backend** — derives from `isa::IProcessor`, reuses `isa::Memory` / `RegisterFile` / `PipelineState`, so all existing visualizers work unchanged. Groundwork (the `isa::` core split, Stage 2.6) shipped in `v0.1.1`. Remaining phased plan:
   - [x] ISA-agnostic core extraction + `IProcessor` split (`v0.1.1`)
@@ -146,7 +159,10 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 
 ### Regression / quality
 
-- [x] ClusterFuzzLite fuzzing harness (`tests/fuzz/fuzz_hex_loader.cpp`) — libFuzzer targets `mips::parse_hex_program`; runs 120 s on every PR via `cflite_pr.yml` (addresses OpenSSF Scorecard fuzzing signal)
+> Tracked as [Milestone: Quality & Hardening](https://github.com/khenderson20/clearCore/milestone/5), which also carries correctness and
+> toolchain-hygiene work not listed on this page.
+
+- [x] ClusterFuzzLite fuzzing harness (`tests/fuzz/fuzz_hex_loader.cpp`) — libFuzzer targets `mips::parse_hex_program`; runs 120 s via `cflite_pr.yml` on PRs touching relevant paths (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
 - [ ] UI smoke test guarding `Container::Tab` child count against `tab_labels.size()` (prevents reintroduction of the tab/focus aliasing bug)
 - [ ] Regression test for per-instruction-type telemetry breakout
 

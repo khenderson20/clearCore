@@ -57,27 +57,65 @@ A post-run summary dashboard: total cycles, committed instructions, CPI, and sta
 
 ## Architecture: `SimulatorController`
 
-The CPU does not run on the main Qt thread. The `SimulatorController` class mediates:
+The simulation runs **on the GUI thread**, driven by a zero-interval `QTimer` rather than a worker thread. `SimulatorController` mediates between the CPU and the widgets:
 
+```mermaid
+flowchart TD
+    subgraph GUI["GUI thread — the only thread; no worker thread exists"]
+        direction TB
+        TIMER["run_timer_<br/>QTimer, interval 0"]
+        SLOT["SimulatorController::onRunTimer()"]
+        STEP["PipelinedCpu::step()"]
+        TIMER -- timeout --> SLOT --> STEP
+    end
+
+    STEP --> THROTTLED
+    STEP --> ALWAYS
+
+    subgraph THROTTLED["per-cycle signals — at interval 0, emitted only every 5000th cycle"]
+        direction LR
+        S1["cycleExecuted(count)"] --> W1["Cycle counter"]
+        S2["pipelineStateChanged(state)"] --> W2["Datapath · Registers<br/>Memory · Pipeline Trace"]
+        S3["statisticsUpdated(stats)"] --> W3["Statistics tab"]
+    end
+
+    subgraph ALWAYS["event signals — never throttled"]
+        direction LR
+        E1["exceptionRaised(epc, name)"] --> V1["Status-bar banner<br/>Pipeline Events entry"]
+        E2["breakpointHit(pc)"] --> V2["Status-bar message"]
+        E3["halted() / faulted()"] --> V3["Stop auto-run, report status"]
+        E4["programLoaded(count)"] --> V4["Reset views for the new program"]
+    end
+
+    classDef drive  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef sig    fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+    classDef evt    fill:#5c2331,stroke:#fca5a5,stroke-width:2px,color:#ffffff
+    classDef widget fill:#1f4d3d,stroke:#6ee7b7,stroke-width:2px,color:#ffffff
+    classDef zone   fill:none,stroke:#8b949e,stroke-width:1px,color:#8b949e
+
+    class TIMER,SLOT,STEP drive
+    class S1,S2,S3 sig
+    class E1,E2,E3,E4 evt
+    class W1,W2,W3,V1,V2,V3,V4 widget
+    class GUI,THROTTLED,ALWAYS zone
 ```
-CPU thread                          Main thread (UI)
-─────────────────                   ─────────────────
-PipelinedCpu::step()
-  → emit pipelineStateChanged()  ──→  Datapath tab updates
-  → emit registersChanged()      ──→  Registers tab updates
-  → emit memoryChanged()         ──→  Memory tab updates
-  → emit traceRowAdded()         ──→  Pipeline Trace updates
-  → emit statisticsChanged()     ──→  Statistics tab updates
-  → emit breakpointHit()         ──→  Status bar message
-```
 
-Qt's event loop automatically marshals signals from the CPU thread to the UI thread. No mutexes are needed in widget code. The controller is the only object that touches the `IProcessor` from outside the CPU thread.
+`SimulatorController` (`include/nsc_qt/simulator_controller.h`) has no separate `registersChanged`/`memoryChanged`/`traceRowAdded` signals — the Registers, Memory, and Pipeline Trace tabs all derive their view from the single `pipelineStateChanged(mips::PipelineState)` payload rather than getting dedicated signals of their own.
 
-### Thread safety rules
+Because every connection is within one thread, these are direct calls — nothing is queued or marshalled across a thread boundary. `SimulatorController` does hold a `QMutex`, but in this application it is uncontended; see [`src/nsc_qt/docs/SimulatorController.md`](https://github.com/khenderson20/clearCore/blob/main/src/nsc_qt/docs/SimulatorController.md) for the detailed account.
 
-- Widget `paintEvent()` and slot handlers run on the main thread — they may read cached copies of CPU state but must never call `IProcessor` methods directly.
-- `SimulatorController` slots that call `step()` are invoked so they execute on the CPU thread.
-- Signal parameters are passed by value (not reference) to survive thread-boundary copying.
+### Concurrency rules
+
+- **There is no worker thread.** Stepping happens inside a `QTimer` slot on the GUI thread, so a long
+  run does not block the UI only because `run_timer_` uses interval 0 and yields to the event loop
+  between cycles. Anything that blocks inside `step()` freezes the window.
+- Per-cycle signals are throttled at maximum speed (`cycle % 5000`) to stop the event queue flooding;
+  a manual `stepCycle()` always emits, or the UI would show stale state.
+- Signal parameters are passed **by value** (`mips::PipelineState`, `SimulatorStatistics`). That is not
+  currently a thread-boundary requirement — it is what would make moving the CPU onto a real worker
+  thread a contained change.
+- Widgets read the state carried in the signal payload. They must not call `IProcessor` methods
+  directly, so that the controller stays the single point of access if threading is ever introduced.
 
 ---
 

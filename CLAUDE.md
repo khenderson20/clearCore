@@ -44,7 +44,10 @@ cmake --preset asan             # ASan + UBSan instrumented build
 ```
 
 `compile_commands.json` is always emitted (`CMAKE_EXPORT_COMPILE_COMMANDS ON`) into
-`build/<preset>/` — point clangd/IDEs at `build/debug/compile_commands.json`.
+`build/<preset>/`. The repo-root `.clangd` points clangd at `build/debug`, so configure that
+preset at least once and clangd resolves includes and indexes the tree; without it every
+header reports phantom errors and cross-file navigation returns nothing. IDEs that read the
+database directly want `build/debug/compile_commands.json`.
 
 **Key CMake options:**
 
@@ -192,13 +195,20 @@ ctest --preset core-only      # TUI + core only, no Qt
 ## Git Workflow
 
 - **Always branch from `develop`**; PRs target `develop`, not `main`.
+- `Closes #N` in a PR body does **not** close the issue: GitHub only auto-closes on a merge to the
+  default branch, and PRs here target `develop` while `main` is the default. Close the issue by hand
+  when the fix lands on `develop`, or let the release-promotion PR close it.
 - Branch naming: `feature/`, `fix/`, `chore/`, `refactor/`, `docs/` prefixes.
 - Label PRs so release-drafter categorises them:
   `feature`, `enhancement`, `bug`, `security`, `documentation`, `dependencies`, `ci`.
 - **Strict SemVer**: new user-visible capability → `MINOR` bump; bug fix → `PATCH` bump.
   Never bump only PATCH for a feature.
-- When updating README/About framing, also update `CITATION.cff` and the BibTeX title in the
-  same commit before pushing.
+- **Version numbers are automated.** `update-changelog.yml` aligns `CHANGELOG.md`,
+  `CITATION.cff` (`version` + `date-released`) and the README BibTeX `version` with the tag on
+  `release: published`, and opens a PR into `develop`. Do not bump them by hand.
+  The `doi:` field is Zenodo's **concept** DOI — version-independent by design, never bumped.
+- Prose still needs a human: when updating README/About framing, update the `CITATION.cff`
+  title and abstract and the BibTeX title in the same commit before pushing.
 
 ---
 
@@ -207,7 +217,9 @@ ctest --preset core-only      # TUI + core only, no Qt
 - `cppcheck` and `clang-tidy` are available locally. `libasan`/`clang++` are **not** available on
   this machine — use the `asan` preset only on machines where those are present.
 - `clang-format` is required; the PR checklist enforces a clean diff. Format before committing.
-- Compiler warnings are errors in the `clearcore_warnings` interface target (`-Wall -Wextra -pedantic`).
+- The `clearcore_warnings` interface target raises the warning level per compiler —
+  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. It does **not** set
+  `-Werror`/`/WX`, so warnings do not fail the build; treat them as errors by convention.
   Never suppress a warning without a comment explaining why.
 
 ---
@@ -239,94 +251,84 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 
 ### ci.yml job map
 
-```
-push/PR ──┬── format       (cpp-linter clang-format; annotates PR violations)
-          ├── coverage      (push only; gcovr → Codecov OIDC upload; core-only preset)
-          ├── core-tests    (matrix: core-only, asan; fast; no Qt/LLVM)
-          └── full-build    (release preset; both Qt6 GUIs + Nyxstone; non-draft PRs only)
+```mermaid
+flowchart LR
+    TRIG["push / PR<br/>main · develop"]
+
+    TRIG --> FMT["<b>format</b><br/>clang-format-22<br/>annotates PR violations"]
+    TRIG --> COV["<b>coverage</b><br/>push + same-repo PRs<br/>gcovr → Codecov OIDC<br/>core-only preset"]
+    TRIG --> CT["<b>core-tests</b><br/>matrix: core-only, asan<br/>fast; no Qt or LLVM"]
+    TRIG --> FB["<b>full-build</b><br/>release preset<br/>both Qt6 GUIs + Nyxstone<br/>skipped on draft PRs"]
+
+    classDef trig  fill:#4a3410,stroke:#fbbf24,stroke-width:2px,color:#ffffff
+    classDef gate  fill:#1e3a5f,stroke:#7ab8ff,stroke-width:2px,color:#ffffff
+    classDef heavy fill:#3b2a5e,stroke:#c4b5fd,stroke-width:2px,color:#ffffff
+
+    class TRIG trig
+    class FMT,COV,CT gate
+    class FB heavy
 ```
 
 ### Codecov
 
-Coverage is already fully wired in `ci.yml`. The `coverage` job:
+Coverage is wired end to end; there is no outstanding setup. The `coverage` job in `ci.yml`:
 
-- Builds the `core-only` preset with `--coverage` flags (no ccache — cached objects skip instrumentation)
-- Runs `gcovr` with `--filter src/ --filter include/` → `coverage.xml` (Cobertura format)
-- Uploads via `codecov/codecov-action` with `use_oidc: true` — **no `CODECOV_TOKEN` secret needed**
-  for public repos; the workflow already has `id-token: write` permission
-- Scope: `mips_core` + `nsc_core` only (Qt GUI code is excluded by design)
-- Runs on **push** events only, not PRs (so PRs don't produce coverage diff comments by default)
+- Builds the `core-only` preset with `--coverage` (no ccache — cached objects would skip
+  instrumentation)
+- Runs `gcovr --root . build/core-only --filter src/ --filter include/` → `coverage.xml`
+  (Cobertura format)
+- Uploads via `codecov/codecov-action` with `use_oidc: true` — **no `CODECOV_TOKEN` secret is
+  needed**; the job already holds `id-token: write`
+- Runs on pushes to `main`/`develop` and on PRs from this repo. Fork PRs are skipped on purpose:
+  they have no OIDC token, so the upload would fail silently
 
-**To complete your Codecov setup:**
+Gates and scope live in `codecov.yml` at the repo root — project 60 % (2 % drop tolerated), patch
+60 % on newly added lines (5 % tolerance), and an `ignore` list covering `tests/`, `.github/`,
+both Qt front ends, and `src/nsc/ui.cpp` + `src/nsc/main.cpp`. The Qt GUIs are excluded by design:
+the `core-only` coverage job never compiles them, so they produce no `.gcno` files and counting
+them would understate how well the core is covered. The badge is in `README.md`.
 
-1. Confirm uploads are arriving at `https://codecov.io/gh/khenderson20/clearCore`
-   (should appear after the next push to `main` or `develop`)
-2. Copy the badge Markdown from the Codecov dashboard and add it to `README.md`
-3. Optionally create `codecov.yml` in the repo root to set thresholds:
-   ```yaml
-   coverage:
-     status:
-       project:
-         default:
-           target: 70%        # fail CI if overall drops below this
-           threshold: 2%      # allow small drops without failing
-       patch:
-         default:
-           target: 60%        # new code added in a PR must be ≥60% covered
-   comment:
-     layout: "diff, files"
-     behavior: default
-   ```
-4. To get coverage diff comments on PRs, change the `coverage` job condition from
-   `if: github.event_name == 'push'` to run on both push and pull_request events.
+### Windows / macOS release workflow (cross-platform.yml)
 
-**Should you use Codecov for this project?** Yes — it's a strong fit:
+`cross-platform.yml` has two jobs: `core-only` (fast pre-merge matrix on every PR/push) and
+`build` (the full Qt-bundled installer matrix, gated to `release: published` and
+`workflow_dispatch`). The `build` job has been green since v0.3.4 — it is **not** a known-broken
+workflow. Because it never runs on a PR, a regression in it only surfaces at release time, so run
+it via `workflow_dispatch` before cutting a release.
 
-- `mips_core` has many independent code paths (32 opcodes × 2 CPU models × hazard cases ×
-  exception paths) that benefit from tracking; coverage gaps reveal untested instruction combinations
-- Gives contributors a concrete quality signal before merging
-- Already integrated, operational cost is zero
+Windows-specific hazards, all currently handled in-file:
 
-### Broken Windows workflow (cross-platform.yml — windows-x64)
+1. **NSIS install via choco** — `choco install nsis` can return exit 0 even when the community
+   feed 503s, leaving `makensis.exe` absent and `cpack -G NSIS` unable to find it. The `Ensure
+   NSIS` step retries 5× and verifies the binary on disk. Version-pinned (3.12.0) for Scorecard's
+   Pinned-Dependencies check; Dependabot has no Chocolatey ecosystem, so bump it manually from
+   <https://community.chocolatey.org/packages/nsis>.
 
-The `windows-x64` job in `cross-platform.yml` builds the NSIS installer and runs smoke tests.
-Known fragile points (check the Actions log to confirm which step fails):
+2. **QADS DLL not on PATH** — `qt_ui_test` links the Qt Advanced Docking System as a shared
+   library (LGPL; cannot be static). Windows' loader blocks on a missing-library dialog rather
+   than exiting, so the test hits its timeout instead of failing fast. The `Add QADS DLL to PATH`
+   step locates the DLL anywhere under the build tree and appends its directory.
 
-1. **`install-qt-action` missing `modules:`** — the action installs only the Qt base package
-   by default; `qtdeclarative` (Qt Quick/QML) is a separate aqtinstall module and may not be
-   present. Qt gracefully skips `clearCore-quick` when Quick isn't found, so this won't fail the
-   build outright, but the QML GUI won't be in the installer. Fix:
-   ```yaml
-   - name: Install Qt 6
-     uses: jurplel/install-qt-action@...
-     with:
-       version: '6.8.*'
-       cache: true
-       modules: 'qtshadertools qtdeclarative'
-   ```
+3. **Defender ASR rejects unsigned fresh binaries** — the "block executables unless they meet
+   prevalence/age/trusted-list criteria" rule returns "Access is denied" for the *installed*
+   `clearCore-gui.exe`, not just the installer. App binaries are therefore signed before cpack
+   packages them, and the installer is signed in a second pass. Both steps are gated on
+   `vars.AZURE_SIGNING_ACCOUNT`, so the build still succeeds unsigned until Trusted Signing is set
+   up. **If you add a fourth executable, add it to the `files:` list of `Sign application
+   binaries`** — that list is hardcoded and a missing file fails the signing step.
 
-2. **NSIS install via choco** — `choco install nsis` can silently fail even with the retry loop
-   (503 from the community feed), leaving `makensis.exe` absent and causing `cpack -G NSIS` to
-   fail. The retry loop has 5 attempts + 20 s sleeps — check if the `Ensure NSIS` step shows
-   repeated failures in the log.
+4. **WER crash dialogs** — suppressed via `HKCU:\...\Windows Error Reporting\DontShowUI` so a
+   crashing test subprocess exits instead of blocking on a modal prompt until the job times out.
 
-3. **Smoke-test `kill -0` on Windows Git Bash** — `kill -0 $pid` in Git Bash on Windows is
-   unreliable for detecting whether a native `.exe` process is still alive; it may return non-zero
-   immediately, making the smoke test misreport a healthy GUI as crashed. Replace the polling loop
-   with a PowerShell-aware check or use `tasklist` in the Windows branch.
-
-4. **`qt_standard_project_setup()` absent** — not currently called in `CMakeLists.txt`. On
-   Windows, this means DLL runtime output directories are not configured by Qt; build-tree test
-   runs may fail to find `Qt6Core.dll`. If the `Test` step fails (not the build or package step),
-   this is the likely cause. Fix: add `qt_standard_project_setup()` after the first
-   `find_package(Qt6 ...)` call in `CMakeLists.txt`.
-
-**To diagnose:** open the failed workflow run on GitHub → expand each step → the first red step
-is the cause. Share the error text to get a targeted fix.
+**To diagnose a failure:** open the run on GitHub → expand each step → the first red step is the
+cause. `gh run view <id> --log | grep "^windows-x64"` filters to the Windows leg.
 
 ---
 
 ## RISC-V Roadmap (in progress)
+
+Tracked as [Milestone: RV32I Backend](https://github.com/khenderson20/clearCore/milestone/4) — decoder, single-cycle and pipelined
+backends, `EM_RISCV` ELF support, and the GDB register map / CSR trap model.
 
 Phase 1 (`feature/isa-core-riscv-prep`): `Memory` and `RegisterFile` moved to `isa::` namespace.
 Phase 2 (upcoming): RV32I decoder + single-cycle backend deriving from `isa::IProcessor`.
