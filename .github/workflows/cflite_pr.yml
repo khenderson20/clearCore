@@ -6,14 +6,15 @@ on:
       - 'src/**'
       - 'include/**'
       - 'tests/fuzz/**'
-permissions:
-  contents: read
-  actions: read
-  pull-requests: read
-  security-events: write
+permissions: read-all
 jobs:
   PR:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write # SARIF upload to code scanning
     timeout-minutes: 20
     steps:
       - name: Harden the runner (Audit all outbound calls)
