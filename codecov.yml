@@ -35,6 +35,11 @@ coverage:
       default:
         target: 60%
         threshold: 5%
+        # A PR that only touches paths in the `ignore` list below (the TUI, the
+        # Qt front ends) or only docs has no coverable lines, so Codecov finds
+        # no patch data. The default for that case is a red check, which is
+        # wrong: there is nothing to cover, not nothing covered.
+        if_not_found: success
 
 # ── PR comment ───────────────────────────────────────────────────────────────
 # Post a single collapsible comment on each PR with a coverage diff and the
