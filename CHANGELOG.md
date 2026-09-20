@@ -82,9 +82,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the scope the file always described. The reported percentage and the README badge will move as a
   result. Validate changes with
   `curl -X POST --data-binary @codecov.yml https://codecov.io/validate`.
-- The Codecov patch gate no longer fails a PR that has no coverable lines. A change touching only
-  ignored paths or only docs leaves Codecov with no patch data, and its default for missing data is
-  a red check — the wrong reading of "nothing to cover". `if_not_found: success`.
+  With the file valid, a PR touching only ignored paths reports `codecov/patch: success — "Coverage
+  not affected"` on its own; no extra key is needed for that case.
 - **Warnings are now errors in CI.** `clearcore_warnings` raised the warning level but set no
   `-Werror`/`/WX`, so warnings had been accumulating unnoticed — there were eleven across the three
   compilers. All are fixed: MSVC's `int -> uint8_t` narrowing on `regs().read(i)` (now an explicit
