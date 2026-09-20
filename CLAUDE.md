@@ -298,11 +298,11 @@ it via `workflow_dispatch` before cutting a release.
 
 Windows-specific hazards, all currently handled in-file:
 
-1. **NSIS install via choco** â€” `choco install nsis` can return exit 0 even when the community
-   feed 503s, leaving `makensis.exe` absent and `cpack -G NSIS` unable to find it. The `Ensure
-   NSIS` step retries 5Ã— and verifies the binary on disk. Version-pinned (3.12.0) for Scorecard's
-   Pinned-Dependencies check; Dependabot has no Chocolatey ecosystem, so bump it manually from
-   <https://community.chocolatey.org/packages/nsis>.
+1. **NSIS install** — the installer is downloaded from SourceForge and verified against a pinned
+   SHA-256 (choco can return exit 0 when its feed 503s, and cannot pin by hash, which Scorecard's
+   Pinned-Dependencies check needs). The `Ensure NSIS` step retries 5× and verifies `makensis.exe`
+   on disk. Dependabot cannot bump it, so update `NSIS_VERSION` and `NSIS_SHA256` in that step
+   manually.
 
 2. **QADS DLL not on PATH** â€” `qt_ui_test` links the Qt Advanced Docking System as a shared
    library (LGPL; cannot be static). Windows' loader blocks on a missing-library dialog rather

@@ -171,19 +171,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          # choco can return exit 0 even when the community feed is down (503),
-          # leaving NSIS uninstalled and cpack unable to find makensis. Retry
-          # until makensis actually exists on disk.
-          #
-          # Version pinned for Scorecard's Pinned-Dependencies check. Dependabot
-          # has no Chocolatey ecosystem, so this needs a manual bump occasionally
-          # — check https://community.chocolatey.org/packages/nsis for the
-          # current release.
+          # Downloaded directly and verified against a pinned SHA-256 rather than
+          # via choco: the choco feed can return exit 0 on a 503 (leaving makensis
+          # absent) and cannot pin by hash, which Scorecard's Pinned-Dependencies
+          # check requires. To bump: fetch the new nsis-<ver>-setup.exe from
+          # https://sourceforge.net/projects/nsis/files/NSIS%203/ and update both
+          # values below (`sha256sum nsis-<ver>-setup.exe`).
+          NSIS_VERSION=3.12
+          NSIS_SHA256=3bc2b06253a7e4957111be152ac6a536e0c7478a706e19da814038db5d706495
           makensis="/c/Program Files (x86)/NSIS/makensis.exe"
           for attempt in 1 2 3 4 5; do
             [ -f "$makensis" ] && { echo "NSIS present"; exit 0; }
-            echo "Installing NSIS (attempt $attempt)…"
-            choco install nsis --version=3.12.0 --no-progress -y || true
+            echo "Installing NSIS (attempt $attempt)�"
+            if curl -fsSL "https://downloads.sourceforge.net/project/nsis/NSIS%203/${NSIS_VERSION}/nsis-${NSIS_VERSION}-setup.exe" -o nsis-setup.exe                && echo "${NSIS_SHA256}  nsis-setup.exe" | sha256sum -c -; then
+              ./nsis-setup.exe /S || true
+            fi
             [ -f "$makensis" ] && { echo "NSIS installed"; exit 0; }
             sleep 20
           done
