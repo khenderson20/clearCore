@@ -1,0 +1,13 @@
+# clangd configuration.
+#
+# Without this, clangd searches the source file's directory and its parents for
+# compile_commands.json. build/<preset>/ is neither, so every translation unit is
+# parsed standalone with no include paths: real headers report "file not found",
+# core types report "unknown type name", and cross-file navigation returns
+# nothing because the index is empty.
+#
+# build/debug is the only preset that covers the whole tree. core-only configures
+# faster but compiles no nsc_qt/ or nsc_quick/ sources, so Qt headers would keep
+# reporting phantom errors under it.
+CompileFlags:
+  CompilationDatabase: build/debug

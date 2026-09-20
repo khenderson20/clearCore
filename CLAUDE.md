@@ -44,7 +44,10 @@ cmake --preset asan             # ASan + UBSan instrumented build
 ```
 
 `compile_commands.json` is always emitted (`CMAKE_EXPORT_COMPILE_COMMANDS ON`) into
-`build/<preset>/` — point clangd/IDEs at `build/debug/compile_commands.json`.
+`build/<preset>/`. The repo-root `.clangd` points clangd at `build/debug`, so configure that
+preset at least once and clangd resolves includes and indexes the tree; without it every
+header reports phantom errors and cross-file navigation returns nothing. IDEs that read the
+database directly want `build/debug/compile_commands.json`.
 
 **Key CMake options:**
 

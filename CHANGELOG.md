@@ -62,6 +62,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not accept them and the build silently comes out uninstrumented. The MSVC branch uses
   `/fsanitize=address`; UBSan has no MSVC equivalent, so that branch is ASan-only. The GCC/Clang
   path is unchanged, so the `asan` CI leg is unaffected. (#171)
+- Added a repo-root `.clangd` pointing at `build/debug`. clangd searches a source file's own
+  directory and its parents for `compile_commands.json`; `build/<preset>/` is neither, so every
+  translation unit was parsed standalone with no include paths — real headers reported "file not
+  found", core types reported "unknown type name", and cross-file navigation returned nothing.
+  (#170)
 
 ---
 
