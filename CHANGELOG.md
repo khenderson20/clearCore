@@ -44,6 +44,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by return value rather than by exception.
 
 ### Documentation
+- The three diagrams that are genuinely graphs — the Architecture module overview, the Qt6
+  `SimulatorController` signal flow, and the `ci.yml` job map — are now Mermaid rather than hand-drawn
+  box art, which GitHub renders natively in both wikis and repo files. Colour carries meaning rather
+  than decoration: the `isa::` contract, the `mips::` backend, the UI layer and `nsc_core` each get
+  their own, so the layer rule CLAUDE.md calls hard is visible instead of only stated. Dark fills with
+  light strokes keep them legible under both GitHub themes. The pipelined-CPU instruction × cycle
+  chart stays ASCII deliberately — it is a fixed grid, which Mermaid renders worse than a table.
 - Wiki diagrams re-synced with the code they describe. The Qt6 GUI page documented a worker-thread
   model that does not exist — there is no `QThread` or `moveToThread` anywhere in the Qt layer, and
   the repo's own `src/nsc_qt/docs/SimulatorController.md` already said so; the page now describes the
