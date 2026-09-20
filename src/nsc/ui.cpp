@@ -35,6 +35,13 @@ using namespace ftxui;
 // ─── CPU mode ─────────────────────────────────────────────────────────────────
 enum class CpuMode { SingleCycle, Pipelined };
 
+// ─── Golden ratio ─────────────────────────────────────────────────────────────
+// Detunes the second wave of the Core Pulse surface so the three sine terms
+// have no common repeat period.  At namespace scope because it is only ever
+// read as a constant inside a lambda, which is not an odr-use — as a local,
+// MSVC reports C4189 "initialized but not referenced" despite the use.
+static constexpr float kPhi = 1.61803398875f;
+
 // ─── Tab labels ───────────────────────────────────────────────────────────────
 // The single source of truth for how many tabs exist.  Container::Tab selects
 // children()[*selector % children().size()], so a child list shorter than this
