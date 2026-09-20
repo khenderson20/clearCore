@@ -45,7 +45,7 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 ## At a glance
 
 ```
-C++20 · CMake 3.20+ · MIT license · v0.1.0
+C++20 · CMake 3.20+ · MIT license · v0.3.5
 FTXUI v7.0.0 · GSL · spdlog (all auto-fetched) · Qt6 (Widgets + Quick, both optional) · Nyxstone/LLVM 15–20 (optional) · KSyntaxHighlighting (optional)
 Seven core CTest suites (plus gdb_stub_test and nyxstone_test when enabled) + a Qt smoke-test suite + MARS differential tests + ClusterFuzzLite libFuzzer harness
 ```

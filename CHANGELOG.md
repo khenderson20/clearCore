@@ -44,6 +44,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by return value rather than by exception.
 
 ### Documentation
+- Wiki diagrams re-synced with the code they describe. The Qt6 GUI page documented a worker-thread
+  model that does not exist — there is no `QThread` or `moveToThread` anywhere in the Qt layer, and
+  the repo's own `src/nsc_qt/docs/SimulatorController.md` already said so; the page now describes the
+  zero-interval `QTimer` on the GUI thread, the 5000-cycle update throttle, and `exceptionRaised`.
+  The Architecture module diagram had the `nsc_core` dependency arrow backwards (only the TUI links
+  it; neither Qt GUI does) and its box edges did not line up. The pipelined-CPU diagram drew two
+  identical cycle rows and is now a proper instruction × cycle chart. CLAUDE.md's `ci.yml` job map
+  still said coverage was push-only and full-build was PR-only.
 - Roadmap, README and CLAUDE.md now point at the GitHub milestones that track each stage, and two
   stale claims are corrected: the Qt6 assembler was described as single-pass with backpatched labels
   when it has been two-pass since it shipped, and the TUI was described as lacking a performance
@@ -55,6 +63,9 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `codecov.yml`, and why the Qt front ends are out of scope. (#174)
 
 ### CI / Internal
+- `update-changelog.yml` also aligns `wiki/Home.md`'s version, which the previous pass missed — it
+  read `v0.1.0` against a released 0.3.5. The pattern is anchored on `MIT license · v` so it cannot
+  match the dependency versions on the next line.
 - `update-changelog.yml` now aligns every version-bearing file with the release tag, not just the
   CHANGELOG: `CITATION.cff`'s `version` and `date-released` and the README BibTeX `version` move
   too, in the same PR. Nothing had ever updated those two, so at v0.3.5 the citation metadata said

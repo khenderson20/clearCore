@@ -6,6 +6,7 @@ name: Update release metadata
 #   CHANGELOG.md  [Unreleased] -> the released version, plus a fresh [Unreleased]
 #   CITATION.cff  version + date-released
 #   README.md     the BibTeX block's version field
+#   wiki/Home.md  the version printed in the stats line
 #
 # The result is opened as a PR into develop (the ruleset blocks direct pushes).
 #
@@ -111,6 +112,14 @@ jobs:
               (r"(\n\s*version\s*=\s*\{)[^}]*(\})", rf"\g<1>{tag}\g<2>",
                "BibTeX `version =` field"),
           ])
+
+          # The wiki landing page prints the version in a stats line. Anchored on
+          # "MIT license · v" so it cannot match the dependency versions on the
+          # following line ("FTXUI v7.0.0 · GSL · spdlog …").
+          patch("wiki/Home.md", [
+              (r"(MIT license · v)\d+\.\d+\.\d+", rf"\g<1>{tag}",
+               "`MIT license · v<version>` stats line"),
+          ])
           EOF
 
       - name: Open a pull request with the release-metadata updates
@@ -122,7 +131,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          files="CHANGELOG.md CITATION.cff README.md"
+          files="CHANGELOG.md CITATION.cff README.md wiki/Home.md"
           if git diff --quiet -- $files; then
             echo "No release-metadata changes to commit"; exit 0
           fi

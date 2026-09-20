@@ -253,9 +253,9 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 
 ```
 push/PR ──┬── format       (cpp-linter clang-format; annotates PR violations)
-          ├── coverage      (push only; gcovr → Codecov OIDC upload; core-only preset)
+          ├── coverage      (push + same-repo PRs; gcovr → Codecov OIDC upload; core-only)
           ├── core-tests    (matrix: core-only, asan; fast; no Qt/LLVM)
-          └── full-build    (release preset; both Qt6 GUIs + Nyxstone; non-draft PRs only)
+          └── full-build    (release preset; both Qt6 GUIs + Nyxstone; skipped on draft PRs)
 ```
 
 ### Codecov

@@ -7,38 +7,45 @@ clearCore is organized into independent libraries and interface layers that shar
 ## Module overview
 
 ```
-┌──────────────────────┬───────────────────────┬──────────────────────────┐
-│ nsc_ui (FTXUI TUI)    │ nsc_qt (Qt6 Widgets)  │ nsc_quick (Qt Quick/QML) │
-└──────────┬────────────┴───────────┬───────────┴────────────┬─────────────┘
-           │                        │                        │
-           ▼                        ▼                        ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│                               mips_core                               │
-│  ┌─────────────────────────── isa:: (ISA-agnostic core) ────────────┐ │
-│  │  IProcessor · Memory · RegisterFile · PipelineState · StepResult │ │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│   mips::IMipsProcessor ◄── SingleCycleCpu / PipelinedCpu (adds CP0/HI/LO)│
-│   Decoder · ALU · Control · CP0 · Disassembler · trace (spdlog)        │
-│   (optional) NyxstoneBackend (LLVM-based assembler/disassembler)      │
-└──────────────────────────────┬────────────────────────────────────────┘
-                                │
-                    ┌───────────┘
-                    ▼
-        ┌─────────────────────────┐
-        │        nsc_core         │
-        │  Number system converter│
-        └─────────────────────────┘
+  nsc_ui                    nsc_qt                    nsc_quick
+  (FTXUI TUI)               (Qt6 Widgets)             (Qt Quick / QML)
+  number_system_converter   clearCore-gui             clearCore-quick
+     │     │                     │                         │
+     │     │                     │   reuses nsc_qt::SimulatorController
+     │     └─────────────────────┴─────────────────────────┘
+     │                           │
+     │                           ▼
+     │   ┌───────────────────────────────────────────────────────────────┐
+     │   │ mips_core                                                     │
+     │   │   isa::   IProcessor · Memory · RegisterFile · PipelineState  │
+     │   │           StepResult · StageSnapshot                          │
+     │   │           headers in include/isa/ — no separate CMake target  │
+     │   │                                                               │
+     │   │   mips::  IMipsProcessor ◄── SingleCycleCpu · PipelinedCpu    │
+     │   │           Decoder · ALU · Control · CP0 · Disassembler        │
+     │   │           ELF loader · program loader · trace (spdlog)        │
+     │   │           GdbStub         (BUILD_GDB_STUB, POSIX only)        │
+     │   │           NyxstoneBackend (BUILD_NYXSTONE, LLVM 15–20)        │
+     │   └───────────────────────────────────────────────────────────────┘
+     │
+     ▼
+  ┌──────────────────────────┐
+  │ nsc_core                 │   linked by the TUI only — neither Qt GUI
+  │ number-system converter  │   depends on it
+  └──────────────────────────┘
 ```
 
 | Library / target | Responsibility                                                                     |
 |-------------------|-------------------------------------------------------------------------------------|
 | `nsc_core`        | Real-time binary/hex/decimal conversion around a `uint64_t` value                   |
-| `mips_core`       | CPU simulation: the ISA-agnostic `isa::` core (`IProcessor`, `Memory`, `RegisterFile`, `PipelineState`) plus the MIPS backend — decoder, ALU, disassembler, both CPU models |
-| `nsc_ui`          | FTXUI terminal interface (`number_system_converter` binary) — depends only on public `mips_core` headers |
+| `mips_core`       | CPU simulation: the ISA-agnostic `isa::` core (`IProcessor`, `Memory`, `RegisterFile`, `PipelineState`) plus the MIPS backend — decoder, ALU, disassembler, both CPU models, CP0, ELF loader, and optionally the GDB stub and Nyxstone bridge |
+| `nsc_ui`          | FTXUI terminal interface (`number_system_converter` binary) — the only target that links `nsc_core`, alongside `mips_core` |
 | `nsc_qt`          | Qt6 Widgets layer (`clearCore-gui` binary) — `SimulatorController` bridges CPU state to Qt signals, plus an in-app MIPS assembler |
 | `nsc_quick`       | Qt Quick / QML layer (`clearCore-quick` binary) — same `IProcessor` backend, declarative UI in `qml/ClearCore/` |
 
-**Rule:** `nsc_core` and `mips_core` must never include UI headers. This boundary is enforced in `CMakeLists.txt` through target link dependencies.
+**Rule:** `nsc_core` and `mips_core` must never include UI headers. `CMakeLists.txt` enforces this structurally rather than by policy: neither library links a UI target, so Qt and FTXUI include directories are never propagated onto their compile lines and a stray `#include <QObject>` fails to compile.
+
+> **Caveat on the `isa::` boundary.** The `isa::` headers are genuinely ISA-agnostic — `include/isa/*.h` include nothing from `mips/`. The *implementation* is not separated, though: `isa::Memory` is defined in `src/mips/memory.cpp` and `isa::RegisterFile` in `src/mips/registers.cpp`, which also defines `namespace mips` in the same translation unit. There is no `isa_core` CMake target, so the layer is a source-level convention with no link-time boundary. Worth knowing before the RV32I backend lands.
 
 All three UI targets, plus `BUILD_NYXSTONE` (LLVM-based assembler/disassembler, LLVM 15–20) and `GOLDEN_TESTS` (MARS differential testing), default to **ON** and degrade gracefully — the build still configures and the TUI still builds even if Qt6, an in-range LLVM, or a JRE is missing. See [Getting Started](Getting-Started) for the CMake options.
 
