@@ -163,7 +163,7 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 > toolchain-hygiene work not listed on this page.
 
 - [x] ClusterFuzzLite fuzzing harness (`tests/fuzz/fuzz_hex_loader.cpp`) — libFuzzer targets `mips::parse_hex_program`; runs 120 s via `cflite_pr.yml` on PRs touching relevant paths (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
-- [ ] UI smoke test guarding `Container::Tab` child count against `tab_labels.size()` (prevents reintroduction of the tab/focus aliasing bug)
+- [x] `Container::Tab` child count guarded against the tab label list — `kTabLabels` is a `constexpr` array and the child list's size is deduced from its own initialiser, so a `static_assert` fails the build if either grows without the other (prevents reintroduction of the tab/focus aliasing bug) (#195)
 - [ ] Regression test for per-instruction-type telemetry breakout
 
 ---
