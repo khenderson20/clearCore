@@ -60,6 +60,17 @@ target_compile_options(clearcore_warnings INTERFACE
         $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
 )
 
+# Default OFF on purpose: a local build must not become unbuildable because a
+# newer compiler added a diagnostic. CI turns it on so warnings cannot quietly
+# accumulate again (see the WERROR env var in ci.yml / cross-platform.yml).
+option(CLEARCORE_WERROR "Treat compiler warnings as errors (intended for CI)" OFF)
+if (CLEARCORE_WERROR)
+    target_compile_options(clearcore_warnings INTERFACE
+            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
+            $<$<CXX_COMPILER_ID:MSVC>:/WX>
+    )
+endif ()
+
 # Sanitizers are applied globally (before FetchContent) so dependencies are
 # instrumented consistently; mixing sanitized and unsanitized code breaks
 # ASan interceptors.

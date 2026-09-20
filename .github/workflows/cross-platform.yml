@@ -91,13 +91,19 @@ jobs:
           New-ItemProperty -Force -Path "HKCU:\Software\Microsoft\Windows\Windows Error Reporting" `
             -Name DontShowUI -Value 1 -PropertyType DWord | Out-Null
 
+      # CLEARCORE_WERROR is set on these pre-merge legs only: they are what
+      # keeps MSVC /W4 and AppleClang diagnostics from accumulating unseen. The
+      # release `build` job below deliberately leaves it off — a cosmetic new
+      # diagnostic from a toolchain bump must not block cutting a release.
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset core-only -DGOLDEN_TESTS=OFF
+        run: cmake --preset core-only -DGOLDEN_TESTS=OFF -DCLEARCORE_WERROR=ON
 
       - name: Configure (macOS)
         if: runner.os == 'macOS'
-        run: cmake --preset core-only -DGOLDEN_TESTS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+        run: >
+          cmake --preset core-only -DGOLDEN_TESTS=OFF
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset core-only

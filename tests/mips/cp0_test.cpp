@@ -33,13 +33,15 @@ constexpr uint32_t R(uint32_t rs, uint32_t rt, uint32_t rd, uint32_t shamt, uint
 constexpr uint32_t I(uint32_t op, uint32_t rs, uint32_t rt, uint16_t imm) {
     return (op << 26) | (rs << 21) | (rt << 16) | imm;
 }
+// These are complete MIPS encoding tables kept whole for readability; not every
+// entry is used by every test, which -Wunused-const-variable flags on Clang.
 // Registers
-constexpr uint32_t zero = 0, t0 = 8, t1 = 9, t2 = 10;
+[[maybe_unused]] constexpr uint32_t zero = 0, t0 = 8, t1 = 9, t2 = 10;
 // Opcodes
-constexpr uint32_t ADDI = 0x08, LW = 0x23, SW = 0x2B;
+[[maybe_unused]] constexpr uint32_t ADDI = 0x08, LW = 0x23, SW = 0x2B;
 // Funct codes
-constexpr uint32_t F_ADD = 0x20, F_SUB = 0x22;
-constexpr uint32_t F_SYSCALL = 0x0C, F_BREAK = 0x0D;
+[[maybe_unused]] constexpr uint32_t F_ADD = 0x20, F_SUB = 0x22;
+constexpr uint32_t                  F_SYSCALL = 0x0C, F_BREAK = 0x0D;
 // SYSCALL: opcode=SPECIAL(0), all fields 0, funct=0x0C
 constexpr uint32_t SYSCALL = F_SYSCALL;
 // BREAK: same pattern with funct=0x0D
