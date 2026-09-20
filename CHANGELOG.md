@@ -53,6 +53,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   replaced with `macos-15-intel`: the release `build` job already dropped its Intel runner because
   Qt's macOS binaries are universal, and an Intel macOS leg adds only AppleClang + libc++ on x86_64
   over the remaining `macos-14` and Linux legs. (#169)
+- Split the hex program loader's tests out of `tests/mips/disasm_test.cpp` into
+  `tests/mips/program_loader_test.cpp`, matching the one-test-file-per-module convention the rest
+  of `tests/mips/` follows. A loader regression reported as `disasm_test` failing, which points at
+  the wrong translation unit, and `ctest -R program_loader` selected nothing. Pure move: all 42
+  assertions preserved — 15 in the disassembler file, 27 in the new one. (#172)
 
 ---
 

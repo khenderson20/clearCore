@@ -571,7 +571,8 @@ endfunction()
 clearcore_add_test(decoder_test tests/mips/decoder_test.cpp mips_core)  # Instruction decoding
 clearcore_add_test(cpu_test tests/mips/cpu_test.cpp mips_core)  # CPU execution (both models)
 clearcore_add_test(processor_test tests/mips/processor_test.cpp mips_core)  # IProcessor contract
-clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler + hex loader
+clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler
+clearcore_add_test(program_loader_test tests/mips/program_loader_test.cpp mips_core)  # Hex program loader
 clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
