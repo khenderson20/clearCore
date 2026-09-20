@@ -50,11 +50,17 @@ The control unit generates all signals (`RegWrite`, `MemRead`, `MemWrite`, `Bran
 `PipelinedCpu` runs five instructions concurrently, one per stage:
 
 ```
-Cycle N:    IF      ID      EX      MEM     WB
-Cycle N+1:  IF      ID      EX      MEM     WB
-              ↑       ↑       ↑       ↑       ↑
-          instr5  instr4  instr3  instr2  instr1
+cycle:        1     2     3     4     5     6     7     8     9
+           ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+instr 1    │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │     │     │
+instr 2    │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │     │
+instr 3    │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │
+instr 4    │     │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │
+instr 5    │     │     │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │
+           └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
 ```
+
+At cycle 5 the pipeline is full: instr 5 is in IF while instr 1 is in WB.
 
 Each stage reads from a pipeline register (a struct holding the outputs of the previous stage) and writes into the next one. Between cycles, the pipeline registers shift forward.
 
