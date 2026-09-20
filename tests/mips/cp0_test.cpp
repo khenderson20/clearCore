@@ -300,6 +300,49 @@ static void test_trap_does_not_retire() {
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
+// ─── COP0 must not manufacture load-use stalls (#126) ────────────────────────
+// MFC0 writes rt and its rs field is a sub-op selector, so neither is a source
+// register. MTC0 genuinely reads rt. The loads read a zeroed word past the
+// program: loading code bits into Status would trap the CPU into a loop.
+
+// Self-targeting J at word index 2: the halt idiom for a two-instruction program.
+static constexpr uint32_t kHaltAt2 = (0x02u << 26) | 0x2u;
+
+static int count_load_stalls(const std::vector<uint32_t>& prog) {
+    mips::PipelinedCpu cpu;
+    cpu.reset(true);
+    CHECK(cpu.load_program(prog));
+    int stalls = 0;
+    for (int i = 0; i < 100; ++i) {
+        const auto r = cpu.step();
+        stalls += cpu.pipeline_state().load_stall ? 1 : 0;
+        if (r == mips::StepResult::Halt) break;
+    }
+    return stalls;
+}
+
+static void test_mfc0_dest_is_not_a_source() {
+    using namespace enc;
+    // lw t0 ; mfc0 t0, Status: MFC0 overwrites t0, so there is no dependency.
+    CHECK(count_load_stalls({I(LW, zero, t0, 0x100), MFC0(t0, mips::Cp0::kRegStatus), kHaltAt2}) ==
+          0);
+}
+
+static void test_cop0_selector_is_not_a_source() {
+    using namespace enc;
+    constexpr uint32_t a0 = 4;  // equals MTC0's rs selector (0x04)
+    // lw a0 ; mtc0 t1, Status: the selector 4 must not be read as register $a0.
+    CHECK(count_load_stalls({I(LW, zero, a0, 0x100), MTC0(t1, mips::Cp0::kRegStatus), kHaltAt2}) ==
+          0);
+}
+
+static void test_mtc0_true_dependency_still_stalls() {
+    using namespace enc;
+    // lw t0 ; mtc0 t0, Status: MTC0 reads t0, so the load-use bubble is real.
+    CHECK(count_load_stalls({I(LW, zero, t0, 0x100), MTC0(t0, mips::Cp0::kRegStatus), kHaltAt2}) ==
+          1);
+}
+
 int main() {
     // Cp0 unit tests
     test_cp0_raise_eret();
@@ -325,6 +368,11 @@ int main() {
     test_single_epc_survives_unmapped_vector();
     test_pipelined_epc_survives_unmapped_vector();
     test_trap_does_not_retire();
+
+    // COP0 hazard-source decode
+    test_mfc0_dest_is_not_a_source();
+    test_cop0_selector_is_not_a_source();
+    test_mtc0_true_dependency_still_stalls();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
