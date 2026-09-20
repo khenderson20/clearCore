@@ -65,9 +65,18 @@ target_compile_options(clearcore_warnings INTERFACE
 # ASan interceptors.
 option(ENABLE_SANITIZERS "Build with AddressSanitizer + UBSanitizer" OFF)
 if (ENABLE_SANITIZERS)
-    message(STATUS "Sanitizers enabled: address, undefined")
-    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
-    add_link_options(-fsanitize=address,undefined)
+    if (MSVC)
+        # MSVC ships ASan but has no UBSan equivalent, and it spells the flag
+        # /fsanitize=address. The GNU-style flags below are not merely ignored
+        # by cl.exe — reaching the linker they produce a build that looks
+        # successful and is not instrumented.
+        message(STATUS "Sanitizers enabled: address (MSVC; no UBSan equivalent)")
+        add_compile_options(/fsanitize=address)
+    else ()
+        message(STATUS "Sanitizers enabled: address, undefined")
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif ()
 endif ()
 
 find_package(Threads REQUIRED)
