@@ -1,7 +1,7 @@
 // GDB stub robustness tests (#125).
 //
-// The RSP handlers parse attacker-controllable hex fields from packets whose
-// checksum is intentionally unverified. Previously they delegated to std::stoul,
+// The RSP handlers parse attacker-controllable hex fields from packet payloads.
+// Previously they delegated to std::stoul,
 // which throws std::invalid_argument / std::out_of_range on malformed or
 // oversized input; nothing between the handler and the packet loop caught it, so
 // a single bad packet aborted the emulator. These tests pin the replacement
@@ -34,6 +34,9 @@ struct GdbStubTestAccess {
     static std::optional<uint8_t>  parse_hex_byte(const std::string& s, std::size_t off) {
         return GdbStub::parse_hex_byte(s, off);
     }
+    static bool checksum_matches(const std::string& d, char hi, char lo) {
+        return GdbStub::checksum_matches(d, hi, lo);
+    }
 };
 
 }  // namespace mips
@@ -64,6 +67,15 @@ int main() {
     CHECK(!GdbStubTestAccess::parse_hex_byte("ab", 2).has_value());  // offset past end
     CHECK(!GdbStubTestAccess::parse_hex_byte("zz", 0).has_value());  // non-hex
     CHECK(!GdbStubTestAccess::parse_hex_byte("0x", 0).has_value());  // prefix, not a byte
+
+    // ── checksum_matches: mod-256 sum of the payload as two hex digits ─────────
+    CHECK(GdbStubTestAccess::checksum_matches("OK", '9', 'a'));   // 'O'+'K' = 0x9a
+    CHECK(GdbStubTestAccess::checksum_matches("OK", '9', 'A'));   // digits are case-insensitive
+    CHECK(GdbStubTestAccess::checksum_matches("", '0', '0'));     // empty payload
+    CHECK(!GdbStubTestAccess::checksum_matches("OK", '9', 'b'));  // off by one
+    CHECK(!GdbStubTestAccess::checksum_matches("OK", '0', '0'));  // wrong value
+    CHECK(!GdbStubTestAccess::checksum_matches("OK", 'z', 'z'));  // non-hex digits
+    CHECK(!GdbStubTestAccess::checksum_matches("OK", '+', '9'));  // sign is not a digit
 
     if (g_failed == 0) {
         std::printf("All %d gdb_stub tests passed.\n", g_passed);
