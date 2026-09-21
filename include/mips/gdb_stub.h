@@ -108,9 +108,12 @@ private:
     static uint8_t     checksum(const std::string& data) noexcept;
     static std::string to_hex_le(uint32_t v);  // 4-byte little-endian hex
     static uint32_t    from_hex_le(const std::string& s, size_t off = 0);
-    // Non-throwing hex parsers: RSP payloads are attacker-controllable (the
-    // checksum is intentionally unverified), so a malformed field must yield
-    // nullopt rather than throw out of the packet loop and abort the process.
+    // True when the two received checksum characters are valid hex and equal
+    // checksum(data).
+    [[nodiscard]] static bool checksum_matches(const std::string& data, char hi, char lo);
+    // Non-throwing hex parsers: RSP payloads are attacker-controllable, so a
+    // malformed field must yield nullopt rather than throw out of the packet
+    // loop and abort the process.
     static std::optional<uint32_t> parse_hex(const std::string& s);
     static std::optional<uint8_t>  parse_hex_byte(const std::string& s, std::size_t off);
     static std::string             hex_byte(uint8_t b);
