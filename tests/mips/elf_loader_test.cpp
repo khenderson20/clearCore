@@ -8,6 +8,7 @@
 #include "mips/single_cycle_cpu.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <sstream>
@@ -104,6 +105,25 @@ static mips::ElfImage parse_from_bytes(const std::string& bytes) {
     std::istringstream s(bytes);
     return mips::parse_elf(s);
 }
+
+// ─── Byte patching ───────────────────────────────────────────────────────────
+// The hardening tests build a valid image with make_elf and then corrupt one
+// field, so each case isolates exactly one validation rule.
+
+static void patch_u16(std::string& bytes, size_t offset, uint16_t value) {
+    std::memcpy(bytes.data() + offset, &value, sizeof(value));
+}
+
+static void patch_u32(std::string& bytes, size_t offset, uint32_t value) {
+    std::memcpy(bytes.data() + offset, &value, sizeof(value));
+}
+
+// Field offsets inside the single program header make_elf emits.
+static constexpr size_t kPhdrOffset   = sizeof(Elf32Ehdr);
+static constexpr size_t kPOffsetField = kPhdrOffset + 4;
+static constexpr size_t kPVaddrField  = kPhdrOffset + 8;
+static constexpr size_t kPFileszField = kPhdrOffset + 16;
+static constexpr size_t kPMemszField  = kPhdrOffset + 20;
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -223,10 +243,7 @@ static void test_bss_zero_fill() {
     const std::vector<uint32_t> words = {0xAAAA'AAAAu};
     auto                        bytes = make_elf(words, 0x200, 0x200);
 
-    // Patch p_memsz at offset sizeof(Elf32Ehdr) + 24 (p_memsz is the 6th field).
-    const size_t memsz_off = sizeof(Elf32Ehdr) + 20;  // p_memsz offset in Elf32Phdr
-    uint32_t     new_memsz = 8;                       // 4 file bytes + 4 BSS bytes
-    std::memcpy(bytes.data() + memsz_off, &new_memsz, 4);
+    patch_u32(bytes, kPMemszField, 8);  // 4 file bytes + 4 BSS bytes
 
     std::istringstream s(bytes);
     const auto         img = mips::parse_elf(s);
@@ -239,6 +256,101 @@ static void test_bss_zero_fill() {
     CHECK(mips::load_elf_into_processor(cpu, img, err));
     // BSS byte at vaddr+4 should be zero.
     CHECK(cpu.mem().read_byte(0x204).value_or(0xFF) == 0);
+}
+
+// ─── Hardening: header and segment validation (#127) ─────────────────────────
+
+static void test_reject_bad_phentsize() {
+    // Entries are read as sizeof(Elf32Phdr) bytes but walked at e_phentsize
+    // stride; a mismatch used to misparse silently.
+    auto bytes = make_elf({0u}, 0, 0);
+    patch_u16(bytes, offsetof(Elf32Ehdr, e_phentsize), 24);
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_reject_phnum_past_eof() {
+    // A header claiming far more program headers than the file can hold used
+    // to drive a long seek/read loop; the table is now bounded by file size.
+    auto bytes = make_elf({0u}, 0, 0);
+    patch_u16(bytes, offsetof(Elf32Ehdr, e_phnum), 0xFFFF);
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_reject_filesz_past_eof() {
+    // p_filesz drove seg.data.resize() unchecked — a 4 GiB request from a
+    // ~100-byte file. Now rejected before the allocation.
+    auto bytes = make_elf({0u}, 0, 0);
+    patch_u32(bytes, kPFileszField, 0xFFFF'0000u);
+    patch_u32(bytes, kPMemszField, 0xFFFF'0000u);
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_reject_memsz_below_filesz() {
+    // ElfSegment documents memsz >= filesz; the BSS loop assumes it.
+    auto bytes = make_elf({0u, 0u}, 0, 0);
+    patch_u32(bytes, kPMemszField, 4);  // filesz is 8
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_reject_segment_wrapping_address_space() {
+    // vaddr + off is uint32_t arithmetic in the loader: a wrapping segment
+    // would pass Memory's bounds check and overwrite low memory.
+    auto bytes = make_elf({0u}, 0, 0);
+    patch_u32(bytes, kPVaddrField, 0xFFFF'FFFCu);
+    patch_u32(bytes, kPFileszField, 4);
+    patch_u32(bytes, kPMemszField, 16);  // 0xFFFFFFFC + 16 wraps
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_reject_offset_past_eof() {
+    auto bytes = make_elf({0u}, 0, 0);
+    patch_u32(bytes, kPOffsetField, 0xFFFF'FF00u);
+    const auto img = parse_from_bytes(bytes);
+    CHECK(!img.ok());
+}
+
+static void test_bss_only_segment_is_mapped() {
+    // p_filesz == 0 with p_memsz > 0 is a pure .bss.  The loader used to skip
+    // the whole segment, so the region was never zeroed.
+    auto bytes = make_elf({0xAAAA'AAAAu}, 0x300, 0x300);
+    patch_u32(bytes, kPFileszField, 0);
+    patch_u32(bytes, kPMemszField, 16);
+
+    const auto img = parse_from_bytes(bytes);
+    CHECK(img.ok());
+    CHECK(img.segments.size() == 1);
+    CHECK(img.segments[0].filesz == 0);
+    CHECK(img.segments[0].memsz == 16);
+    CHECK(img.segments[0].data.empty());
+
+    mips::SingleCycleCpu cpu(1u << 16);
+    std::string          err;
+    // Dirty the region first so the zero-fill is observable.
+    for (uint32_t off = 0; off < 16; ++off)
+        CHECK(cpu.mem().write_byte(0x300 + off, 0xCC));
+    CHECK(mips::load_elf_into_processor(cpu, img, err));
+    CHECK(cpu.mem().read_byte(0x300).value_or(0xFF) == 0);
+    CHECK(cpu.mem().read_byte(0x30F).value_or(0xFF) == 0);
+}
+
+static void test_bss_past_end_of_memory_reports_error() {
+    // The BSS loop discarded write_byte's result, so a memsz running off the
+    // end of memory truncated silently instead of reporting it.
+    auto bytes = make_elf({0xAAAA'AAAAu}, 0xFFFC, 0xFFFC);
+    patch_u32(bytes, kPMemszField, 0x100);  // runs past the 64 KB boundary
+
+    const auto img = parse_from_bytes(bytes);
+    CHECK(img.ok());
+
+    mips::SingleCycleCpu cpu(1u << 16);  // 64 KB
+    std::string          err;
+    CHECK(!mips::load_elf_into_processor(cpu, img, err));
+    CHECK(!err.empty());
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -254,6 +366,14 @@ int main() {
     test_load_respects_vaddr();
     test_load_out_of_bounds();
     test_bss_zero_fill();
+    test_reject_bad_phentsize();
+    test_reject_phnum_past_eof();
+    test_reject_filesz_past_eof();
+    test_reject_memsz_below_filesz();
+    test_reject_segment_wrapping_address_space();
+    test_reject_offset_past_eof();
+    test_bss_only_segment_is_mapped();
+    test_bss_past_end_of_memory_reports_error();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

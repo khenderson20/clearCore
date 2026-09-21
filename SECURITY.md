@@ -28,6 +28,8 @@ When reporting, include what's useful:
 
 This is a personal project, not a funded effort — response times depend on availability. There is no bug bounty program and no guaranteed turnaround, but reports will be acknowledged and taken seriously. Credit in the commit/advisory is offered by default; say if you'd rather stay anonymous.
 
+Confirmed vulnerabilities that are medium severity or higher are fixed within 60 days of the report, and critical ones as quickly as possible; the fix is called out in the release notes.
+
 ## Software Bill of Materials (SBOM)
 
 Every published GitHub release includes an SPDX 2.3 JSON SBOM

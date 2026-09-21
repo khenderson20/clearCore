@@ -125,6 +125,13 @@ jobs:
         uses: step-security/codecov-action@db5c3605ff3c9dc7f0b2791e6bea84a561bacab8 # v7.0.0
         with:
           files: coverage.xml
+          # `files` ADDS to whatever the action discovers by searching the
+          # workspace; it does not restrict the upload. Without this the action
+          # also picked up the raw gcov data left by the --coverage build, so
+          # the report carried tests/ files and ~500 more lines than the gcovr
+          # run that precedes it (gcovr said 36.1% of 2868 lines, Codecov
+          # recorded 44.03% of 3384). Upload exactly what we generated.
+          disable_search: true
           use_oidc: true
           fail_ci_if_error: false
 
@@ -154,11 +161,14 @@ jobs:
         with:
           key: ${{ matrix.preset }}
 
+      # CLEARCORE_WERROR is CI-only: it defaults to OFF in CMakeLists.txt so a
+      # local build never breaks because a newer compiler added a diagnostic.
       - name: Configure (sanitizer job disables the GUIs too)
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -201,6 +211,7 @@ jobs:
         run: >
           cmake --preset release
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset release

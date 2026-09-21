@@ -35,6 +35,28 @@ using namespace ftxui;
 // ─── CPU mode ─────────────────────────────────────────────────────────────────
 enum class CpuMode { SingleCycle, Pipelined };
 
+// ─── Golden ratio ─────────────────────────────────────────────────────────────
+// Detunes the second wave of the Core Pulse surface so the three sine terms
+// have no common repeat period.  At namespace scope because it is only ever
+// read as a constant inside a lambda, which is not an odr-use — as a local,
+// MSVC reports C4189 "initialized but not referenced" despite the use.
+static constexpr float kPhi = 1.61803398875f;
+
+// ─── Tab labels ───────────────────────────────────────────────────────────────
+// The single source of truth for how many tabs exist.  Container::Tab selects
+// children()[*selector % children().size()], so a child list shorter than this
+// makes high tab indices alias onto an earlier tab's live components.  The
+// static_assert at the construction site turns that into a build failure.
+//
+// D: plain glyphs only — FTXUI's IsFullWidth() table has no entries in the
+// emoji block (0x1F3xx-0x1F9xx), so codepoint_width() reports 1 for emoji while
+// terminals render them at 2 cells.  That mismatch desyncs
+// size(WIDTH, GREATER_THAN, ...) and right-edge alignment per glyph used.
+static constexpr std::array<std::string_view, 6> kTabLabels = {
+    " Converter ",      " CPU Dashboard ", " CPU Config ",
+    " Program Loader ", " Core Pulse ",    " Utility Tools ",
+};
+
 // ─── MIPS ABI register names ──────────────────────────────────────────────────
 static constexpr std::array<std::string_view, 32> kRegNames = {
     "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3", "t0", "t1", "t2",
@@ -308,7 +330,10 @@ static Element render_exec_trace(const std::deque<TraceEntry>& trace) {
 static Element render_registers(const mips::IProcessor& cpu) {
     Elements col_l, col_r;
     for (int i = 0; i < 32; ++i) {
-        uint32_t val     = cpu.regs().read(i);
+        // read() takes the 5-bit index as uint8_t.  The loop bounds i to 0-31,
+        // so the narrowing is safe — made explicit so /W4 does not flag it as
+        // the kind of silent int->uint8_t truncation the matrix exists to catch.
+        uint32_t val     = cpu.regs().read(static_cast<uint8_t>(i));
         bool     changed = (i != 0 && i == cpu.regs().last_written());
         bool     nonzero = (val != 0);
 
@@ -873,8 +898,7 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
         // outward ripple. Driven by anim_time so motion stays smooth even when
         // the CPU is paused; cycle_counter only nudges phase so stepping still
         // visibly perturbs the field without owning the animation clock.
-        constexpr float kPhi           = 1.61803398875f;
-        auto            surface_height = [&](float x, float y) -> float {
+        auto surface_height = [&](float x, float y) -> float {
             const float dx      = x - smoothed_mx;
             const float dy      = y - smoothed_my;
             const float dist_sq = dx * dx + dy * dy;
@@ -1012,16 +1036,9 @@ int runApp() {
     std::vector<std::string> cpu_mode_names = {"Single-Cycle", "Pipelined (5-stage)"};
     int                      cpu_mode_idx   = 0;
 
-    // Tabs
-    // D: plain glyphs only — FTXUI's IsFullWidth() table has no entries in
-    // the emoji block (0x1F3xx-0x1F9xx), so codepoint_width() reports 1 for
-    // emoji while terminals render them at 2 cells. That mismatch desyncs
-    // size(WIDTH, GREATER_THAN, ...) and right-edge alignment per glyph used.
-    int                      tab_idx    = 0;
-    std::vector<std::string> tab_labels = {
-        " Converter ",      " CPU Dashboard ", " CPU Config ",
-        " Program Loader ", " Core Pulse ",    " Utility Tools ",
-    };
+    // Tabs — Menu() wants owning strings, so materialise kTabLabels once.
+    int                      tab_idx = 0;
+    std::vector<std::string> tab_labels(kTabLabels.begin(), kTabLabels.end());
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     auto reset_tel = [&] {
@@ -1205,26 +1222,30 @@ int runApp() {
     Component dp_focus   = Container::Vertical({});
     Component util_focus = Container::Vertical({});
 
+    // D: Container::Tab selects children()[*selector % children().size()].
+    // tab_labels has one entry per tab (tab_idx 0-5) but this list once had
+    // only 4 — on tab 4 that wrapped to index 0 (Converter) and on tab 5 to
+    // index 1 (CPU controls), silently routing keyboard/mouse focus to
+    // off-screen components (e.g. Enter on tab 5 could fire Run/Reset).
+    // dp_focus/util_focus are empty containers — ComponentBase::Focusable()
+    // returns false with no children, so they correctly absorb focus without
+    // doing anything, matching those tabs' non-interactive content.
+    //
+    // The size is deduced from this initialiser rather than fixed to
+    // kTabLabels.size(), so adding a label without a child (or the reverse)
+    // fails the build here instead of reintroducing the aliasing bug.
+    const std::array tab_children = {
+        conv_container, ctrl_container, cfg_container, loader_container, dp_focus, util_focus,
+    };
+    static_assert(tab_children.size() == kTabLabels.size(),
+                  "Container::Tab needs exactly one child per entry in kTabLabels: a shorter "
+                  "child list makes high tab indices wrap onto an earlier tab's live components. "
+                  "Add a placeholder Container::Vertical({}) for tabs that render purely from "
+                  "CPU state.");
+
     Component main_container = Container::Vertical({
         tab_menu,
-        // D: Container::Tab selects children()[*selector % children().size()].
-        // tab_labels has 6 entries (tab_idx 0-5) but this list previously had
-        // only 4 — on tab 4 that wrapped to index 0 (Converter) and on tab 5
-        // to index 1 (CPU controls), silently routing keyboard/mouse focus to
-        // off-screen components (e.g. Enter on tab 5 could fire Run/Reset).
-        // dp_focus/util_focus are empty containers — ComponentBase::Focusable()
-        // returns false with no children, so they correctly absorb focus
-        // without doing anything, matching those tabs' non-interactive content.
-        Container::Tab(
-            {
-                conv_container,
-                ctrl_container,
-                cfg_container,
-                loader_container,
-                dp_focus,
-                util_focus,
-            },
-            &tab_idx),
+        Container::Tab(Components(tab_children.begin(), tab_children.end()), &tab_idx),
     });
 
     // ── Renderer ──────────────────────────────────────────────────────────────

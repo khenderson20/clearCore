@@ -162,7 +162,8 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 > Tracked as [Milestone: Quality & Hardening](https://github.com/khenderson20/clearCore/milestone/5), which also carries correctness and
 > toolchain-hygiene work not listed on this page.
 
-- [x] ClusterFuzzLite fuzzing harness (`tests/fuzz/fuzz_hex_loader.cpp`) — libFuzzer targets `mips::parse_hex_program`; runs 120 s via `cflite_pr.yml` on PRs touching relevant paths (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
+- [x] ClusterFuzzLite fuzzing harnesses (`tests/fuzz/`) — libFuzzer targets `mips::parse_hex_program` and `mips::parse_elf`; both run 120 s via `cflite_pr.yml` on PRs touching relevant paths (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
+- [x] ELF32 loader hardening — offsets and sizes bounded by the real file length, `e_phentsize`/`p_memsz`/address-space-wrap validation, pure `.bss` segments mapped, BSS writes bounds-checked (#127)
 - [ ] UI smoke test guarding `Container::Tab` child count against `tab_labels.size()` (prevents reintroduction of the tab/focus aliasing bug)
 - [ ] Regression test for per-instruction-type telemetry breakout
 

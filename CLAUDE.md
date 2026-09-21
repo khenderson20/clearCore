@@ -218,9 +218,12 @@ ctest --preset core-only      # TUI + core only, no Qt
   this machine — use the `asan` preset only on machines where those are present.
 - `clang-format` is required; the PR checklist enforces a clean diff. Format before committing.
 - The `clearcore_warnings` interface target raises the warning level per compiler —
-  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. It does **not** set
-  `-Werror`/`/WX`, so warnings do not fail the build; treat them as errors by convention.
-  Never suppress a warning without a comment explaining why.
+  `-Wall -Wextra -pedantic` on GCC/Clang, `/W4 /permissive-` on MSVC. `-Werror`/`/WX` is behind
+  the `CLEARCORE_WERROR` option, **OFF by default** so a local build never breaks because a newer
+  compiler added a diagnostic, and **ON in CI**: the `core-tests` and `full-build` jobs in
+  `ci.yml`, and the pre-merge `core-only` matrix in `cross-platform.yml`. The release `build` job
+  in `cross-platform.yml` deliberately leaves it off. A new warning therefore fails CI, not your
+  local build. Never suppress a warning without a comment explaining why.
 
 ---
 
@@ -298,11 +301,11 @@ it via `workflow_dispatch` before cutting a release.
 
 Windows-specific hazards, all currently handled in-file:
 
-1. **NSIS install via choco** — `choco install nsis` can return exit 0 even when the community
-   feed 503s, leaving `makensis.exe` absent and `cpack -G NSIS` unable to find it. The `Ensure
-   NSIS` step retries 5× and verifies the binary on disk. Version-pinned (3.12.0) for Scorecard's
-   Pinned-Dependencies check; Dependabot has no Chocolatey ecosystem, so bump it manually from
-   <https://community.chocolatey.org/packages/nsis>.
+1. **NSIS install** — the installer is downloaded from SourceForge and verified against a pinned
+   SHA-256 (choco can return exit 0 when its feed 503s, and cannot pin by hash, which Scorecard's
+   Pinned-Dependencies check needs). The `Ensure NSIS` step retries 5× and verifies `makensis.exe`
+   on disk. Dependabot cannot bump it, so update `NSIS_VERSION` and `NSIS_SHA256` in that step
+   manually.
 
 2. **QADS DLL not on PATH** — `qt_ui_test` links the Qt Advanced Docking System as a shared
    library (LGPL; cannot be static). Windows' loader blocks on a missing-library dialog rather
