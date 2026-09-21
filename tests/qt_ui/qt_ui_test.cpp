@@ -107,6 +107,21 @@ static void test_assembler_errors() {
 
     r = assemble("beq $t0, $t1, missing_label");
     CHECK(!r.ok());
+
+    // Comment-only / blank source encodes no program and must not report success.
+    r = assemble("# just a comment
+
+   
+");
+    CHECK(!r.ok());
+
+    // Non-ASCII bytes in a mnemonic must be rejected, not fed to tolower as negatives.
+    r = assemble("ânopâ");
+    CHECK(!r.ok());
+
+    // INT32_MIN spelled as a negated hex literal (would overflow if negated as int32_t).
+    r = assemble("lui $t0, -0x80000000");
+    CHECK(!r.ok() || r.words.size() == 1);
 }
 
 // ── SimulatorController signal emission ──────────────────────────────────────
