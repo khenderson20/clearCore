@@ -144,32 +144,44 @@ void GdbStub::send_signal(int sig) {
     send_packet(buf);
 }
 
+bool GdbStub::checksum_matches(const std::string& data, char hi, char lo) {
+    const std::string digits{hi, lo};
+    const auto        expected = parse_hex_byte(digits, 0);
+    return expected && *expected == checksum(data);
+}
+
 bool GdbStub::recv_packet(std::string& out) {
-    out.clear();
-    // Skip until '$'.
-    char c;
+    // A packet that fails its checksum is NAKed ('-'); the peer then
+    // retransmits, so loop until one arrives intact or the connection drops.
     while (true) {
-        const ssize_t n = ::recv(client_fd_, &c, 1, 0);
-        if (n <= 0) return false;
-        if (c == '$') break;
-        if (c == '\x03') {
-            // Ctrl-C interrupt: treat like a step + stop.
-            send_signal(kSIGTRAP);
+        out.clear();
+        // Skip until '$'.
+        char c;
+        while (true) {
+            const ssize_t n = ::recv(client_fd_, &c, 1, 0);
+            if (n <= 0) return false;
+            if (c == '$') break;
+            if (c == '\x03') {
+                // Ctrl-C interrupt: treat like a step + stop.
+                send_signal(kSIGTRAP);
+                return true;
+            }
+        }
+        // Read until '#'.
+        while (true) {
+            const ssize_t n = ::recv(client_fd_, &c, 1, 0);
+            if (n <= 0) return false;
+            if (c == '#') break;
+            out += c;
+        }
+        char cksum[2];
+        if (::recv(client_fd_, cksum, 2, MSG_WAITALL) != 2) return false;
+        if (checksum_matches(out, cksum[0], cksum[1])) {
+            send_raw("+");  // ACK
             return true;
         }
+        send_raw("-");  // NAK
     }
-    // Read until '#'.
-    while (true) {
-        const ssize_t n = ::recv(client_fd_, &c, 1, 0);
-        if (n <= 0) return false;
-        if (c == '#') break;
-        out += c;
-    }
-    // Read two-character checksum (we accept it without verifying for simplicity).
-    char cksum[2];
-    if (::recv(client_fd_, cksum, 2, MSG_WAITALL) != 2) return false;
-    send_raw("+");  // ACK
-    return true;
 }
 
 // ─── Register access ─────────────────────────────────────────────────────────
