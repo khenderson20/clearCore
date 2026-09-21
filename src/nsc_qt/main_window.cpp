@@ -162,18 +162,23 @@ void MainWindow::setupToolBar() {
     auto* speed_lbl = new QLabel(tr(" Speed: "), tb);
     tb->addWidget(speed_lbl);
     speed_slider_ = new QSlider(Qt::Horizontal, tb);
-    speed_slider_->setRange(10, 1000);  // cycle interval in ms
-    speed_slider_->setInvertedAppearance(true);
+    // Same 0–100 scale as Preferences and SimulatorController::setExecutionSpeed.
+    speed_slider_->setRange(0, 100);
     speed_slider_->setFixedWidth(140);
     const QSettings s("nsc-qt", "clearCore-gui");
     speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
-    speed_slider_->setToolTip(
-        tr("Run speed — one pipeline cycle every %1 ms").arg(speed_slider_->value()));
-    connect(speed_slider_, &QSlider::valueChanged, this, [this](int ms) {
-        controller_->setExecutionSpeed(ms);
-        speed_slider_->setToolTip(tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+    auto update_tooltip = [this](int speed) {
+        const int ms = (100 - speed) * 5;  // mirrors SimulatorController::setExecutionSpeed
+        speed_slider_->setToolTip(ms == 0
+                                      ? tr("Run speed — as fast as possible")
+                                      : tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+    };
+    update_tooltip(speed_slider_->value());
+    connect(speed_slider_, &QSlider::valueChanged, this, [this, update_tooltip](int speed) {
+        controller_->setExecutionSpeed(speed);
+        update_tooltip(speed);
         QSettings settings("nsc-qt", "clearCore-gui");
-        settings.setValue("executionSpeed", ms);
+        settings.setValue("executionSpeed", speed);
     });
     tb->addWidget(speed_slider_);
 }
