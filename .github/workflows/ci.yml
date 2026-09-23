@@ -22,6 +22,10 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    # ready_for_review is not in the default set. Without it, full-build (skipped
+    # on drafts) never ran on a PR opened as a draft until its next push, and a
+    # skipped job still satisfies a required check.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
