@@ -304,6 +304,10 @@ them would understate how well the core is covered. The badge is in `README.md`.
 workflow. Because it never runs on a PR, a regression in it only surfaces at release time, so run
 it via `workflow_dispatch` before cutting a release.
 
+To backfill an installer a release is missing, dispatch it with the `release-tag` input (e.g.
+`v0.3.6`): it builds that tag and attaches only the assets the release lacks, never replacing
+one already published.
+
 Windows-specific hazards, all currently handled in-file:
 
 1. **NSIS install** — the installer is downloaded from SourceForge and verified against a pinned

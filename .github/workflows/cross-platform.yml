@@ -15,11 +15,24 @@ name: Cross-platform build
 #               release: published and workflow_dispatch only; it's too slow
 #               and needs signing secrets to run on every PR.
 #
+# Backfilling a release: dispatch this workflow with `release-tag` set (e.g.
+# v0.3.6). The build job then checks out that tag, versions the packages from
+# it, and attaches any installer the release is still missing. Assets already
+# on the release are left alone, so a backfill never swaps out a binary people
+# may have downloaded or checksummed. Without the input, a dispatch builds the
+# dispatched ref as 0.0.0-dev and only uploads workflow artifacts.
+#
 # Nyxstone (LLVM) and the golden tests (JRE) are disabled in both jobs — they
 # are Linux-oriented dev/test tooling, not user-facing, and painful to
 # provision off-Linux.
 on:
   workflow_dispatch:
+    inputs:
+      release-tag:
+        description: 'Existing release to build and attach missing installers to (e.g. v0.3.6). Empty = test build only.'
+        required: false
+        default: ''
+        type: string
   release:
     types: [ published ]
   pull_request:
@@ -31,8 +44,10 @@ permissions:
   id-token: write
   contents: read
 
+# event_name keeps a manual/release run out of the push group, so a push to the
+# dispatched branch cannot cancel a backfill halfway through signing.
 concurrency:
-  group: cross-platform-${{ github.ref }}
+  group: cross-platform-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -140,6 +155,9 @@ jobs:
       # libc++ from macOS 13.3 onward. CMake reads this to seed the deployment
       # target; it is ignored on Windows.
       MACOSX_DEPLOYMENT_TARGET: '13.3'
+      # The release this run packages for: the published release, or the
+      # `release-tag` input on a backfill dispatch. Empty = test build.
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -147,8 +165,26 @@ jobs:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
+      # Fail in seconds, not after a full build, if the backfill target is not
+      # an existing, published release.
+      - name: Validate release tag (backfill)
+        if: github.event_name == 'workflow_dispatch' && env.RELEASE_TAG != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::release-tag must look like v1.2.3, got '$RELEASE_TAG'"; exit 1; }
+          draft=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft) \
+            || { echo "::error::no release named $RELEASE_TAG"; exit 1; }
+          [ "$draft" = false ] || { echo "::error::$RELEASE_TAG is still a draft"; exit 1; }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Empty except on a backfill dispatch, where it builds the tagged
+          # source rather than the branch the workflow was dispatched from.
+          ref: ${{ inputs.release-tag }}
           # Full history + tags: the Qt Advanced Docking System's CMake runs
           # `git describe --tags` in this repo to stamp its Windows version
           # resource. A shallow, tagless checkout yields an empty version and a
@@ -314,15 +350,15 @@ jobs:
 
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
       # Versioned, arch-labelled filenames; version comes from the release tag
-      # (published release) or a dev placeholder (push / manual dispatch).
+      # (published release or backfill) or a dev placeholder (test dispatch).
       - name: Package installer
         id: package
         shell: bash
         working-directory: build/release
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "release" ]; then
-            version="${GITHUB_EVENT_RELEASE_TAG_NAME}"; version="${version#v}"
+          if [ -n "$RELEASE_TAG" ]; then
+            version="${RELEASE_TAG#v}"
           else
             version="0.0.0-dev"
           fi
@@ -336,8 +372,6 @@ jobs:
                 -D CPACK_PACKAGE_FILE_NAME="$name" -V
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
-        env:
-          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 
       # Sign the NSIS installer itself so SmartScreen trusts the download and
       # doesn't show an "unknown publisher" wall. Reuses the OIDC login above.
@@ -439,13 +473,29 @@ jobs:
           if-no-files-found: error
 
       - name: Attach installer to the release
-        if: github.event_name == 'release'
+        if: env.RELEASE_TAG != ''
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
           STEPS_PACKAGE_OUTPUTS_NAME: ${{ steps.package.outputs.name }}
         run: |
-          gh release upload "${GITHUB_EVENT_RELEASE_TAG_NAME}" \
-            "build/release/${STEPS_PACKAGE_OUTPUTS_NAME}".* \
-            --clobber --repo "${{ github.repository }}"
+          set -euo pipefail
+          # A re-run of the release event replaces its own upload (--clobber).
+          # A backfill only adds what is missing and never replaces a published
+          # asset.
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            gh release upload "$RELEASE_TAG" \
+              "build/release/${STEPS_PACKAGE_OUTPUTS_NAME}".* \
+              --clobber --repo "$GITHUB_REPOSITORY"
+            exit 0
+          fi
+          existing=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                       --json assets --jq '.assets[].name')
+          for f in "build/release/${STEPS_PACKAGE_OUTPUTS_NAME}".*; do
+            if grep -qxF "$(basename "$f")" <<<"$existing"; then
+              echo "::notice::$(basename "$f") is already on $RELEASE_TAG; left as is"
+            else
+              gh release upload "$RELEASE_TAG" "$f" --repo "$GITHUB_REPOSITORY"
+              echo "Attached $(basename "$f") to $RELEASE_TAG"
+            fi
+          done
