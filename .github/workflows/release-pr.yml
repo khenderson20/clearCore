@@ -38,8 +38,10 @@ jobs:
           set -euo pipefail
           git fetch --quiet origin main develop
 
-          if [ -z "$(git log origin/main..origin/develop --oneline)" ]; then
-            echo "develop is not ahead of main; nothing to promote."
+          # Compare trees, not history: promotion PRs are squash-merged, so main's tip is
+          # never an ancestor of develop and `git log main..develop` is never empty.
+          if git diff --quiet origin/main origin/develop; then
+            echo "develop has no content changes over main; nothing to promote."
             exit 0
           fi
 
@@ -54,9 +56,11 @@ jobs:
           version=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
                       --jq 'map(select(.draft)) | .[0].tag_name // ""' 2>/dev/null || true)
 
-          # List the merged PRs that would ship.
-          included=$(git log origin/main..origin/develop --merges \
-                       --pretty='- %s' | sed -E 's/Merge pull request (#[0-9]+) from .*/\1/')
+          # List what would ship: develop commits landed since the last promotion. Ancestry
+          # can't be used (see above), and develop's PRs are squash-merged, so there are no
+          # merge commits to list.
+          since=$(git log -1 --format=%cI origin/main)
+          included=$(git log origin/develop --since="$since" --no-merges --pretty='- %s')
 
           gh pr create \
             --base main --head develop \

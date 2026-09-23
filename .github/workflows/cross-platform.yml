@@ -353,6 +353,67 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      # Install → uninstall round trip on the finished installer, so a broken
+      # uninstaller fails here instead of on a user's machine. Runs before upload,
+      # so a failure also keeps the installer off the release.
+      - name: Test install / uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:GITHUB_WORKSPACE "build\release\$env:PACKAGE_NAME.exe"
+          $instDir   = Join-Path $env:ProgramFiles 'clearCore'
+          $menuDir   = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\clearCore'
+          $uninstKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+
+          function Get-ClearCoreEntries {
+            Get-ChildItem $uninstKey -ErrorAction SilentlyContinue |
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'clearCore*' }
+          }
+
+          function Install-ClearCore {
+            $p = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
+          }
+
+          # ── Install ───────────────────────────────────────────────────────────
+          Install-ClearCore
+          foreach ($exe in 'clearCore-gui.exe', 'clearCore-quick.exe', 'number_system_converter.exe') {
+            if (-not (Get-ChildItem $instDir -Recurse -Filter $exe -ErrorAction SilentlyContinue)) {
+              throw "$exe missing from $instDir after install"
+            }
+          }
+          if (-not (Test-Path (Join-Path $instDir 'Uninstall.exe'))) { throw 'Uninstall.exe was not installed' }
+          if (-not (Test-Path $menuDir))            { throw 'Start Menu shortcuts were not created' }
+          if (-not (Get-ClearCoreEntries))          { throw 'no Add/Remove Programs entry was registered' }
+
+          # ── Upgrade path: installing over an existing install must succeed ────
+          # (CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL runs the old uninstaller first.)
+          Install-ClearCore
+          if (@(Get-ClearCoreEntries).Count -ne 1) { throw 'reinstall left duplicate Add/Remove Programs entries' }
+
+          # ── Uninstall ─────────────────────────────────────────────────────────
+          # NSIS uninstallers copy themselves to %TEMP% and return immediately, which
+          # makes "did it finish?" a race. `_?=<dir>` keeps it in place and synchronous;
+          # the price is that it can't delete itself or $INSTDIR, so we do that below.
+          $p = Start-Process (Join-Path $instDir 'Uninstall.exe') `
+                 -ArgumentList '/S', "_?=$instDir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "uninstaller exited with $($p.ExitCode)" }
+
+          $left = Get-ChildItem $instDir -Recurse -Force -ErrorAction SilentlyContinue |
+                    Where-Object { -not $_.PSIsContainer -and $_.Name -ne 'Uninstall.exe' }
+          if ($left) {
+            $left | Select-Object -First 50 FullName | Format-Table | Out-String | Write-Host
+            throw "uninstall left $(@($left).Count) file(s) behind in $instDir"
+          }
+          if (Test-Path $menuDir)          { throw 'Start Menu shortcuts left behind' }
+          if (Get-ClearCoreEntries)        { throw 'Add/Remove Programs entry left behind' }
+
+          Remove-Item $instDir -Recurse -Force   # the uninstaller's own leftover
+          Write-Host 'Install / upgrade / uninstall round trip OK'
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
