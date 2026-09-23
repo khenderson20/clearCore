@@ -24,6 +24,12 @@ on:
 permissions:
   contents: read
 
+# Every run pushes to cifuzz-coverage, so a manual dispatch overlapping the
+# nightly run waits for it instead of racing it for the push.
+concurrency:
+  group: cflite-coverage
+  cancel-in-progress: false
+
 jobs:
   coverage:
     runs-on: ubuntu-latest

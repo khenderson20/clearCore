@@ -45,9 +45,11 @@ permissions:
   contents: read
 
 # event_name keeps a manual/release run out of the push group, so a push to the
-# dispatched branch cannot cancel a backfill halfway through signing.
+# dispatched branch cannot cancel a backfill halfway through signing. A
+# backfill is keyed on its tag rather than the branch, so neither a test
+# dispatch nor a backfill of another release cancels it.
 concurrency:
-  group: cross-platform-${{ github.event_name }}-${{ github.ref }}
+  group: cross-platform-${{ github.event_name }}-${{ inputs.release-tag || github.ref }}
   cancel-in-progress: true
 
 jobs:
