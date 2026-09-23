@@ -232,10 +232,15 @@ ctest --preset core-only      # TUI + core only, no Qt
 All actions are pinned to SHA (not tags) for supply-chain security. The harden-runner step
 (`step-security/harden-runner`) is present on every job.
 
+Scheduled triggers use a minute other than `:00`: GitHub delays, and under load drops, the
+scheduled runs queued at the top of the hour. PR-triggered workflows carry a `concurrency`
+group that cancels a superseded PR run; push and scheduled runs are keyed on `run_id`, so
+they never queue behind or cancel one another.
+
 | File                    | Trigger                               | What it does                                                                                                        |
 |-------------------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | `ci.yml`                | push/PR → `main`/`develop`            | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
-| `codeql.yml`            | push/PR → `main`, weekly              | CodeQL C++ security scan; no ccache (would hide code from extractor)                                                |
+| `codeql.yml`            | push/PR → `main`/`develop`, weekly    | CodeQL C++ + Actions scan; no ccache (would hide code from extractor)                                               |
 | `cross-platform.yml`    | release publish, `workflow_dispatch`  | Windows NSIS installer + macOS universal DMG; bundles Qt via windeployqt/macdeployqt                                |
 | `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries; generates an SPDX SBOM                        |
 | `appimage.yml`          | release publish, `workflow_dispatch`  | Self-contained Linux AppImage via linuxdeploy; smoke-tests GUI + TUI                                                |
@@ -243,11 +248,11 @@ All actions are pinned to SHA (not tags) for supply-chain security. The harden-r
 | `release-drafter.yml`   | push → `main`                         | Drafts the next GitHub release from merged PR titles                                                                |
 | `update-changelog.yml`  | release publish                       | Promotes `[Unreleased]` → versioned entry in CHANGELOG.md; opens a PR to `develop`                                  |
 | `scorecard.yml`         | push → `main`, weekly                 | OpenSSF supply-chain score (feeds README badge)                                                                     |
-| `dependency-review.yml` | PR that touches CMakeLists            | Checks for known-vulnerable dependency versions                                                                     |
-| `cflite_pr.yml`         | PR → `main` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing                                                                                    |
-| `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch                                      |
+| `dependency-review.yml` | PR that touches `.github/workflows/`  | Flags known-vulnerable action versions (the dependency graph cannot parse CMake FetchContent)                       |
+| `cflite_pr.yml`         | PR → `main`/`develop` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing of the targets the change affects (per `cifuzz-coverage`)                |
+| `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch (shares a lock with prune)           |
 | `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
-| `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage HTML report from `cifuzz-corpus`, uploaded as a workflow artifact                                  |
+| `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage report from `cifuzz-corpus`, pushed to `cifuzz-coverage` and uploaded as an artifact               |
 | `zizmor.yml`            | push/PR → `main`/`develop`            | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
 | `gitleaks.yml`          | push/PR → `main`/`develop`            | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
@@ -322,6 +327,11 @@ Windows-specific hazards, all currently handled in-file:
 
 4. **WER crash dialogs** — suppressed via `HKCU:\...\Windows Error Reporting\DontShowUI` so a
    crashing test subprocess exits instead of blocking on a modal prompt until the job times out.
+
+5. **Uninstall registry view** — NSIS installers are 32-bit and CPack's template never calls
+   `SetRegView 64`, so the Add/Remove Programs entry is written under `WOW6432Node`. Any check
+   of that entry must read both registry views; reading only the 64-bit one failed the v0.3.6
+   release build and kept the Windows installer off that release.
 
 **To diagnose a failure:** open the run on GitHub → expand each step → the first red step is the
 cause. `gh run view <id> --log | grep "^windows-x64"` filters to the Windows leg.

@@ -5,14 +5,20 @@
 # decoder/parser fuzzing actually reaches. Also feeds cflite_pr.yml's
 # affected-fuzzers detection (which fuzzer(s) a given code change touches).
 #
-# The report is uploaded as a workflow artifact rather than published to a
-# gh-pages-style branch, keeping this workflow read-only against the repo.
-# To browse it: open the run summary -> Artifacts -> coverage-report.
+# Coverage mode ALWAYS pushes the report to the storage repo's coverage
+# branch; there is no read-only variant. With a tokenless storage-repo URL
+# the push failed every night ("could not read Username"), so neither the
+# report nor the affected-fuzzers data ever landed. It now pushes to its own
+# `cifuzz-coverage` branch (not the action's default `gh-pages`, since this
+# repo serves no Pages site), and the report is also uploaded as an artifact:
+# open the run summary -> Artifacts -> coverage-report.
 name: ClusterFuzzLite coverage report
 
 on:
   schedule:
-    - cron: '0 5 * * *'  # nightly, after cflite_prune.yml's 04:00 UTC run
+    # Off the top of the hour: GitHub delays (and under load drops) scheduled
+    # runs queued at :00. Runs after cflite_prune.yml.
+    - cron: '17 5 * * *'  # nightly, 05:17 UTC
   workflow_dispatch: { }
 
 permissions:
@@ -22,6 +28,8 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write  # push the report to the cifuzz-coverage branch
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -47,8 +55,9 @@ jobs:
           fuzz-seconds: 600
           mode: 'coverage'
           sanitizer: 'coverage'
-          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           storage-repo-branch: cifuzz-corpus
+          storage-repo-branch-coverage: cifuzz-coverage
 
       - name: Upload coverage report
         if: always() && steps.build.outcome == 'success'

@@ -366,10 +366,20 @@ jobs:
           $installer = Join-Path $env:GITHUB_WORKSPACE "build\release\$env:PACKAGE_NAME.exe"
           $instDir   = Join-Path $env:ProgramFiles 'clearCore'
           $menuDir   = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\clearCore'
-          $uninstKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+          # NSIS installers are 32-bit and CPack's NSIS template never calls
+          # `SetRegView 64`, so the Add/Remove Programs entry lands in the
+          # WOW6432Node view, which 64-bit pwsh does not see under the plain
+          # HKLM path. Checking only that path failed the v0.3.6 release build
+          # and kept its Windows installer off the release. Add/Remove Programs
+          # reads every view below, so the test does too.
+          $uninstKeys = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+          )
 
           function Get-ClearCoreEntries {
-            Get-ChildItem $uninstKey -ErrorAction SilentlyContinue |
+            Get-ChildItem $uninstKeys -ErrorAction SilentlyContinue |
               Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'clearCore*' }
           }
 
@@ -387,7 +397,12 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $instDir 'Uninstall.exe'))) { throw 'Uninstall.exe was not installed' }
           if (-not (Test-Path $menuDir))            { throw 'Start Menu shortcuts were not created' }
-          if (-not (Get-ClearCoreEntries))          { throw 'no Add/Remove Programs entry was registered' }
+          if (-not (Get-ClearCoreEntries)) {
+            Get-ChildItem $uninstKeys -ErrorAction SilentlyContinue |
+              ForEach-Object { '{0} = {1}' -f $_.Name, (Get-ItemProperty $_.PSPath).DisplayName } |
+              Write-Host
+            throw 'no Add/Remove Programs entry was registered'
+          }
 
           # ── Upgrade path: installing over an existing install must succeed ────
           # (CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL runs the old uninstaller first.)
