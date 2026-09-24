@@ -198,6 +198,12 @@ ctest --preset core-only      # TUI + core only, no Qt
 - `Closes #N` in a PR body does **not** close the issue: GitHub only auto-closes on a merge to the
   default branch, and PRs here target `develop` while `main` is the default. Close the issue by hand
   when the fix lands on `develop`, or let the release-promotion PR close it.
+- **The release PR comes from `chore/release-promotion`, not `develop`.** `release-pr.yml` keeps
+  that branch as `develop` with `main` merged in, so the PR stays up to date and conflict-free;
+  squash-merge it to release. If it does show a conflict, fix it on that branch (**Resolve
+  conflicts** on the PR, or locally): never merge `main` into `develop` and never close the PR
+  for it. The branch is bot-owned: deleting it is fine (it is re-seeded from the last release
+  PR's head), recreating it by hand is not.
 - Branch naming: `feature/`, `fix/`, `chore/`, `refactor/`, `docs/` prefixes.
 - Label PRs so release-drafter categorises them:
   `feature`, `enhancement`, `bug`, `security`, `documentation`, `dependencies`, `ci`.
@@ -239,12 +245,12 @@ they never queue behind or cancel one another.
 
 | File                    | Trigger                               | What it does                                                                                                        |
 |-------------------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| `ci.yml`                | push/PR → `main`/`develop`            | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
+| `ci.yml`                | push/PR → `main`/`develop`, `workflow_dispatch` | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
 | `codeql.yml`            | push/PR → `main`/`develop`, weekly    | CodeQL C++ + Actions scan; no ccache (would hide code from extractor)                                               |
 | `cross-platform.yml`    | release publish, `workflow_dispatch`  | Windows NSIS installer + macOS universal DMG; bundles Qt via windeployqt/macdeployqt                                |
 | `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries; generates an SPDX SBOM                        |
 | `appimage.yml`          | release publish, `workflow_dispatch`  | Self-contained Linux AppImage via linuxdeploy; smoke-tests GUI + TUI                                                |
-| `release-pr.yml`        | push → `develop`                      | Keeps a standing `develop → main` release-promotion PR open                                                         |
+| `release-pr.yml`        | push → `develop`/`main`, `workflow_dispatch` | Keeps the release PR into `main` open from `chore/release-promotion` (`develop` with `main` merged in); dispatches `ci.yml` + `gitleaks.yml` on it, as its `GITHUB_TOKEN` pushes start no CI |
 | `release-drafter.yml`   | push → `main`                         | Drafts the next GitHub release from merged PR titles                                                                |
 | `update-changelog.yml`  | release publish                       | Promotes `[Unreleased]` → versioned entry in CHANGELOG.md; opens a PR to `develop`                                  |
 | `scorecard.yml`         | push → `main`, weekly                 | OpenSSF supply-chain score (feeds README badge)                                                                     |
@@ -254,7 +260,7 @@ they never queue behind or cancel one another.
 | `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
 | `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage report from `cifuzz-corpus`, pushed to `cifuzz-coverage` and uploaded as an artifact               |
 | `zizmor.yml`            | push/PR → `main`/`develop`            | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
-| `gitleaks.yml`          | push/PR → `main`/`develop`            | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
+| `gitleaks.yml`          | push/PR → `main`/`develop`, `workflow_dispatch` | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
 
 ### ci.yml job map

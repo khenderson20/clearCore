@@ -18,6 +18,9 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # release-pr.yml pushes chore/release-promotion with GITHUB_TOKEN, which starts no
+  # push or pull_request runs, so it dispatches this workflow there for the required check.
+  workflow_dispatch:
 
 permissions:
   contents: read
