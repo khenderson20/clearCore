@@ -9,14 +9,21 @@ name: ClusterFuzzLite corpus pruning
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # nightly, after cflite_batch.yml's 03:00 UTC run
+    # Off the top of the hour (see cflite_batch.yml). If batch fuzzing is still
+    # running, the shared concurrency group below makes this wait for it.
+    - cron: '37 4 * * *'  # nightly, 04:37 UTC
   workflow_dispatch: { }
 
 permissions:
   contents: read
 
+# One group shared by cflite_batch.yml and cflite_prune.yml (deliberately not
+# keyed on github.workflow): both rewrite the cifuzz-corpus branch, and prune
+# replaces it wholesale, so they must never overlap. GitHub keeps one pending
+# run per group, so a manual batch dispatch while batch is running replaces a
+# waiting prune; that night's prune then shows as cancelled.
 concurrency:
-  group: cflite-corpus-${{ github.workflow }}
+  group: cflite-corpus
   cancel-in-progress: false
 
 jobs:

@@ -22,6 +22,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels that PR's previous run. Push and scheduled runs
+# get a group of their own (run_id), so none is ever queued behind or
+# cancelled by another: every commit on main/develop keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     runs-on: ubuntu-latest
