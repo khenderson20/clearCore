@@ -15,14 +15,21 @@ name: ClusterFuzzLite batch fuzzing
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # nightly, 03:00 UTC
+    # Off the top of the hour: GitHub delays (and under load drops) scheduled
+    # runs queued at :00.
+    - cron: '17 3 * * *'  # nightly, 03:17 UTC
   workflow_dispatch: { }
 
 permissions:
   contents: read
 
+# One group shared by cflite_batch.yml and cflite_prune.yml (deliberately not
+# keyed on github.workflow): both rewrite the cifuzz-corpus branch, and prune
+# replaces it wholesale, so they must never overlap. GitHub keeps one pending
+# run per group, so a manual batch dispatch while batch is running replaces a
+# waiting prune; that night's prune then shows as cancelled.
 concurrency:
-  group: cflite-corpus-${{ github.workflow }}
+  group: cflite-corpus
   cancel-in-progress: false
 
 jobs:

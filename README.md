@@ -243,7 +243,7 @@ GitHub's **"Cite this repository"** button in the top-right sidebar generates AP
   author  = {Henderson, Kevin},
   title   = {{clearCore}: An educational {CPU}-architecture simulator with live 5-stage pipeline visualization},
   year    = {2026},
-  version = {0.3.5},
+  version = {0.3.6},
   doi     = {10.5281/zenodo.21194876},
   url     = {https://github.com/khenderson20/clearCore}
 }

@@ -24,6 +24,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.3.6] - 2026-09-23
+
 ### Fixed
 - **Statistics for the single-cycle model**: Instructions and CPI read 0 in both Qt GUIs whenever
   the single-cycle CPU was selected, because retirement was counted from the WB slot that model
