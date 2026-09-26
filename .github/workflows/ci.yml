@@ -26,6 +26,9 @@ on:
     # on drafts) never ran on a PR opened as a draft until its next push, and a
     # skipped job still satisfies a required check.
     types: [opened, synchronize, reopened, ready_for_review]
+  # release-pr.yml pushes chore/release-promotion with GITHUB_TOKEN, which starts no
+  # push or pull_request runs, so it dispatches this workflow there for the required checks.
+  workflow_dispatch:
 
 permissions:
   contents: read
