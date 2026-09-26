@@ -1,24 +1,53 @@
 name: Release PR (develop → main)
 
-# Keeps a standing release-promotion PR from develop into main. On each push to
-# develop it opens the PR if none is open; an existing PR tracks new commits
-# automatically, so you just merge it when you're ready to cut a release.
+# Keeps one release-promotion PR open into main, and keeps it mergeable.
+#
+# The PR does not come from develop. The "protect main" ruleset covers main, develop and
+# release/*, and on each requires linear history and a PR that is up to date with its
+# base. A PR straight from develop can only be brought up to date by merging main into
+# develop, which that same ruleset forbids, so every conflict ended in a side PR merged
+# with an admin bypass, or in closing the release PR.
+#
+# Its head is chore/release-promotion instead: develop with main merged in. The ruleset
+# does not cover that branch, so this workflow merges main into it (the PR stays up to
+# date), and a conflict the workflow cannot resolve is fixed on it, from the PR, without
+# touching develop.
+#
+# Merging main back in is clean because main only moves by squash-merging this PR (plus
+# the odd PR merged straight into main, like Dependabot's), and a squash commit has
+# exactly the tree of the PR head it came from. That head stays in this branch's history, so git sees the same change on both
+# sides; only a real clash between a change made on main and one made on develop can
+# conflict. A missing branch is re-seeded from the last merged release PR's head, which
+# gives the same guarantee. Don't recreate the branch by hand; deleting it is fine.
+#
+# Pushes made with GITHUB_TOKEN start no workflows, so nothing would report the required
+# checks on this branch. After pushing, this workflow dispatches ci.yml and gitleaks.yml
+# on it; their check runs land on the head commit, which is what the ruleset checks.
 #
 # Requires: Settings → Actions → General → Workflow permissions →
 # "Allow GitHub Actions to create and approve pull requests" (same as update-changelog.yml).
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
+
+# Serialized, because two runs would race to advance the branch. A queued run is replaced
+# by a newer one, and every run reads the branches fresh.
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
 
 jobs:
   release-pr:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write       # push chore/release-promotion
+      pull-requests: write  # open, refresh and supersede release PRs
+      actions: write        # dispatch the required-check workflows on the branch
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -31,39 +60,137 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Open or refresh the develop → main release PR
+      - name: Advance chore/release-promotion and open or refresh the release PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROMO: chore/release-promotion
         run: |
           set -euo pipefail
-          git fetch --quiet origin main develop
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --quiet --prune origin
 
-          # Compare trees, not history: promotion PRs are squash-merged, so main's tip is
-          # never an ancestor of develop and `git log main..develop` is never empty.
-          if git diff --quiet origin/main origin/develop; then
-            echo "develop has no content changes over main; nothing to promote."
+          # Head of the last merged release PR; its tree is exactly what its squash gave main.
+          # Before this branch existed, release PRs came straight from develop.
+          last_pr=""
+          for head in "$PROMO" develop; do
+            last_pr=$(gh pr list --base main --head "$head" --state merged --limit 1 \
+                        --json number --jq '.[0].number // empty')
+            [ -z "$last_pr" ] || break
+          done
+          released=""
+          if [ -n "$last_pr" ]; then
+            git fetch --quiet origin "refs/pull/${last_pr}/head"
+            released=$(git rev-parse FETCH_HEAD)
+          fi
+
+          # Continue the branch when it exists, so a conflict resolved on it stays resolved.
+          if git rev-parse --verify --quiet "origin/${PROMO}" >/dev/null; then
+            start="origin/${PROMO}"
+          else
+            start="${released:-origin/develop}"
+          fi
+          git switch --quiet --detach "$start"
+
+          # main first: the branch already holds main's last squash, so that merge is clean,
+          # and develop then merges against the develop commit that was last promoted.
+          conflicts=""
+          for src in main develop; do
+            git merge-base --is-ancestor "origin/${src}" HEAD && continue
+            if ! git merge --no-edit -m "Merge ${src} into ${PROMO}" "origin/${src}"; then
+              files=$(git diff --name-only --diff-filter=U | sed "s/.*/\`&\`/" | paste -sd ' ' -)
+              conflicts+="- \`${src}\`: ${files}"$'\n'
+              git merge --abort
+            fi
+          done
+
+          pr=$(gh pr list --base main --head "$PROMO" --state open \
+                 --json number --jq '.[0].number // empty')
+          if [ -z "${conflicts}${pr}" ] && git diff --quiet origin/main HEAD; then
+            echo "develop has nothing that main lacks; no release PR needed."
             exit 0
           fi
 
-          existing=$(gh pr list --base main --head develop --state open \
-                       --json number --jq '.[0].number // empty')
-          if [ -n "$existing" ]; then
-            echo "Release PR #$existing already open; it tracks new commits automatically."
-            exit 0
+          pushed=""
+          if [ "$start" != "origin/${PROMO}" ] || [ "$(git rev-parse HEAD)" != "$(git rev-parse "$start")" ]; then
+            # One-shot credential helper: the token is read from the environment at push
+            # time and never written to .git/config.
+            # shellcheck disable=SC2016  # ${GH_TOKEN} is for the helper's shell to expand
+            git -c credential.helper= \
+                -c 'credential.helper=!f() { echo username=x-access-token; echo "password=${GH_TOKEN}"; }; f' \
+                push origin "HEAD:refs/heads/${PROMO}"
+            pushed=1
           fi
 
           # Suggested next version from the current draft release (release-drafter).
           version=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
                       --jq 'map(select(.draft)) | .[0].tag_name // ""' 2>/dev/null || true)
+          title="release: promote develop → main${version:+ (${version})}"
 
-          # List what would ship: develop commits landed since the last promotion. Ancestry
-          # can't be used (see above), and develop's PRs are squash-merged, so there are no
-          # merge commits to list.
-          since=$(git log -1 --format=%cI origin/main)
-          included=$(git log origin/develop --since="$since" --no-merges --pretty='- %s')
+          # What ships: develop's commits since the develop commit the last release came from.
+          since=$(git merge-base "${released:-origin/main}" origin/develop)
+          included=$(git log --no-merges --pretty='- %s' "${since}..origin/develop")
 
-          gh pr create \
-            --base main --head develop \
-            --title "release: promote develop → main${version:+ (${version})}" \
-            --label skip-changelog \
-            --body "$(printf 'Automated release-promotion PR from `develop` into `main`, opened by `release-pr.yml`.\n\n## Included\n%s\n\nReview, confirm the version bump, and merge to cut a release — release-drafter updates the draft on merge to `main`, and you publish the draft when ready.' "$included")"
+          notice=""
+          if [ -n "$conflicts" ]; then
+            notice=$(printf '%s\n' \
+              '## Needs a manual merge' \
+              '' \
+              "\`release-pr.yml\` could not merge these into \`${PROMO}\`:" \
+              '' \
+              "$conflicts" \
+              "Fix it on \`${PROMO}\`, never on \`develop\`. A conflict with \`main\` can be fixed with **Resolve conflicts** on this PR; either kind can be fixed locally:" \
+              '' \
+              '    git fetch origin' \
+              "    git switch -C ${PROMO} origin/${PROMO}" \
+              '    git merge origin/develop    # or origin/main, as listed above' \
+              '    # fix the conflicts, then' \
+              '    git commit' \
+              "    git push origin ${PROMO}")
+          fi
+
+          body=$(
+            printf '%s\n' \
+              "Automated release-promotion PR, kept current by \`release-pr.yml\` on every push to \`develop\` or \`main\`." \
+              '' \
+              "Its head, \`${PROMO}\`, is \`develop\` with \`main\` merged in. Unlike those two it is not protected, so a merge conflict is fixed here (**Resolve conflicts**, or locally on \`${PROMO}\`) without touching \`develop\` or closing this PR." \
+              ''
+            [ -z "$notice" ] || printf '%s\n\n' "$notice"
+            printf '%s\n' \
+              '## Included' \
+              "$included" \
+              '' \
+              "Review, confirm the version bump, and **squash-merge** to cut a release — release-drafter updates the draft on merge to \`main\`, and you publish the draft when ready."
+          )
+
+          created=""
+          if [ -n "$pr" ]; then
+            gh api --silent -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${pr}" \
+              -f title="$title" -f body="$body"
+          else
+            url=$(gh pr create --base main --head "$PROMO" --title "$title" \
+                    --label skip-changelog --body "$body")
+            pr=${url##*/}
+            created=1
+          fi
+
+          # Release PRs used to come straight from develop; close any left open.
+          for old in $(gh pr list --base main --head develop --state open --json number --jq '.[].number'); do
+            gh api --silent -X POST "repos/${GITHUB_REPOSITORY}/issues/${old}/comments" \
+              -f body="Superseded by #${pr}, which comes from \`${PROMO}\` (develop with main merged in). That branch is not protected, so conflicts are resolved on the release PR itself instead of on develop."
+            gh api --silent -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${old}" -f state=closed
+          done
+
+          # Only once the PR exists: code scanning reports the required gitleaks check only
+          # on a commit that heads an open PR.
+          if [ -n "${pushed}${created}" ]; then
+            for wf in ci.yml gitleaks.yml; do
+              gh workflow run "$wf" --ref "$PROMO"
+            done
+          fi
+
+          if [ -n "$conflicts" ]; then
+            printf '%s\n' "$notice" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Could not merge into ${PROMO} automatically; #${pr} says how to finish it."
+            exit 1
+          fi

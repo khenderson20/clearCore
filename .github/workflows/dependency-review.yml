@@ -7,15 +7,25 @@
 #
 # Source repository: https://github.com/actions/dependency-review-action
 name: 'Dependency Review'
+# Path filter = the manifests GitHub's dependency graph can actually parse.
+# In this repo that is only the workflow files (their `uses:` lines). CMake
+# FetchContent is not a supported ecosystem, so the previous CMakeLists.txt
+# filter ran the job exactly when it had nothing to review, and skipped it
+# for the action bumps it can check.
 on:
   pull_request:
     paths:
-      - 'CMakeLists.txt'
-      - 'cmake/**'
-      - '**/CMakeLists.txt'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
+
+# A new push to a PR cancels that PR's previous run. Push and scheduled runs
+# get a group of their own (run_id), so none is ever queued behind or
+# cancelled by another: every commit on main/develop keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   dependency-review:
