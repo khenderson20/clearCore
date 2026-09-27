@@ -74,6 +74,24 @@ static std::optional<std::pair<int32_t, uint8_t>> parse_mem_operand(std::string_
     return std::pair{*imm, *reg};
 }
 
+// ── Operand ranges ────────────────────────────────────────────────────────────
+// The encoders below keep only the low bits of each field, so an operand outside
+// its field's range would be silently truncated into a different program. The
+// CPU sign-extends arithmetic, memory and branch immediates and zero-extends
+// the logical ones, which is why each field accepts a different range.
+
+constexpr int32_t kSimm16Min     = -32768;
+constexpr int32_t kSimm16Max     = 32767;
+constexpr int32_t kUimm16Max     = 0xFFFF;
+constexpr int32_t kJumpTargetMax = 0x03FF'FFFF;  // 26-bit word index
+
+bool fits_simm16(int32_t v) {
+    return v >= kSimm16Min && v <= kSimm16Max;
+}
+bool fits_uimm16(int32_t v) {
+    return v >= 0 && v <= kUimm16Max;
+}
+
 // ── Encoding helpers ──────────────────────────────────────────────────────────
 
 static uint32_t enc_r(uint8_t rs, uint8_t rt, uint8_t rd, uint8_t shamt, uint8_t funct) {
@@ -112,6 +130,10 @@ static const std::unordered_map<std::string, uint8_t> kIArithMap = {
     {"addi", 0x08}, {"addiu", 0x09}, {"slti", 0x0A}, {"sltiu", 0x0B},
     {"andi", 0x0C}, {"ori", 0x0D},   {"xori", 0x0E},
 };
+// The logical I-type instructions zero-extend their immediate; the rest sign-extend.
+bool zero_extends_imm(const std::string& mn) {
+    return mn == "andi" || mn == "ori" || mn == "xori";
+}
 static const std::unordered_map<std::string, uint8_t> kMemMap = {
     {"lw", 0x23},
     {"lbu", 0x24},
@@ -310,8 +332,12 @@ AssemblerResult assemble(const std::string& source) {
             auto rs  = parse_reg(ops[1]);
             auto imm = parse_imm(ops[2]);
             if (!rt || !rs || !imm) return err("bad operands");
-            result.words.push_back(enc_i(kIArithMap.at(mn), *rs, *rt,
-                                         static_cast<uint16_t>(static_cast<int16_t>(*imm))));
+            if (zero_extends_imm(mn)) {
+                if (!fits_uimm16(*imm)) return err("immediate out of range (0 to 65535)");
+            } else if (!fits_simm16(*imm)) {
+                return err("immediate out of range (-32768 to 32767)");
+            }
+            result.words.push_back(enc_i(kIArithMap.at(mn), *rs, *rt, static_cast<uint16_t>(*imm)));
             continue;
         }
 
@@ -321,8 +347,8 @@ AssemblerResult assemble(const std::string& source) {
             auto rt  = parse_reg(ops[0]);
             auto imm = parse_imm(ops[1]);
             if (!rt || !imm) return err("bad operands");
-            result.words.push_back(
-                enc_i(0x0F, 0, *rt, static_cast<uint16_t>(static_cast<int16_t>(*imm))));
+            if (!fits_uimm16(*imm)) return err("immediate out of range (0 to 65535)");
+            result.words.push_back(enc_i(0x0F, 0, *rt, static_cast<uint16_t>(*imm)));
             continue;
         }
 
@@ -334,8 +360,8 @@ AssemblerResult assemble(const std::string& source) {
             auto mem_op = parse_mem_operand(ops[1]);
             if (!mem_op) return err("expected imm($rs)");
             auto [imm, rs] = *mem_op;
-            result.words.push_back(
-                enc_i(kMemMap.at(mn), rs, *rt, static_cast<uint16_t>(static_cast<int16_t>(imm))));
+            if (!fits_simm16(imm)) return err("offset out of range (-32768 to 32767)");
+            result.words.push_back(enc_i(kMemMap.at(mn), rs, *rt, static_cast<uint16_t>(imm)));
             continue;
         }
 
@@ -357,8 +383,10 @@ AssemblerResult assemble(const std::string& source) {
                 // offset = (target_word_addr - (current_word_addr + 4)) / 4
                 offset = static_cast<int32_t>(it->second) - static_cast<int32_t>(idx + 1);
             }
-            result.words.push_back(enc_i(kBranchMap.at(mn), *rs, *rt,
-                                         static_cast<uint16_t>(static_cast<int16_t>(offset))));
+            if (!fits_simm16(offset))
+                return err("branch offset out of range (-32768 to 32767 instructions)");
+            result.words.push_back(
+                enc_i(kBranchMap.at(mn), *rs, *rt, static_cast<uint16_t>(offset)));
             continue;
         }
 
@@ -368,11 +396,15 @@ AssemblerResult assemble(const std::string& source) {
             uint32_t target = 0;
             auto     imm    = parse_imm(ops[0]);
             if (imm) {
+                if (*imm < 0 || *imm > kJumpTargetMax)
+                    return err("jump target out of range (0 to 0x3FFFFFF)");
                 target = static_cast<uint32_t>(*imm);
             } else {
                 auto it = labels.find(ops[0]);
                 if (it == labels.end()) return err("undefined label '" + ops[0] + "'");
                 target = it->second;  // word index; IProcessor::load_program handles byte address
+                if (target > static_cast<uint32_t>(kJumpTargetMax))
+                    return err("jump target out of range (0 to 0x3FFFFFF)");
             }
             result.words.push_back(enc_j(kJumpMap.at(mn), target));
             continue;

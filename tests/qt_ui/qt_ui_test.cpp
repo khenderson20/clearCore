@@ -117,8 +117,67 @@ static void test_assembler_errors() {
     CHECK(!r.ok());
 
     // INT32_MIN spelled as a negated hex literal (would overflow if negated as int32_t).
+    // Parsing it must not be UB; the value is then outside lui's range and rejected.
     r = assemble("lui $t0, -0x80000000");
-    CHECK(!r.ok() || r.words.size() == 1);
+    CHECK(!r.ok());
+}
+
+// Every operand field has a fixed width; an out-of-range value must be an error, not
+// silently truncated into a different program (#233).
+static void test_assembler_operand_ranges() {
+    using namespace nsc::qt;
+    const auto low16 = [](const AssemblerResult& r) { return r.words.at(0) & 0xFFFFu; };
+
+    // Sign-extended 16-bit immediate: addi addiu slti sltiu
+    auto r = assemble("addi $t0, $zero, 32767");
+    CHECK(r.ok() && low16(r) == 0x7FFFu);
+    r = assemble("addi $t0, $zero, -32768");
+    CHECK(r.ok() && low16(r) == 0x8000u);
+    CHECK(!assemble("addi $t0, $zero, 32768").ok());
+    CHECK(!assemble("addi $t0, $zero, -32769").ok());
+    CHECK(!assemble("addi $t0, $zero, 70000").ok());  // used to encode 4464
+    CHECK(!assemble("sltiu $t0, $zero, 0xFFFF").ok());
+
+    // Zero-extended 16-bit immediate: andi ori xori lui
+    r = assemble("ori $t0, $zero, 65535");
+    CHECK(r.ok() && low16(r) == 0xFFFFu);
+    CHECK(!assemble("ori $t0, $zero, 65536").ok());
+    CHECK(!assemble("andi $t0, $t0, -1").ok());
+    r = assemble("lui $t0, 0xFFFF");
+    CHECK(r.ok() && low16(r) == 0xFFFFu);
+    CHECK(!assemble("lui $t0, 0x10000").ok());
+
+    // Memory offsets are sign-extended 16-bit
+    r = assemble("lw $t0, -32768($sp)");
+    CHECK(r.ok() && low16(r) == 0x8000u);
+    CHECK(!assemble("lw $t0, 32768($sp)").ok());
+    CHECK(!assemble("sw $t0, -32769($sp)").ok());
+
+    // Branch displacements are sign-extended 16-bit word offsets
+    r = assemble("beq $zero, $zero, 32767");
+    CHECK(r.ok() && low16(r) == 0x7FFFu);
+    CHECK(!assemble("bne $t0, $t1, 32768").ok());
+    CHECK(!assemble("beq $t0, $t1, -32769").ok());
+
+    // A label exactly 32767 instructions ahead fits; one more does not. The branch is
+    // at index 0 and the label follows `nops` nops, so the offset is `nops` itself.
+    const auto branch_over = [](int nops) {
+        std::string src = "beq $zero, $zero, far\n";
+        for (int i = 0; i < nops; ++i)
+            src += "nop\n";
+        return assemble(src + "far: nop\n");
+    };
+    r = branch_over(32767);
+    CHECK(r.ok() && low16(r) == 0x7FFFu);
+    r = branch_over(32768);
+    CHECK(!r.ok());
+    CHECK(r.error.value_or("").rfind("line 1:", 0) == 0);  // reported on the branch's line
+
+    // Jump targets are 26-bit word indexes
+    r = assemble("j 0x3FFFFFF");
+    CHECK(r.ok() && (r.words.at(0) & 0x03FFFFFFu) == 0x03FFFFFFu);
+    CHECK(!assemble("j 0x4000000").ok());
+    CHECK(!assemble("jal -1").ok());
 }
 
 // ── SimulatorController signal emission ──────────────────────────────────────
@@ -336,6 +395,7 @@ int main(int argc, char* argv[]) {
     test_assembler_basic();
     test_assembler_labels();
     test_assembler_errors();
+    test_assembler_operand_ranges();
     test_controller_step_signal();
     test_controller_breakpoint();
     test_controller_reset();
