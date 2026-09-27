@@ -386,7 +386,7 @@ jobs:
           # https://www.nuget.org/packages/Microsoft.ArtifactSigning.Client
           # and update both values below (`sha256sum <file>.nupkg`).
           $dlibVersion = '1.0.128'
-          $dlibSha256  = '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40'
+          $dlibSha256  = '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40B'
           $tmp = Join-Path $env:RUNNER_TEMP 'artifact-signing-client'
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           $nupkg = Join-Path $tmp 'package.nupkg'
