@@ -1,5 +1,5 @@
 #include "nsc/ui.h"
 
 int main() {
-    return nsc::runApp();
+    return nsc::run_app();
 }

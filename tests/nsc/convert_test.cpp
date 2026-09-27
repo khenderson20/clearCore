@@ -27,36 +27,36 @@ void expectEq(const A& got, const B& want, const char* expr, int line) {
 #define EXPECT_EQ(got, want) expectEq((got), (want), #got " == " #want, __LINE__)
 
 void parseTests() {
-    EXPECT_EQ(nsc::parseBase("0", 10).value_or(1), std::uint64_t{0});
-    EXPECT_EQ(nsc::parseBase("255", 10).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("FF", 16).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("11111111", 2).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("", 10).has_value(), false);     // empty
-    EXPECT_EQ(nsc::parseBase("12x", 10).has_value(), false);  // trailing garbage
-    EXPECT_EQ(nsc::parseBase("2", 2).has_value(), false);     // not a binary digit
+    EXPECT_EQ(nsc::parse_base("0", 10).value_or(1), std::uint64_t{0});
+    EXPECT_EQ(nsc::parse_base("255", 10).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parse_base("FF", 16).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parse_base("11111111", 2).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parse_base("", 10).has_value(), false);     // empty
+    EXPECT_EQ(nsc::parse_base("12x", 10).has_value(), false);  // trailing garbage
+    EXPECT_EQ(nsc::parse_base("2", 2).has_value(), false);     // not a binary digit
 
     // Regression (#124): stoull-lenient inputs the contract requires rejecting.
-    EXPECT_EQ(nsc::parseBase("-1", 10).has_value(), false);    // negative sign
-    EXPECT_EQ(nsc::parseBase("-0", 10).has_value(), false);    // negative zero
-    EXPECT_EQ(nsc::parseBase("+5", 10).has_value(), false);    // positive sign
-    EXPECT_EQ(nsc::parseBase(" 7", 10).has_value(), false);    // leading whitespace
-    EXPECT_EQ(nsc::parseBase("7 ", 10).has_value(), false);    // trailing whitespace
-    EXPECT_EQ(nsc::parseBase("0xFF", 16).has_value(), false);  // 0x prefix (base 16)
+    EXPECT_EQ(nsc::parse_base("-1", 10).has_value(), false);    // negative sign
+    EXPECT_EQ(nsc::parse_base("-0", 10).has_value(), false);    // negative zero
+    EXPECT_EQ(nsc::parse_base("+5", 10).has_value(), false);    // positive sign
+    EXPECT_EQ(nsc::parse_base(" 7", 10).has_value(), false);    // leading whitespace
+    EXPECT_EQ(nsc::parse_base("7 ", 10).has_value(), false);    // trailing whitespace
+    EXPECT_EQ(nsc::parse_base("0xFF", 16).has_value(), false);  // 0x prefix (base 16)
     // Overflow past 64 bits must still be rejected.
-    EXPECT_EQ(nsc::parseBase("18446744073709551616", 10).has_value(), false);
+    EXPECT_EQ(nsc::parse_base("18446744073709551616", 10).has_value(), false);
     // Valid inputs across bases remain accepted.
-    EXPECT_EQ(nsc::parseBase("FF", 16).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("ff", 16).value_or(0), std::uint64_t{255});
-    EXPECT_EQ(nsc::parseBase("18446744073709551615", 10).value_or(0),
+    EXPECT_EQ(nsc::parse_base("FF", 16).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parse_base("ff", 16).value_or(0), std::uint64_t{255});
+    EXPECT_EQ(nsc::parse_base("18446744073709551615", 10).value_or(0),
               std::uint64_t{18446744073709551615ULL});
 }
 
 void formatTests() {
-    EXPECT_EQ(nsc::toBinary(0), std::string{"0"});
-    EXPECT_EQ(nsc::toBinary(245), std::string{"11110101"});
-    EXPECT_EQ(nsc::toHex(255), std::string{"FF"});
-    EXPECT_EQ(nsc::toDecimal(245), std::string{"245"});
-    EXPECT_EQ(nsc::groupBits(0xAC), std::string{"1010 1100"});
+    EXPECT_EQ(nsc::to_binary(0), std::string{"0"});
+    EXPECT_EQ(nsc::to_binary(245), std::string{"11110101"});
+    EXPECT_EQ(nsc::to_hex(255), std::string{"FF"});
+    EXPECT_EQ(nsc::to_decimal(245), std::string{"245"});
+    EXPECT_EQ(nsc::group_bits(0xAC), std::string{"1010 1100"});
 }
 
 void converterTests() {

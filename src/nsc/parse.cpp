@@ -17,7 +17,7 @@ constexpr int digit_value(unsigned char c) noexcept {
 
 }  // anonymous namespace
 
-std::optional<std::uint64_t> parseBase(const std::string& str, int base) {
+std::optional<std::uint64_t> parse_base(const std::string& str, int base) {
     // Empty strings are invalid
     if (str.empty()) {
         return std::nullopt;

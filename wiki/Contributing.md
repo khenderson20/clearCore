@@ -80,7 +80,7 @@ This project uses a **lightweight, dependency-free `CHECK()`-macro test harness*
 
 ### Unit tests
 
-Target individual components (`parseBase`, ALU functions, individual decoder cases). Keep each test focused on a single behavior.
+Target individual components (`parse_base`, ALU functions, individual decoder cases). Keep each test focused on a single behavior.
 
 ### Integration / polymorphic tests
 

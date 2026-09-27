@@ -161,7 +161,7 @@ The suite covers:
 - `cp0_test` — Coprocessor 0 exception model (SYSCALL/BREAK/overflow/address errors, MFC0/MTC0/ERET)
 - `elf_loader_test` — MIPS ELF32 parsing and segment mapping
 - `nyxstone_test` — differential validation of the Decoder + Disassembler against Nyxstone (LLVM's assembler): our disassembly of each corpus word is re-encoded by LLVM and asserted bit-identical. Built only when `BUILD_NYXSTONE=ON` and an in-range LLVM was found; self-skips otherwise.
-- `nsc_tests` — number system converter (`parseBase`, conversions)
+- `nsc_tests` — number system converter (`parse_base`, conversions)
 - `qt_ui_test` — Qt6 assembler/controller/widget smoke tests (built only when `BUILD_QT6_UI=ON`; runs headless via `QT_QPA_PLATFORM=offscreen`)
 - `gdb_stub_test` — GDB RSP stub protocol handling (built only when `BUILD_GDB_STUB=ON`)
 

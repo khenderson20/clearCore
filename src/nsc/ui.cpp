@@ -785,7 +785,7 @@ static void runSplash() {
 // continuously on its own (independent of CPU cycle stepping), and is gently
 // attracted toward the mouse — but only while the cursor is inside this
 // panel. `mouse_active` is computed once in the event handler against an
-// approximate panel bounding box (see runApp()'s CatchEvent).
+// approximate panel bounding box (see run_app()'s CatchEvent).
 static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool& mouse_active,
                                                uint64_t cycle_counter) {
     return Renderer([&, cycle_counter] {
@@ -925,8 +925,8 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
     });
 }
 
-// ─── runApp ───────────────────────────────────────────────────────────────────
-int runApp() {
+// ─── run_app ──────────────────────────────────────────────────────────────────
+int run_app() {
     // run the splash screen()
     runSplash();
     // ── Mouse tracking for the Core Pulse panel ─────────────────────────────────
