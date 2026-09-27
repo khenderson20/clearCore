@@ -3,15 +3,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <exception>
 #include <gsl/gsl>
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 
 // POSIX socket headers — supported on Linux and macOS.
 #include <arpa/inet.h>
@@ -26,11 +26,21 @@ namespace mips {
 static constexpr uint32_t kBreakWord = 0x0000'000Du;
 
 // POSIX signal numbers mirrored here to avoid including <signal.h>.
+static constexpr int kSIGINT  = 2;
 static constexpr int kSIGTRAP = 5;
 static constexpr int kSIGSEGV = 11;
 static constexpr int kSIGILL  = 4;
 static constexpr int kSIGFPE  = 8;
 static constexpr int kSIGSYS  = 12;
+
+// A peer that disconnects mid-reply must not raise SIGPIPE: its default action
+// kills the whole emulator. Linux has a per-call flag for this; macOS has only
+// the per-socket SO_NOSIGPIPE option, which configure_client_socket() sets.
+#if defined(MSG_NOSIGNAL)
+static constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+static constexpr int kSendFlags = 0;
+#endif
 
 // ─── Constructor / destructor ─────────────────────────────────────────────────
 
@@ -78,13 +88,38 @@ void GdbStub::listen() {
     client_fd_           = ::accept(server_fd_, reinterpret_cast<sockaddr*>(&peer), &peer_len);
     if (client_fd_ < 0) return;
 
-    // Disable Nagle — RSP is request-response, latency matters more than throughput.
-    ::setsockopt(client_fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    configure_client_socket();
+    serve();
+}
 
-    // RSP event loop.
+void GdbStub::configure_client_socket() {
+    const int yes = 1;
+    // Disable Nagle — RSP is request-response, latency matters more than throughput.
+    // Fails harmlessly on a non-TCP socket (the unit tests use a socketpair).
+    ::setsockopt(client_fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+#if defined(SO_NOSIGPIPE)
+    ::setsockopt(client_fd_, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes));
+#endif
+    rx_begin_ = 0;
+    rx_end_   = 0;
+}
+
+// ─── RSP event loop ──────────────────────────────────────────────────────────
+
+void GdbStub::serve() {
     last_result_ = StepResult::Ok;
+    detached_    = false;
     std::string pkt;
-    while (recv_packet(pkt)) {
+    while (!detached_) {
+        const RecvStatus status = recv_packet(pkt);
+        if (status == RecvStatus::Closed) return;
+        if (status == RecvStatus::Interrupt) {
+            // Ctrl-C while the target is already stopped: GDB still waits for the
+            // stop reply its interrupt asked for. Send exactly one, and never
+            // dispatch the interrupt as if it were an (empty) packet.
+            send_signal(kSIGINT);
+            continue;
+        }
         // Defense in depth: the individual handlers are written not to throw on
         // malformed input, but a single bad packet must never abort the whole
         // emulator, so any stray exception degrades to an RSP error reply.
@@ -100,7 +135,7 @@ void GdbStub::listen() {
 
 uint8_t GdbStub::checksum(const std::string& data) noexcept {
     uint8_t sum = 0;
-    for (unsigned char c : data)
+    for (const unsigned char c : data)
         sum = static_cast<uint8_t>(sum + c);
     return sum;
 }
@@ -115,7 +150,8 @@ bool GdbStub::send_raw(const std::string& s) {
     const char* p   = s.data();
     auto        rem = static_cast<ssize_t>(s.size());
     while (rem > 0) {
-        const ssize_t n = ::send(client_fd_, p, static_cast<size_t>(rem), 0);
+        const ssize_t n = ::send(client_fd_, p, static_cast<size_t>(rem), kSendFlags);
+        if (n < 0 && errno == EINTR) continue;
         if (n <= 0) return false;
         p += n;
         rem -= n;
@@ -150,35 +186,95 @@ bool GdbStub::checksum_matches(const std::string& data, char hi, char lo) {
     return expected && *expected == checksum(data);
 }
 
-bool GdbStub::recv_packet(std::string& out) {
-    // A packet that fails its checksum is NAKed ('-'); the peer then
-    // retransmits, so loop until one arrives intact or the connection drops.
+std::optional<std::string> GdbStub::unescape(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        if (raw[i] != '}') {
+            out += raw[i];
+            continue;
+        }
+        if (++i == raw.size()) return std::nullopt;  // '}' with nothing to escape
+        out += static_cast<char>(raw[i] ^ 0x20);
+    }
+    return out;
+}
+
+bool GdbStub::read_byte(char& c) {
+    while (rx_begin_ == rx_end_) {
+        const ssize_t n = ::recv(client_fd_, rx_buf_.data(), rx_buf_.size(), 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return false;
+        rx_begin_ = 0;
+        rx_end_   = static_cast<std::size_t>(n);
+    }
+    c = rx_buf_[rx_begin_++];
+    return true;
+}
+
+GdbStub::InputPoll GdbStub::poll_input() {
+    // Keep the unread bytes at the front so the non-blocking read below has room.
+    if (rx_begin_ > 0) {
+        std::copy(rx_buf_.begin() + static_cast<std::ptrdiff_t>(rx_begin_),
+                  rx_buf_.begin() + static_cast<std::ptrdiff_t>(rx_end_), rx_buf_.begin());
+        rx_end_ -= rx_begin_;
+        rx_begin_ = 0;
+    }
+    // A full buffer holds no 0x03 (the previous poll scanned it), and in all-stop
+    // mode GDB sends nothing but the interrupt while the target runs: drop it.
+    if (rx_end_ == rx_buf_.size()) rx_end_ = 0;
+
+    const ssize_t n =
+        ::recv(client_fd_, rx_buf_.data() + rx_end_, rx_buf_.size() - rx_end_, MSG_DONTWAIT);
+    const bool closed =
+        n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR);
+    if (n > 0) rx_end_ += static_cast<std::size_t>(n);
+
+    // Scan before reporting a close: a peer that sends Ctrl-C and then hangs up
+    // still gets the interrupt honoured.
+    for (std::size_t i = rx_begin_; i < rx_end_; ++i) {
+        if (rx_buf_[i] == '\x03') {
+            rx_begin_ = i + 1;  // consume everything up to and including the interrupt
+            return InputPoll::Interrupt;
+        }
+    }
+    return closed ? InputPoll::Closed : InputPoll::Idle;
+}
+
+GdbStub::RecvStatus GdbStub::recv_packet(std::string& out) {
+    // A packet that fails its checksum, exceeds kMaxPacketSize or ends inside an
+    // escape is NAKed ('-'); the peer then retransmits, so loop until one arrives
+    // intact or the connection drops.
     while (true) {
         out.clear();
-        // Skip until '$'.
-        char c;
+        char c = 0;
+        // Skip acks and noise until '$'. A bare 0x03 between packets is Ctrl-C.
+        do {
+            if (!read_byte(c)) return RecvStatus::Closed;
+            if (c == '\x03') return RecvStatus::Interrupt;
+        } while (c != '$');
+
+        // Read until '#'. Past the size limit, keep reading to find the end of
+        // the packet but stop storing it, so memory stays bounded.
+        bool too_long = false;
         while (true) {
-            const ssize_t n = ::recv(client_fd_, &c, 1, 0);
-            if (n <= 0) return false;
-            if (c == '$') break;
-            if (c == '\x03') {
-                // Ctrl-C interrupt: treat like a step + stop.
-                send_signal(kSIGTRAP);
-                return true;
-            }
-        }
-        // Read until '#'.
-        while (true) {
-            const ssize_t n = ::recv(client_fd_, &c, 1, 0);
-            if (n <= 0) return false;
+            if (!read_byte(c)) return RecvStatus::Closed;
             if (c == '#') break;
-            out += c;
+            if (out.size() < kMaxPacketSize)
+                out += c;
+            else
+                too_long = true;
         }
-        char cksum[2];
-        if (::recv(client_fd_, cksum, 2, MSG_WAITALL) != 2) return false;
-        if (checksum_matches(out, cksum[0], cksum[1])) {
-            send_raw("+");  // ACK
-            return true;
+        char hi = 0;
+        char lo = 0;
+        if (!read_byte(hi) || !read_byte(lo)) return RecvStatus::Closed;
+        if (!too_long && checksum_matches(out, hi, lo)) {
+            // The checksum covers the escaped bytes, so decode only after it passes.
+            if (auto decoded = unescape(out)) {
+                out = std::move(*decoded);
+                send_raw("+");  // ACK
+                return RecvStatus::Packet;
+            }
         }
         send_raw("-");  // NAK
     }
@@ -290,14 +386,14 @@ int GdbStub::stop_signal() const {
 
 std::string GdbStub::handle_read_regs() {
     std::string out;
-    out.reserve(kNumRegs * 8);
+    out.reserve(static_cast<std::size_t>(kNumRegs) * 8);
     for (int i = 0; i < kNumRegs; ++i)
         out += to_hex_le(read_gdb_reg(i));
     return out;
 }
 
 bool GdbStub::handle_write_regs(const std::string& hex) {
-    if (hex.size() < static_cast<size_t>(kNumRegs * 8)) return false;
+    if (hex.size() < static_cast<std::size_t>(kNumRegs) * 8) return false;
     for (int i = 0; i < kNumRegs; ++i) {
         // Little-endian: LSB is at the lowest address in the hex string.
         uint32_t v = 0;
@@ -463,8 +559,23 @@ void GdbStub::handle_continue(const std::string& args) {
         if (const auto pc = parse_hex(args)) cpu_.set_pc(*pc);
     }
 
-    running_ = true;
+    running_          = true;
+    std::size_t steps = 0;
     while (running_) {
+        // The stub cannot read GDB's Ctrl-C while it only steps the CPU, so a
+        // program that never halts would hang it. Check the socket now and then.
+        if (++steps % kInterruptPollSteps == 0) {
+            const InputPoll input = poll_input();
+            if (input == InputPoll::Interrupt) {
+                running_ = false;
+                send_signal(kSIGINT);
+                return;
+            }
+            if (input == InputPoll::Closed) {
+                running_ = false;  // nobody is left to report a stop to
+                return;
+            }
+        }
         last_result_ = cpu_.step();
         if (last_result_ == StepResult::Halt) {
             running_ = false;
@@ -566,27 +677,23 @@ void GdbStub::dispatch(const std::string& pkt) {
         handle_breakpoint_clear(args);
         break;
 
-    case 'k':  // kill — stop the loop
-        running_ = false;
+    case 'k':  // kill — end the session
+    case 'D':  // detach — end the session but leave the program as it is
+        running_  = false;
+        detached_ = true;
         send_ok();
         break;
 
-    case 'D':  // detach — stop the loop but don't kill the program
-        running_ = false;
-        send_ok();
-        break;
-
-    case 'H':  // set thread — we have one thread; ignore
-        send_ok();
-        break;
-
-    case 'T':  // thread alive
+    case 'H':  // set thread — there is one thread, so any selection is fine
+    case 'T':  // thread alive — the one thread always is
         send_ok();
         break;
 
     case 'q':
         if (args.substr(0, 9) == "Supported") {
-            send_packet("PacketSize=4000;swbreak+;hwbreak-");
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "PacketSize=%zx;swbreak+;hwbreak-", kMaxPacketSize);
+            send_packet(buf);
         } else if (args == "Attached") {
             send_packet("1");  // attached to existing process
         } else if (args == "C") {
@@ -598,12 +705,8 @@ void GdbStub::dispatch(const std::string& pkt) {
         }
         break;
 
-    case 'v':
-        if (args.substr(0, 5) == "Cont?") {
-            send_empty();  // not supported; GDB falls back to 'c'/'s'
-        } else {
-            send_empty();
-        }
+    case 'v':  // vCont? and the other v-packets are unsupported; GDB falls back to 'c'/'s'
+        send_empty();
         break;
 
     default:
