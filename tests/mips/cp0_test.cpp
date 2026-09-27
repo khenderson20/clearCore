@@ -275,8 +275,14 @@ static void test_pipelined_epc_survives_unmapped_vector() {
     CHECK(r == mips::StepResult::Exception);
     CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::Sys);
     CHECK(cpu.cp0().epc() == 4u);
-    CHECK(cpu.step() == mips::StepResult::Exception);  // fetch from the vector fails
+    // The fetch from the vector fails. The pipeline raises that AdEL when the
+    // failed fetch reaches EX, two cycles after IF, so step until it arrives.
+    r = mips::StepResult::Ok;
+    for (int i = 0; i < 5 && r == mips::StepResult::Ok; ++i)
+        r = cpu.step();
+    CHECK(r == mips::StepResult::Exception);
     CHECK(cpu.cp0().last_exception() == mips::ExceptionCode::AdEL);
+    CHECK(cpu.cp0().bad_vaddr() == mips::kExceptionVector);
     CHECK(cpu.cp0().epc() == 4u);
 }
 

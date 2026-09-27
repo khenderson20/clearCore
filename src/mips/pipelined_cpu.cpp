@@ -22,6 +22,11 @@
 // older stage trapped or redirected in the same cycle.  That age order is what
 // keeps a squashed (wrong-path or younger) instruction from trapping,
 // redirecting or writing CP0.
+//
+// Traps are raised only in MEM and EX. IF and ID record a failed fetch or an
+// undecodable word in the register they produce, and EX raises it: by then
+// every older instruction is in MEM or WB, and MEM runs first, so the oldest
+// faulting instruction always wins and no older instruction is flushed.
 
 namespace mips {
 
@@ -73,6 +78,14 @@ PipelinedCpu::ExOutcome PipelinedCpu::execute(const IdEx& in, const ExMem& ex_me
     ExOutcome out;
     if (!in.valid) return out;
 
+    // A trap recorded in IF (failed fetch) or ID (undecodable word) is raised
+    // here, in program order. The instruction itself becomes a bubble.
+    if (in.early_trap) {
+        const bool fetch = *in.early_trap == ExceptionCode::AdEL;
+        out.trap         = Trap{*in.early_trap, in.pc, fetch ? in.pc : 0};
+        return out;
+    }
+
     // Note: mem_wb is the MEM/WB register BEFORE WB wrote the register file,
     // so its value is still needed for the MEM/WB → EX path.
     const ExOperands ops = forward_operands(in, ex_mem, mem_wb);
@@ -87,6 +100,9 @@ PipelinedCpu::ExOutcome PipelinedCpu::execute(const IdEx& in, const ExMem& ex_me
     // common fields once; each case below only flips `valid` and sets what it
     // produces. A trapping instruction leaves `valid` false and becomes a
     // bubble at the end.
+    // COP0 also decodes as R-format, so the funct-based cases below test for the
+    // SPECIAL opcode: a COP0 word whose low bits happen to read as JR or BREAK
+    // is still a COP0 operation (the single-cycle model checks COP0 first too).
     ExMem& next  = out.next;
     next.pc      = in.pc;
     next.raw     = dec.raw;
@@ -112,7 +128,7 @@ PipelinedCpu::ExOutcome PipelinedCpu::execute(const IdEx& in, const ExMem& ex_me
             out.redirect      = in.pc4 + (static_cast<uint32_t>(off) << 2);
         }
         next.valid = true;  // no writeback; flows through MEM/WB as a no-op
-    } else if (dec.format == InstrFormat::R &&
+    } else if (dec.opcode == Opcode::SPECIAL &&
                (dec.r().funct == FunctCode::JR || dec.r().funct == FunctCode::JALR)) {
         // ── JR / JALR: register jump resolved in EX, 2-stage flush.
         out.redirect = ops.a;  // rs, possibly forwarded
@@ -121,7 +137,7 @@ PipelinedCpu::ExOutcome PipelinedCpu::execute(const IdEx& in, const ExMem& ex_me
             next.alu.value = in.pc4;  // return address
             next.write_reg = dec.r().rd;
         }
-    } else if (dec.format == InstrFormat::R &&
+    } else if (dec.opcode == Opcode::SPECIAL &&
                (dec.r().funct == FunctCode::SYSCALL || dec.r().funct == FunctCode::BREAK)) {
         // ── SYSCALL / BREAK: trap; the handler gets a clean pipeline.
         const ExceptionCode code =
@@ -196,10 +212,21 @@ PipelinedCpu::ExOutcome PipelinedCpu::execute(const IdEx& in, const ExMem& ex_me
 
 // ─── ID ──────────────────────────────────────────────────────────────────────
 PipelinedCpu::IdOutcome PipelinedCpu::decode(const IfId& in) const {
-    IdOutcome  out;
+    IdOutcome out;
+    IdEx&     next = out.next;
+    next.valid     = true;
+    next.pc        = in.pc;
+    next.pc4       = in.pc4;
+
+    // A failed fetch or an undecodable word is carried to EX and raised there.
+    if (in.fetch_fault) {
+        next.early_trap = ExceptionCode::AdEL;
+        return out;
+    }
     const auto decoded = Decoder::decode(in.instr);
     if (!decoded) {
-        out.trap = Trap{ExceptionCode::RI, in.pc, 0};
+        next.early_trap  = ExceptionCode::RI;
+        next.decoded.raw = in.instr;  // keeps the word visible in the EX snapshot
         return out;
     }
     const DecodedInstr& dec = *decoded;
@@ -217,10 +244,6 @@ PipelinedCpu::IdOutcome PipelinedCpu::decode(const IfId& in) const {
     }
 
     // The register file is read AFTER WB wrote it (WB ran first this cycle).
-    IdEx& next   = out.next;
-    next.valid   = true;
-    next.pc      = in.pc;
-    next.pc4     = in.pc4;
     next.ctrl    = derive_control(dec);
     next.decoded = dec;
     next.rs_val  = regs_.read(rs);
@@ -236,17 +259,20 @@ PipelinedCpu::IdOutcome PipelinedCpu::decode(const IfId& in) const {
 }
 
 // ─── IF ──────────────────────────────────────────────────────────────────────
-PipelinedCpu::IfOutcome PipelinedCpu::fetch() const {
-    IfOutcome  out;
+IfId PipelinedCpu::fetch() const {
+    IfId next;
+    next.valid = true;
+    next.pc    = pc_;
+    next.pc4   = pc_ + 4;
+
     const auto word = mem_.read_word(pc_);
     if (!word) {
-        out.trap = Trap{ExceptionCode::AdEL, pc_, pc_};  // out of range or misaligned
-        return out;
+        // Out of range or misaligned. Not raised here: the fetch may be on a
+        // wrong path that an older jump or branch is about to flush.
+        next.fetch_fault = true;
+        return next;
     }
-    out.next.valid = true;
-    out.next.pc    = pc_;
-    out.next.pc4   = pc_ + 4;
-    out.next.instr = *word;
+    next.instr = *word;
 
     // Halt detection: a J/JAL whose resolved target equals the instruction's
     // own address is the "spin-in-place" halt idiom.
@@ -254,9 +280,9 @@ PipelinedCpu::IfOutcome PipelinedCpu::fetch() const {
     if (raw_op == Opcode::J || raw_op == Opcode::JAL) {
         const uint32_t tgt   = *word & 0x03FF'FFFFu;
         const uint32_t jaddr = ((pc_ + 4) & 0xF000'0000u) | (tgt << 2);
-        if (jaddr == pc_) out.next.is_halt = true;
+        if (jaddr == pc_) next.is_halt = true;
     }
-    return out;
+    return next;
 }
 
 // ─── step ────────────────────────────────────────────────────────────────────
@@ -271,10 +297,10 @@ StepResult PipelinedCpu::step() {
     const MemWb cur_mem = mem_wb_;
 
     // ── Stages, oldest first ─────────────────────────────────────────────────
-    // A trap in MEM squashes EX; a trap or redirect in EX squashes ID and IF; a
-    // trap in ID squashes IF. A squashed stage is not run at all. The hazard
-    // unit looks only at the pipeline registers, so a load-use stall is still
-    // reported in a cycle that also flushes.
+    // A trap in MEM squashes EX; a trap or redirect in EX squashes ID and IF. A
+    // squashed stage is not run at all. The hazard unit looks only at the
+    // pipeline registers, so a load-use stall is still reported in a cycle that
+    // also flushes.
     const bool       halted         = write_back(cur_mem);
     const MemOutcome mem            = memory_access(cur_ex);
     const ExOutcome  ex             = mem.trap ? ExOutcome{} : execute(cur_id, cur_ex, cur_mem);
@@ -282,17 +308,16 @@ StepResult PipelinedCpu::step() {
     const bool       ex_flushes     = mem.trap || ex.trap || ex.redirect;
     const IdOutcome  id =
         (stall_load_use || ex_flushes || !cur_if.valid) ? IdOutcome{} : decode(cur_if);
-    const IfOutcome fetched = (stall_load_use || ex_flushes || id.trap) ? IfOutcome{} : fetch();
+    const IfId fetched = (stall_load_use || ex_flushes) ? IfId{} : fetch();
 
     // ── Resolve: the oldest stage that traps or redirects wins ───────────────
-    std::optional<Trap>     trap = mem.trap ? mem.trap : ex.trap;
-    std::optional<uint32_t> redirect;
+    const std::optional<Trap> trap = mem.trap ? mem.trap : ex.trap;
+    std::optional<uint32_t>   redirect;
     if (!trap) {
         // EX survived: apply its CP0 access and control transfer.
         if (ex.mtc0) cp0_.write(ex.mtc0->reg, ex.mtc0->value);
         if (ex.eret) cp0_.eret();
         redirect = ex.redirect;
-        if (!redirect) trap = id.trap ? id.trap : fetched.trap;
     }
 
     StepResult result    = halted ? StepResult::Halt : StepResult::Ok;
@@ -308,7 +333,7 @@ StepResult PipelinedCpu::step() {
 
     // ── Determine next PC and apply flushes ──────────────────────────────────
     // Priority: flush_from_ex (2 stages) > flush_from_id (1 stage) > stall > normal.
-    IfId     new_if  = fetched.next;
+    IfId     new_if  = fetched;
     IdEx     new_id  = id.next;
     uint32_t next_pc = pc_ + 4;
     if (flush_from_ex) {
@@ -337,7 +362,7 @@ StepResult PipelinedCpu::step() {
                               cycle_, branch_pc);
         else if (flush_from_id)
             trace_log().trace("pl  cyc={:<6} flush 1 (j/jal) -> pc={:#010x}", cycle_, next_pc);
-        if (new_if.valid) {
+        if (new_if.valid && !new_if.fetch_fault) {
             const auto        if_dec = Decoder::decode(new_if.instr);
             const std::string asm_text =
                 if_dec ? Disassembler::to_string(*if_dec, new_if.pc) : "<undecodable>";
@@ -354,13 +379,18 @@ StepResult PipelinedCpu::step() {
     pc_     = next_pc;
 
     // ── Update PipelineState for the front ends ──────────────────────────────
-    // Reflect what each stage was *doing* this cycle (its input registers).
-    ps_.stages[0] = {"IF",      new_if.valid, stall_load_use, flush_from_ex || flush_from_id,
-                     new_if.pc, new_if.instr};
-    ps_.stages[1] = {"ID", cur_if.valid, stall_load_use, flush_from_ex, cur_if.pc, cur_if.instr};
-    ps_.stages[2] = {"EX", cur_id.valid, false, false, cur_id.pc, cur_id.decoded.raw};
-    ps_.stages[3] = {"MEM", cur_ex.valid, false, false, cur_ex.pc, cur_ex.raw};
-    ps_.stages[4] = {"WB", cur_mem.valid, false, false, cur_mem.pc, cur_mem.raw};
+    // Reflect what each stage was *doing* this cycle (its input registers). A
+    // failed fetch is not an instruction, so it shows as a bubble until EX
+    // raises its AdEL.
+    const bool if_real = new_if.valid && !new_if.fetch_fault;
+    const bool id_real = cur_if.valid && !cur_if.fetch_fault;
+    const bool ex_real = cur_id.valid && cur_id.early_trap != ExceptionCode::AdEL;
+    ps_.stages[0]      = {"IF",      if_real,     stall_load_use, flush_from_ex || flush_from_id,
+                          new_if.pc, new_if.instr};
+    ps_.stages[1]      = {"ID", id_real, stall_load_use, flush_from_ex, cur_if.pc, cur_if.instr};
+    ps_.stages[2]      = {"EX", ex_real, false, false, cur_id.pc, cur_id.decoded.raw};
+    ps_.stages[3]      = {"MEM", cur_ex.valid, false, false, cur_ex.pc, cur_ex.raw};
+    ps_.stages[4]      = {"WB", cur_mem.valid, false, false, cur_mem.pc, cur_mem.raw};
 
     ps_.fwd_ex_to_ex_a  = ex.forwarded.ex_mem_a;
     ps_.fwd_ex_to_ex_b  = ex.forwarded.ex_mem_b;

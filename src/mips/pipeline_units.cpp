@@ -50,7 +50,7 @@ SourceRegisters source_registers(const DecodedInstr& d) {
 }
 
 bool load_use_hazard(const IdEx& in_ex, const IfId& in_id) {
-    if (!in_ex.valid || !in_ex.ctrl.mem_read || !in_id.valid) return false;
+    if (!in_ex.valid || !in_ex.ctrl.mem_read || !in_id.valid || in_id.fetch_fault) return false;
     const auto decoded = Decoder::decode(in_id.instr);
     if (!decoded) return false;
     const SourceRegisters src      = source_registers(*decoded);

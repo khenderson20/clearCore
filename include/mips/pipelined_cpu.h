@@ -24,6 +24,11 @@
 // Structure: one private function per stage. Each reads only the pipeline
 // registers as they were at the start of the cycle and returns an outcome;
 // step() runs them oldest first and resolves which trap or redirect wins.
+//
+// Precise exceptions: traps are raised only in EX and MEM. A fetch or decode
+// failure travels to EX in the pipeline registers first (see pipeline_regs.h),
+// so the reported exception is always that of the oldest faulting instruction,
+// every older instruction completes, and a wrong-path fault is flushed away.
 
 #include "mips/cp0.h"
 #include "mips/pipeline_regs.h"
@@ -84,29 +89,25 @@ private:
     };
     struct ExOutcome {
         ExMem                    next{};
-        std::optional<Trap>      trap;      // Sys, Bp, Ov, RI
+        std::optional<Trap>      trap;      // Sys, Bp, Ov, RI, or an AdEL/RI from IF/ID
         std::optional<uint32_t>  redirect;  // taken branch, JR/JALR target, ERET's EPC
         bool                     eret = false;
         std::optional<Mtc0Write> mtc0;
         ForwardingPaths          forwarded{};
     };
 
+    // ID and IF never trap directly: a decode or fetch failure is recorded in
+    // the register they produce and raised when it reaches EX.
     struct IdOutcome {
         IdEx                    next{};
-        std::optional<Trap>     trap;  // RI: the word does not decode
         std::optional<uint32_t> jump;  // J/JAL target, resolved in ID (1-stage flush)
-    };
-
-    struct IfOutcome {
-        IfId                next{};
-        std::optional<Trap> trap;  // AdEL: the fetch address is out of range or misaligned
     };
 
     [[nodiscard]] bool       write_back(const MemWb& in);  // true when a halt retired
     [[nodiscard]] MemOutcome memory_access(const ExMem& in);
     [[nodiscard]] ExOutcome execute(const IdEx& in, const ExMem& ex_mem, const MemWb& mem_wb) const;
     [[nodiscard]] IdOutcome decode(const IfId& in) const;
-    [[nodiscard]] IfOutcome fetch() const;
+    [[nodiscard]] IfId      fetch() const;
 
     RegisterFile  regs_;
     Memory        mem_;
