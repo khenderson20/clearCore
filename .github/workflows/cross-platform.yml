@@ -480,6 +480,21 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
+      # TEMPORARY diagnostic -- CPack only says "check NSISOutput.log", never
+      # prints it. Runs regardless of the step above's outcome so a makensis
+      # parse error (e.g. in nsisconf.nsh) is visible instead of just "Problem
+      # running NSIS command". Removed once confirmed working end to end.
+      - name: DEBUG NSISOutput.log (Windows)
+        if: always() && runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          Write-Host "=== nsisconf.nsh content ==="
+          Get-Content "C:\Program Files (x86)\NSIS\nsisconf.nsh" -ErrorAction SilentlyContinue
+          $log = Get-ChildItem -Recurse -Path build\release\_CPack_Packages -Filter 'NSISOutput.log' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $log) { Write-Host "NSISOutput.log not found"; exit 0 }
+          Write-Host "=== NSISOutput.log content ==="
+          Get-Content $log.FullName
+
       # TEMPORARY diagnostic -- CPack's NSIS generator doesn't surface
       # makensis's own stdout when it exits 0, so there's no visibility into
       # whether !uninstfinalize actually ran. !uninstfinalize now lives in
