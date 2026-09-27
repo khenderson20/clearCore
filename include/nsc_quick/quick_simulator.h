@@ -52,7 +52,7 @@ public:
     [[nodiscard]] QVariant               data(const QModelIndex& idx, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
-    void refresh(const mips::RegisterFile& regs);
+    void refresh(const isa::RegisterFile& regs);
     void resetAll();
 
 private:

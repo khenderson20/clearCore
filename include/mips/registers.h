@@ -1,16 +1,15 @@
 #pragma once
 
 // ─── mips/registers.h ────────────────────────────────────────────────────────
-// The 32×32 register file is ISA-agnostic and now lives in <isa/registers.h>.
-// This header re-exports it as `mips::RegisterFile` for existing callers and
-// adds the MIPS O32 ABI mnemonic table, which is MIPS-specific and stays here.
+// The MIPS O32 ABI mnemonic table. The register file itself is ISA-agnostic:
+// use isa::RegisterFile from <isa/registers.h>. There is deliberately no
+// mips::RegisterFile alias, so a front end cannot name the ISA-agnostic type
+// through a MIPS header (#237).
 
-#include "isa/registers.h"
-
+#include <cstdint>
 #include <string_view>
 
 namespace mips {
-using isa::RegisterFile;
 
 // ─── ABI register names ───────────────────────────────────────────────────────
 // MIPS O32 ABI mnemonic for register `idx` (0–31), e.g. 8 → "t0", 31 → "ra".

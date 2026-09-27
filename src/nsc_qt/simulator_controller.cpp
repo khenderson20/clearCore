@@ -133,11 +133,11 @@ SimulatorStatistics SimulatorController::statistics() const noexcept {
     return stats_;
 }
 
-const mips::Memory& SimulatorController::memory() const noexcept {
+const isa::Memory& SimulatorController::memory() const noexcept {
     return processor_->mem();
 }
 
-const mips::RegisterFile& SimulatorController::registers() const noexcept {
+const isa::RegisterFile& SimulatorController::registers() const noexcept {
     return processor_->regs();
 }
 

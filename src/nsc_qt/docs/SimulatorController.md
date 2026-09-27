@@ -15,7 +15,7 @@ Qt modules required:
 
 Project-internal types:
 - `mips::IProcessor` (`mips_core`) — the abstract processor interface this class owns and drives; `SimulatorController` never depends on a concrete processor type beyond the constructor parameter.
-- `mips::PipelineState`, `mips::Memory`, `mips::RegisterFile` — read-only state types returned by the accessor methods below.
+- `mips::PipelineState`, `isa::Memory`, `isa::RegisterFile` — read-only state types returned by the accessor methods below.
 - `SimulatorStatistics` — a plain struct (declared in the same header) accumulated internally and emitted via `statisticsUpdated`.
 
 Build requirement: compiled into both the `nsc_qt_ui` object library and the `clearCore-gui` executable; also linked into the `qt_ui_test` smoke-test target.
@@ -104,10 +104,10 @@ Returns a snapshot of all five pipeline stages.
 #### `SimulatorStatistics statistics() const noexcept`
 Returns a copy of the accumulated statistics.
 
-#### `const mips::Memory& memory() const noexcept`
+#### `const isa::Memory& memory() const noexcept`
 Returns a reference to the processor's memory. It is valid while the controller exists; read it when needed rather than storing it (see [Thread Safety](#8-thread-safety)).
 
-#### `const mips::RegisterFile& registers() const noexcept`
+#### `const isa::RegisterFile& registers() const noexcept`
 Returns a reference to the processor's register file. Same lifetime rule as `memory()`.
 
 #### `void setBreakpoint(uint32_t pc)` / `void clearBreakpoint(uint32_t pc)`

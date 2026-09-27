@@ -72,7 +72,7 @@ QHash<int, QByteArray> RegisterModel::roleNames() const {
     return kRoles;
 }
 
-void RegisterModel::refresh(const mips::RegisterFile& regs) {
+void RegisterModel::refresh(const isa::RegisterFile& regs) {
     const auto& raw          = regs.raw();
     const int   written      = regs.last_written();
     const int   prev_written = last_written_;

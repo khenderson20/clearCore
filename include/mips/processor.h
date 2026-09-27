@@ -10,10 +10,11 @@
 // A concrete MIPS core derives from IMipsProcessor; a future RISC-V core derives
 // straight from isa::IProcessor (plus its own CSR sub-interface).
 
+#include "isa/memory.h"
 #include "isa/processor.h"
+#include "isa/registers.h"
 #include "mips/cp0.h"
 #include "mips/decoder.h"
-#include "mips/memory.h"
 #include "mips/registers.h"
 
 #include <cstdint>

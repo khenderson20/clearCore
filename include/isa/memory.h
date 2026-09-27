@@ -8,8 +8,9 @@
 // ─── isa/memory.h ────────────────────────────────────────────────────────────
 // ISA-agnostic flat memory. Shared by every processor backend (MIPS today,
 // RISC-V next). Nothing here is MIPS-specific: byte-addressable little-endian
-// RAM is common to both ISAs clearCore models. Backends re-export this type
-// into their own namespace via a `using` shim (see mips/memory.h).
+// RAM is common to both ISAs clearCore models. Backends and front ends name it
+// isa::Memory; there is no per-ISA alias, so a front end never depends on a
+// backend header for it (#237).
 
 namespace isa {
 

@@ -113,7 +113,7 @@ A single `derive_control()` free function maps an opcode/funct pair to the full 
 
 ## ISA-agnostic core (`isa::`)
 
-These types carry nothing MIPS-specific and live in `include/isa/`, ready to be shared by a second ISA backend (RISC-V). The `mips` headers re-export them with `using`-shims (`mips::Memory`, `mips::RegisterFile`, `mips::IProcessor`, …) so existing callers compile unchanged.
+These types carry nothing MIPS-specific and live in `include/isa/`, ready to be shared by a second ISA backend (RISC-V). `Memory` and `RegisterFile` have no per-ISA alias: the CPU models, the Qt bridge, the widgets, the Quick bridge and the golden runner all name them `isa::Memory` and `isa::RegisterFile`, so a front end never needs a MIPS header for them (#237). `mips/processor.h` still re-exports `IProcessor`, `PipelineState`, `StageSnapshot` and `StepResult` with `using`-shims.
 
 | Component        | File(s)                   | Role                                                        |
 |-------------------|----------------------------|---------------------------------------------------------------|

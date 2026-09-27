@@ -57,8 +57,8 @@ public:
     [[nodiscard]] SimulatorStatistics     statistics() const noexcept;
     // Live views into the processor. Valid while this controller exists; read
     // them when needed rather than storing the reference.
-    [[nodiscard]] const mips::Memory&       memory() const noexcept;
-    [[nodiscard]] const mips::RegisterFile& registers() const noexcept;
+    [[nodiscard]] const isa::Memory&       memory() const noexcept;
+    [[nodiscard]] const isa::RegisterFile& registers() const noexcept;
 
     void                                              setBreakpoint(uint32_t pc);
     void                                              clearBreakpoint(uint32_t pc);
