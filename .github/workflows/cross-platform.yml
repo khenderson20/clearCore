@@ -437,14 +437,25 @@ jobs:
           else
             generator="DragNDrop"; name="clearCore-${version}-macOS-universal"
           fi
+          # macOS's /bin/bash is 3.2 (Apple ships no newer GPLv3 bash), where
+          # "${arr[@]}" on a zero-element array is an unbound-variable error
+          # under `set -u` -- unlike bash >= 4.4. Guarding on array length
+          # avoids the expansion entirely instead of relying on a version-gated
+          # bash feature.
           extra_defines=()
           if [ -n "${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE:-}" ]; then
             extra_defines+=(-D "CPACK_NSIS_DEFINES=${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE}")
           fi
-          cpack -G "$generator" \
-                -D CPACK_PACKAGE_VERSION="$version" \
-                -D CPACK_PACKAGE_FILE_NAME="$name" \
-                "${extra_defines[@]}" -V
+          if [ ${#extra_defines[@]} -gt 0 ]; then
+            cpack -G "$generator" \
+                  -D CPACK_PACKAGE_VERSION="$version" \
+                  -D CPACK_PACKAGE_FILE_NAME="$name" \
+                  "${extra_defines[@]}" -V
+          else
+            cpack -G "$generator" \
+                  -D CPACK_PACKAGE_VERSION="$version" \
+                  -D CPACK_PACKAGE_FILE_NAME="$name" -V
+          fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
