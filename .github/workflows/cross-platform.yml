@@ -343,6 +343,19 @@ jobs:
             -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON `
             -DCPACK_NSIS_DEFINES="$env:CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE"
 
+      # TEMPORARY diagnostic -- cheap, fast check (no build needed) of exactly
+      # what landed in the generated CPackConfig.cmake right after configure,
+      # to localize where the value is getting lost/mangled. Removed once the
+      # uninstaller signing gap is confirmed working end to end.
+      - name: DEBUG CPackConfig.cmake (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          Write-Host "=== CPACK_NSIS_DEFINES cache entry ==="
+          Select-String -Path build\release\CMakeCache.txt -Pattern 'CPACK_NSIS_DEFINES'
+          Write-Host "=== CPackConfig.cmake line(s) ==="
+          Select-String -Path build\release\CPackConfig.cmake -Pattern 'CPACK_NSIS_DEFINES'
+
       - name: Configure (macOS, universal)
         if: runner.os == 'macOS'
         run: >
