@@ -18,6 +18,9 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QString>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <memory>
@@ -322,6 +325,103 @@ static void test_trace_widget_clear() {
     CHECK(true);
 }
 
+// Text of the trace cell for (row, column); empty when there is no item.
+static QString trace_cell(QTableWidget* t, int row, int col) {
+    const auto* item = t->item(row, col);
+    return item ? item->text() : QString();
+}
+
+// Columns are real cycles (#238): a snapshot of cycle 5 lands under header "5",
+// not in the first column, and a later cycle leaves the skipped ones blank.
+static void test_trace_widget_columns_follow_state_cycle() {
+    using namespace nsc::qt;
+
+    PipelineTraceWidget tw;
+    tw.show();
+    auto* table = tw.findChild<QTableWidget*>();
+    CHECK(table != nullptr);
+
+    mips::PipelineState ps;
+    ps.cycle     = 5;
+    ps.stages[0] = {"IF", true, false, false, 0x40, 0x2108'0001u};
+    tw.updateCycle(ps);
+    CHECK(table->rowCount() == 1);
+    CHECK(table->horizontalHeaderItem(5)->text() == QStringLiteral("5"));
+    CHECK(trace_cell(table, 0, 5) == QStringLiteral("IF"));
+    CHECK(trace_cell(table, 0, 1).isEmpty());
+
+    ps.cycle     = 7;  // cycle 6 was never reported
+    ps.stages[0] = {};
+    ps.stages[1] = {"ID", true, false, false, 0x40, 0x2108'0001u};
+    tw.updateCycle(ps);
+    CHECK(table->rowCount() == 1);
+    CHECK(trace_cell(table, 0, 6).isEmpty());
+    CHECK(trace_cell(table, 0, 7) == QStringLiteral("ID"));
+
+    // A jump past the whole window starts a fresh diagram.
+    ps.cycle = 5000;
+    tw.updateCycle(ps);
+    CHECK(table->rowCount() == 1);
+    CHECK(table->horizontalHeaderItem(20)->text() == QStringLiteral("5000"));
+    CHECK(trace_cell(table, 0, 20) == QStringLiteral("ID"));
+}
+
+// Rows are dynamic instances (#239): in a 2-instruction loop (period 4, shorter
+// than the pipeline) one PC is in WB and IF in the same cycle, and both must
+// be shown, on different rows.
+static void test_trace_widget_rows_are_dynamic_instances() {
+    using namespace nsc::qt;
+
+    PipelineTraceWidget tw;
+    tw.show();
+    auto* table = tw.findChild<QTableWidget*>();
+
+    mips::PipelinedCpu cpu;
+    // 0x0: addi $t0, $t0, 1   0x4: beq $zero, $zero, -2 (back to 0x0)
+    CHECK(cpu.load_program({0x2108'0001u, 0x1000'FFFEu}));
+    for (int i = 0; i < 16; ++i) {
+        (void)cpu.step();
+        tw.updateCycle(cpu.pipeline_state());
+    }
+
+    int  rows_for_pc0     = 0;
+    bool same_cycle_twice = false;
+    int  cells_in_one_row = 0;
+    for (int r = 0; r < table->rowCount(); ++r) {
+        if (!trace_cell(table, r, 0).startsWith(QStringLiteral("0x0000 "))) continue;
+        ++rows_for_pc0;
+        int filled = 0;
+        for (int c = 1; c < table->columnCount(); ++c)
+            filled += trace_cell(table, r, c).isEmpty() ? 0 : 1;
+        cells_in_one_row = std::max(cells_in_one_row, filled);
+        for (int r2 = r + 1; r2 < table->rowCount(); ++r2) {
+            if (!trace_cell(table, r2, 0).startsWith(QStringLiteral("0x0000 "))) continue;
+            for (int c = 1; c < table->columnCount(); ++c)
+                if (!trace_cell(table, r, c).isEmpty() && !trace_cell(table, r2, c).isEmpty())
+                    same_cycle_twice = true;
+        }
+    }
+    CHECK(rows_for_pc0 >= 3);      // one row per execution of the addi
+    CHECK(same_cycle_twice);       // WB of one instance and IF of the next, same column
+    CHECK(cells_in_one_row == 5);  // an instance keeps its whole IF..WB history
+}
+
+// A hidden trace keeps recording but only redraws when shown (#242).
+static void test_trace_widget_defers_redraw_while_hidden() {
+    using namespace nsc::qt;
+
+    PipelineTraceWidget tw;  // never shown yet
+    auto*               table = tw.findChild<QTableWidget*>();
+    mips::PipelineState ps;
+    ps.cycle     = 1;
+    ps.stages[0] = {"IF", true, false, false, 0x0, 0};
+    tw.updateCycle(ps);
+    CHECK(table->rowCount() == 0);  // recorded, not drawn
+    tw.show();
+    CHECK(table->rowCount() == 1);
+    CHECK(trace_cell(table, 0, 1) == QStringLiteral("IF"));
+}
+
 // ── PipelineEventsWidget log behaviour ───────────────────────────────────────
 
 static void test_events_widget_log() {
@@ -450,6 +550,9 @@ int main(int argc, char* argv[]) {
     test_memory_widget_construct();
     test_memory_widget_incremental_refresh();
     test_trace_widget_clear();
+    test_trace_widget_columns_follow_state_cycle();
+    test_trace_widget_rows_are_dynamic_instances();
+    test_trace_widget_defers_redraw_while_hidden();
     test_events_widget_log();
     test_dock_panels_carry_content();
 

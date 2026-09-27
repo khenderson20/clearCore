@@ -1,18 +1,26 @@
 #pragma once
 
 #include "mips/processor.h"
+#include <QFont>
 #include <QWidget>
+#include <array>
 #include <cstdint>
-#include <deque>
-#include <string>
-#include <utility>
 #include <vector>
 
+class QShowEvent;
 class QTableWidget;
 
 namespace nsc::qt {
 
-class PipelineTraceWidget : public QWidget {
+// Instruction × cycle pipeline diagram over the last kMaxCycles cycles.
+//
+// Columns are real simulator cycles (PipelineState::cycle), so a cycle the
+// controller did not report stays blank instead of shifting later columns.
+// Rows are dynamic instruction instances, not PCs: each instance is followed
+// from stage to stage, so a short loop whose PC is in two stages at once gets
+// one row per execution. The table is redrawn only while the widget is
+// visible; a hidden widget keeps recording and redraws once when shown.
+class PipelineTraceWidget final : public QWidget {
     Q_OBJECT
 
 public:
@@ -22,29 +30,32 @@ public:
     void clear();
     void setDarkMode(bool dark);
 
+protected:
+    void showEvent(QShowEvent* ev) override;
+
 private:
-    static constexpr int MAX_CYCLES = 20;
+    static constexpr int kMaxCycles = 20;
+
+    // One dynamic instance: the cycle in which it occupied each stage, 0 when
+    // it was not seen there (a stalled or flushed slot is not recorded).
+    struct InstrRow {
+        uint32_t                pc  = 0;
+        uint32_t                raw = 0;
+        std::array<uint64_t, 5> cycle_in_stage{};
+
+        [[nodiscard]] int      lastStage() const noexcept;  // -1 when empty
+        [[nodiscard]] uint64_t lastCycle() const noexcept;
+    };
 
     void rebuildTable();
 
-    // One row per instruction currently visible in the trace window (keyed by
-    // PC). Each entry in `stages` is (absolute cycle number, stage name);
-    // entries older than the visible window are pruned every updateCycle()
-    // call, and the row itself is dropped once it has no visible entries
-    // left. Storing the absolute cycle rather than a column offset means
-    // entries stay correctly aligned with the header even as cycle_base_
-    // advances.
-    struct InstrRow {
-        uint32_t                                     pc  = 0;
-        uint32_t                                     raw = 0;
-        std::deque<std::pair<uint64_t, std::string>> stages;
-    };
-
     QTableWidget*         table_ = nullptr;
     std::vector<InstrRow> rows_{};
-    uint64_t              cycle_base_    = 0;  // column 0 maps to this cycle + 1
-    uint64_t              current_cycle_ = 0;
-    bool                  dark_mode_     = false;
+    uint64_t              last_cycle_ = 0;  // PipelineState::cycle of the last snapshot
+    bool                  dirty_      = false;
+    bool                  dark_mode_  = false;
+    QFont                 label_font_;  // built once; constructing a QFont resolves the family
+    QFont                 stage_font_;
 };
 
 }  // namespace nsc::qt
