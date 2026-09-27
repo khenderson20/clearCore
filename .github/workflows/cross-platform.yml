@@ -484,42 +484,6 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
-      # TEMPORARY diagnostic -- CPack only says "check NSISOutput.log", never
-      # prints it. Runs regardless of the step above's outcome so a makensis
-      # parse error (e.g. in nsisconf.nsh) is visible instead of just "Problem
-      # running NSIS command". Removed once confirmed working end to end.
-      - name: DEBUG NSISOutput.log (Windows)
-        if: always() && runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
-        shell: pwsh
-        run: |
-          Write-Host "=== nsisconf.nsh content ==="
-          Get-Content "C:\Program Files (x86)\NSIS\nsisconf.nsh" -ErrorAction SilentlyContinue
-          $log = Get-ChildItem -Recurse -Path build\release\_CPack_Packages -Filter 'NSISOutput.log' -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $log) { Write-Host "NSISOutput.log not found"; exit 0 }
-          Write-Host "=== NSISOutput.log content ==="
-          Get-Content $log.FullName
-
-      # TEMPORARY diagnostic -- CPack's NSIS generator doesn't surface
-      # makensis's own stdout when it exits 0, so there's no visibility into
-      # whether !uninstfinalize actually ran. !uninstfinalize now lives in
-      # nsisconf.nsh (auto-included by makensis), not project.nsi itself, so
-      # this checks nsisconf.nsh directly and re-runs makensis to surface its
-      # actual signtool output. Removed once confirmed working end to end.
-      - name: DEBUG uninstfinalize (Windows)
-        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
-        shell: pwsh
-        run: |
-          Write-Host "=== nsisconf.nsh content ==="
-          Get-Content "C:\Program Files (x86)\NSIS\nsisconf.nsh" -ErrorAction SilentlyContinue
-          $nsi = Get-ChildItem -Recurse -Path build\release\_CPack_Packages -Filter 'project.nsi' | Select-Object -First 1
-          if (-not $nsi) { Write-Host "project.nsi not found"; exit 0 }
-          Write-Host "=== re-running makensis /V4 to capture its own output ==="
-          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          & $makensis /V4 $nsi.FullName 2>&1 | Tee-Object -Variable nsisOutput | Out-Null
-          $nsisOutput | Select-String -Pattern 'uninstfinalize|warning|error|sign'
-          Write-Host "=== last 40 lines of makensis output ==="
-          $nsisOutput | Select-Object -Last 40
-
       # Sign the NSIS installer itself so SmartScreen trusts the download and
       # doesn't show an "unknown publisher" wall. Reuses the OIDC login above.
       - name: Sign installer (Windows)
