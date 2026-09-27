@@ -601,6 +601,7 @@ clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number con
 # ---- gdb_stub_test: RSP hex-parser robustness (only when the stub is built) ----
 if (BUILD_GDB_STUB)
     clearcore_add_test(gdb_stub_test tests/mips/gdb_stub_test.cpp mips_core)
+    target_link_libraries(gdb_stub_test PRIVATE Threads::Threads)
 endif ()
 
 # ---- nyxstone_test: differential Decoder/Disassembler vs LLVM (if enabled) ----

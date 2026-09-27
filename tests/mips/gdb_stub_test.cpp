@@ -23,6 +23,8 @@
 #include <cstdlib>
 #include <optional>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 static int g_passed = 0, g_failed = 0;
@@ -92,6 +94,11 @@ struct StubSession {
     ~StubSession() { ::close(peer); }
 
     void send(const std::string& bytes) const { ::send(peer, bytes.data(), bytes.size(), 0); }
+    // For a frame larger than the socketpair buffer (8 KiB on macOS): send() blocks until the
+    // stub reads, and the stub reads on this thread, so the write needs a thread of its own.
+    [[nodiscard]] std::thread send_async(std::string bytes) const {
+        return std::thread([this, bytes = std::move(bytes)] { send(bytes); });
+    }
     // The stub has already written its reply before recv_packet returns, so this never blocks
     // for long; a short read means the stub sent less than expected.
     std::string receive(std::size_t n) const {
@@ -258,8 +265,10 @@ int main() {
     {  // a payload over the advertised PacketSize is NAKed, not buffered without bound
         StubSession t;
         std::string out;
-        t.send(frame(std::string(GdbStubTestAccess::kMaxPacketSize + 1, 'a')) + frame("OK"));
+        auto writer = t.send_async(frame(std::string(GdbStubTestAccess::kMaxPacketSize + 1, 'a')) +
+                                   frame("OK"));
         CHECK(GdbStubTestAccess::recv_packet(t.stub, out) == Recv::Packet);
+        writer.join();
         CHECK(out == "OK");
         CHECK(t.receive(2) == "-+");
     }
@@ -267,8 +276,9 @@ int main() {
         StubSession       t;
         std::string       out;
         const std::string big(GdbStubTestAccess::kMaxPacketSize, 'a');
-        t.send(frame(big));
+        auto              writer = t.send_async(frame(big));
         CHECK(GdbStubTestAccess::recv_packet(t.stub, out) == Recv::Packet);
+        writer.join();
         CHECK(out == big);
         CHECK(t.receive(1) == "+");
     }
