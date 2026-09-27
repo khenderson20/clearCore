@@ -7,8 +7,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > **How this file stays current:** [release-drafter](https://github.com/release-drafter/release-drafter) collects
 > merged PR titles into a draft GitHub Release on every push to `main`. When a release is published, the
-> `update-changelog.yml` workflow promotes the `[Unreleased]` section to a versioned entry and commits back to
-> `develop` automatically. Label PRs with the categories below so they land in the right section.
+> `update-changelog.yml` workflow promotes the `[Unreleased]` section to a versioned entry and opens a pull
+> request into `main` with it. Label PRs with the categories below so they land in the right section.
 >
 > | Label            | CHANGELOG section  |
 > |------------------|--------------------|
@@ -23,6 +23,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ---
 
 ## [Unreleased]
+
+### CI / Internal
+- **Trunk-based development: `main` is the only long-lived branch.** Pull requests branch from and target
+  `main`; `develop` and the release-promotion machinery are gone. Release promotions were squash-merged, so
+  `develop` never became an ancestor of `main`: release PRs went out of date or conflicted and needed
+  admin-bypassed back-merges (#222, #252, #253, #262), and release-drafter saw only the `skip-changelog`
+  promotion PR, so the v0.3.6 notes left out every PR merged into `develop` and the v0.3.7 draft read
+  "No changes". `release-pr.yml` is removed, `update-changelog.yml` opens its PR into `main` and dispatches
+  the required-check workflows on it, and every workflow trigger drops `develop`. Branch protection is one
+  ruleset on `main`, the only branch OpenSSF Scorecard and the OSPS Baseline evaluate.
 
 ---
 

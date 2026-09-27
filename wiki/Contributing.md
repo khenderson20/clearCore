@@ -3,17 +3,17 @@
 ## Workflow
 
 1. Fork the repository
-2. Create a feature branch from `develop` with a descriptive name
+2. Create a feature branch from `main` with a descriptive name
 3. Make your changes, ensuring existing tests still pass
 4. Add new tests covering your changes
 5. Run `ctest --preset debug` (or `ctest --preset asan`) to verify all tests pass
-6. Open a pull request targeting the `develop` branch
+6. Open a pull request targeting the `main` branch
 
 ## CI workflows
 
 This is the canonical list of what runs when — if you're checking a trigger condition, check here rather than README.md, which only summarizes.
 
-CI (`.github/workflows/ci.yml`) runs four jobs on every push and PR to `main` or `develop`: a `clang-format` check, a coverage build uploaded to Codecov (push events, or same-repo PRs — not fork PRs), a fast core-only test matrix (Debug and Debug+ASan/UBSan), and a full build exercising both Qt6 GUIs and Nyxstone (skipped for draft PRs). Additional workflows run under narrower conditions:
+CI (`.github/workflows/ci.yml`) runs four jobs on every push and PR to `main`: a `clang-format` check, a coverage build uploaded to Codecov (push events, or same-repo PRs — not fork PRs), a fast core-only test matrix (Debug and Debug+ASan/UBSan), and a full build exercising both Qt6 GUIs and Nyxstone (skipped for draft PRs). Additional workflows run under narrower conditions:
 
 | Workflow                    | Trigger                                                        | Purpose                                                                                  |
 |-----------------------------|-----------------------------------------------------------------|-------------------------------------------------------------------------------------------|

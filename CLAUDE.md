@@ -194,24 +194,30 @@ ctest --preset core-only      # TUI + core only, no Qt
 
 ## Git Workflow
 
-- **Always branch from `develop`**; PRs target `develop`, not `main`.
-- `Closes #N` in a PR body does **not** close the issue: GitHub only auto-closes on a merge to the
-  default branch, and PRs here target `develop` while `main` is the default. Close the issue by hand
-  when the fix lands on `develop`, or let the release-promotion PR close it.
-- **The release PR comes from `chore/release-promotion`, not `develop`.** `release-pr.yml` keeps
-  that branch as `develop` with `main` merged in, so the PR stays up to date and conflict-free;
-  squash-merge it to release. If it does show a conflict, fix it on that branch (**Resolve
-  conflicts** on the PR, or locally): never merge `main` into `develop` and never close the PR
-  for it. The branch is bot-owned: deleting it is fine (it is re-seeded from the last release
-  PR's head), recreating it by hand is not.
+- **Trunk-based: `main` is the only long-lived branch.** Branch from `main`, open the PR against
+  `main`, squash-merge it. Do not reintroduce a `develop` branch or a release-promotion PR:
+  squash-promoting `develop` into `main` never made `develop` an ancestor of `main`, so every
+  release PR went out of date or conflicted, and release-drafter saw only the promotion PR
+  instead of the PRs it carried.
+- **`main`'s ruleset** (the only one): no direct pushes, no force-push or deletion, squash merges
+  only, and required status checks that must be up to date with `main`. The repository-admin
+  bypass is *for pull requests only*: it can merge a PR past a stuck check but cannot push.
+  Only require a check that runs on **every** PR — a path-filtered workflow (`zizmor`,
+  `dependency-review`, `cflite_pr`) never reports on a PR outside its paths, and that PR can
+  then never merge.
+- **Releasing:** release-drafter keeps a draft release current from the PRs merged into `main`.
+  Dispatch `cross-platform.yml` on `main` (see below), then publish the draft.
 - Branch naming: `feature/`, `fix/`, `chore/`, `refactor/`, `docs/` prefixes.
-- Label PRs so release-drafter categorises them:
+- Label PRs so release-drafter categorises them; the labels also pick the version bump
+  (`feature` → minor, `breaking-change` → major, anything else → patch):
   `feature`, `enhancement`, `bug`, `security`, `documentation`, `dependencies`, `ci`.
 - **Strict SemVer**: new user-visible capability → `MINOR` bump; bug fix → `PATCH` bump.
   Never bump only PATCH for a feature.
 - **Version numbers are automated.** `update-changelog.yml` aligns `CHANGELOG.md`,
   `CITATION.cff` (`version` + `date-released`) and the README BibTeX `version` with the tag on
-  `release: published`, and opens a PR into `develop`. Do not bump them by hand.
+  `release: published`, and opens a PR into `main`. Its `GITHUB_TOKEN` push starts no CI, so it
+  dispatches `ci.yml` and `gitleaks.yml` on the PR branch for the required checks. Do not bump
+  them by hand.
   The `doi:` field is Zenodo's **concept** DOI — version-independent by design, never bumped.
 - Prose still needs a human: when updating README/About framing, update the `CITATION.cff`
   title and abstract and the BibTeX title in the same commit before pushing.
@@ -245,29 +251,28 @@ they never queue behind or cancel one another.
 
 | File                    | Trigger                               | What it does                                                                                                        |
 |-------------------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| `ci.yml`                | push/PR → `main`/`develop`, `workflow_dispatch` | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
-| `codeql.yml`            | push/PR → `main`/`develop`, weekly    | CodeQL C++ + Actions scan; no ccache (would hide code from extractor)                                               |
+| `ci.yml`                | push/PR → `main`, `workflow_dispatch` | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
+| `codeql.yml`            | push/PR → `main`, weekly              | CodeQL C++ + Actions scan; no ccache (would hide code from extractor)                                               |
 | `cross-platform.yml`    | release publish, `workflow_dispatch`  | Windows NSIS installer + macOS universal DMG; bundles Qt via windeployqt/macdeployqt                                |
 | `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries; generates an SPDX SBOM                        |
 | `appimage.yml`          | release publish, `workflow_dispatch`  | Self-contained Linux AppImage via linuxdeploy; smoke-tests GUI + TUI                                                |
-| `release-pr.yml`        | push → `develop`/`main`, `workflow_dispatch` | Keeps the release PR into `main` open from `chore/release-promotion` (`develop` with `main` merged in); dispatches `ci.yml` + `gitleaks.yml` on it, as its `GITHUB_TOKEN` pushes start no CI |
 | `release-drafter.yml`   | push → `main`                         | Drafts the next GitHub release from merged PR titles                                                                |
-| `update-changelog.yml`  | release publish                       | Promotes `[Unreleased]` → versioned entry in CHANGELOG.md; opens a PR to `develop`                                  |
+| `update-changelog.yml`  | release publish                       | Promotes `[Unreleased]` → versioned entry in CHANGELOG.md; opens a PR to `main` and dispatches `ci.yml` + `gitleaks.yml` on it |
 | `scorecard.yml`         | push → `main`, weekly                 | OpenSSF supply-chain score (feeds README badge)                                                                     |
 | `dependency-review.yml` | PR that touches `.github/workflows/`  | Flags known-vulnerable action versions (the dependency graph cannot parse CMake FetchContent)                       |
-| `cflite_pr.yml`         | PR → `main`/`develop` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing of the targets the change affects (per `cifuzz-coverage`)                |
+| `cflite_pr.yml`         | PR → `main` touching src/include/fuzz | ClusterFuzzLite 120 s PR fuzzing of the targets the change affects (per `cifuzz-coverage`)                |
 | `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch (shares a lock with prune)           |
 | `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
 | `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage report from `cifuzz-corpus`, pushed to `cifuzz-coverage` and uploaded as an artifact               |
-| `zizmor.yml`            | push/PR → `main`/`develop`            | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
-| `gitleaks.yml`          | push/PR → `main`/`develop`, `workflow_dispatch` | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
+| `zizmor.yml`            | push/PR → `main`                      | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
+| `gitleaks.yml`          | push/PR → `main`, `workflow_dispatch` | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
 
 ### ci.yml job map
 
 ```mermaid
 flowchart LR
-    TRIG["push / PR<br/>main · develop"]
+    TRIG["push / PR<br/>main"]
 
     TRIG --> FMT["<b>format</b><br/>clang-format-22<br/>annotates PR violations"]
     TRIG --> COV["<b>coverage</b><br/>push + same-repo PRs<br/>gcovr → Codecov OIDC<br/>core-only preset"]
@@ -293,7 +298,7 @@ Coverage is wired end to end; there is no outstanding setup. The `coverage` job 
   (Cobertura format)
 - Uploads via `codecov/codecov-action` with `use_oidc: true` — **no `CODECOV_TOKEN` secret is
   needed**; the job already holds `id-token: write`
-- Runs on pushes to `main`/`develop` and on PRs from this repo. Fork PRs are skipped on purpose:
+- Runs on pushes to `main` and on PRs from this repo. Fork PRs are skipped on purpose:
   they have no OIDC token, so the upload would fail silently
 
 Gates and scope live in `codecov.yml` at the repo root — project 60 % (2 % drop tolerated), patch

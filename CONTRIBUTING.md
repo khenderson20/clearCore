@@ -10,7 +10,7 @@ The full contributor guide lives in the wiki:
 ## Quick start
 
 1. Fork the repository.
-2. Create a feature branch **from `develop`** (not `main`) with a descriptive name,
+2. Create a feature branch **from `main`** with a descriptive name,
    e.g. `feat/branch-predictor` or `fix/decoder-signext`.
 3. Make your changes, keeping core libraries (`nsc_core`, `mips_core`) free of any
    UI headers — see the [code style rules](https://github.com/khenderson20/clearCore/wiki/Contributing#code-style).
@@ -30,7 +30,7 @@ The full contributor guide lives in the wiki:
    cmake --build --preset debug
    ctest --preset debug        # or: ctest --preset asan
    ```
-6. Open a pull request **targeting `develop`**. Fill out the PR template so
+6. Open a pull request **targeting `main`**. Fill out the PR template so
    reviewers can see what changed and how it was verified.
 
 ## Before you open a PR

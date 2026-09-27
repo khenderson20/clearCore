@@ -19,15 +19,15 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     # ready_for_review is not in the default set. Without it, full-build (skipped
     # on drafts) never ran on a PR opened as a draft until its next push, and a
     # skipped job still satisfies a required check.
     types: [opened, synchronize, reopened, ready_for_review]
-  # release-pr.yml pushes chore/release-promotion with GITHUB_TOKEN, which starts no
-  # push or pull_request runs, so it dispatches this workflow there for the required checks.
+  # update-changelog.yml pushes its PR branch with GITHUB_TOKEN, which starts no push
+  # or pull_request runs, so it dispatches this workflow there for the required checks.
   workflow_dispatch:
 
 permissions:
@@ -84,7 +84,7 @@ jobs:
         run: exit 1
 
   coverage:
-    # Push to main/develop always runs. PRs from forks lack the id-token needed
+    # Push to main always runs. PRs from forks lack the id-token needed
     # for OIDC, so restrict to same-repo PRs only to avoid silent upload failures.
     if: >
       github.event_name == 'push' ||

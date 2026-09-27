@@ -3,14 +3,14 @@
 # cflite_pr.yml only fuzzes code touched by a PR for 120s — bugs only surface
 # if a PR happens to touch the exact vulnerable path. This runs the existing
 # fuzz targets (tests/fuzz/) for much longer on a schedule, against the
-# current develop HEAD, so bugs pre-existing in the MIPS decoder/parser get
+# current main HEAD, so bugs pre-existing in the MIPS decoder/parser get
 # found even when no PR exercises them, and builds up a corpus for
 # cflite_pr.yml / cflite_cov.yml to reuse.
 #
 # Corpus storage: pushed to the `cifuzz-corpus` branch of this same repo
 # (rather than a separate storage repo) using the job's own GITHUB_TOKEN, so
 # no extra PAT/secret is needed. That branch carries no source code and isn't
-# covered by the main/develop branch rulesets, so direct pushes are fine.
+# covered by the main branch ruleset, so direct pushes are fine.
 name: ClusterFuzzLite batch fuzzing
 
 on:
