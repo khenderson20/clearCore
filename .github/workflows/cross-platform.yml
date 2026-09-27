@@ -7,7 +7,7 @@ name: Cross-platform build
 # Two jobs:
 #   core-only : fast pre-merge safety net. core-only preset (no Qt, no LLVM,
 #               configures in about a minute), build + test on every PR and
-#               push to main/develop. Catches MSVC/AppleClang divergences
+#               push to main. Catches MSVC/AppleClang divergences
 #               (narrowing conversions, two-phase lookup, /W4 vs -Wextra)
 #               on a PR instead of after a release is already published.
 #   build     : the full signed-installer matrix — Qt-bundled NSIS/DragNDrop
@@ -36,9 +36,9 @@ on:
   release:
     types: [ published ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 permissions:
   id-token: write

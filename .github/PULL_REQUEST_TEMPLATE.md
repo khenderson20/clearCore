@@ -1,6 +1,6 @@
 <!--
 Thanks for contributing to clearCore!
-PRs should target the `develop` branch. See CONTRIBUTING.md for the full guide.
+PRs should target the `main` branch. See CONTRIBUTING.md for the full guide.
 -->
 
 ## Summary
@@ -30,7 +30,7 @@ PRs should target the `develop` branch. See CONTRIBUTING.md for the full guide.
 
 ## Checklist
 
-- [ ] Branch is based on and targets `develop`
+- [ ] Branch is based on and targets `main`
 - [ ] Code is `clang-format`-clean
 - [ ] Core libraries (`nsc_core`, `mips_core`) include no UI headers
 - [ ] Docs / CHANGELOG updated if the change is user-facing

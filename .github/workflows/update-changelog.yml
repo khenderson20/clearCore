@@ -8,7 +8,9 @@ name: Update release metadata
 #   README.md     the BibTeX block's version field
 #   wiki/Home.md  the version printed in the stats line
 #
-# The result is opened as a PR into develop (the ruleset blocks direct pushes).
+# The result is opened as a PR into main (the ruleset blocks direct pushes). Its
+# GITHUB_TOKEN push starts no workflows, so the job then dispatches ci.yml and
+# gitleaks.yml on the PR branch; their check runs are what the ruleset requires.
 #
 # Before this existed the metadata drifted silently: at v0.3.5 the CITATION.cff
 # still said 0.3.4 and the README BibTeX said 0.1.0 (#211).
@@ -26,6 +28,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write        # dispatch the required-check workflows on the PR branch
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -35,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: develop
+          ref: main
           # persist-credentials stays true (default): the "Open a pull request"
           # step below does `git push` using the credential helper this checkout
           # sets up. Token is the job-scoped GITHUB_TOKEN (contents: write), not
@@ -125,8 +128,8 @@ jobs:
           EOF
 
       - name: Open a pull request with the release-metadata updates
-        # The develop branch ruleset forbids direct pushes ("changes must be made
-        # through a pull request"), so open a PR instead of pushing to develop.
+        # The main branch ruleset forbids direct pushes ("changes must be made
+        # through a pull request"), so open a PR instead of pushing to main.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -144,9 +147,14 @@ jobs:
           git push --force-with-lease origin "$branch"
           # skip-changelog: this promotion PR should not appear in the next release's notes.
           gh pr create \
-            --base develop \
+            --base main \
             --head "$branch" \
             --title "chore: align release metadata for ${RELEASE_TAG}" \
-            --body "Automated release-metadata update for ${RELEASE_TAG}, opened by \`update-changelog.yml\` (direct pushes to \`develop\` are blocked by the branch ruleset). Promotes the CHANGELOG's [Unreleased] section and aligns \`CITATION.cff\` and the README BibTeX with the tag. The Zenodo concept DOI is intentionally left unchanged." \
+            --body "Automated release-metadata update for ${RELEASE_TAG}, opened by \`update-changelog.yml\` (direct pushes to \`main\` are blocked by the branch ruleset). Promotes the CHANGELOG's [Unreleased] section and aligns \`CITATION.cff\` and the README BibTeX with the tag. The Zenodo concept DOI is intentionally left unchanged." \
             --label skip-changelog \
             || echo "PR already exists for $branch"
+          # Only once the PR exists: code scanning reports the gitleaks result only on
+          # a commit that heads an open PR.
+          for wf in ci.yml gitleaks.yml; do
+            gh workflow run "$wf" --ref "$branch"
+          done
