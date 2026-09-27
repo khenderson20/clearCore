@@ -350,6 +350,74 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      # NSIS writes Uninstall.exe to disk on the *end user's* machine at
+      # install time (WriteUninstaller), not as a build artifact, so neither
+      # signing pass above ever touches it. Left unsigned, it's the one
+      # binary Defender's ASR rule can still block post-install -- same
+      # "Windows cannot access the specified device, path, or file" symptom
+      # as an unsigned app exe, just discovered later, on Uninstall.exe (see
+      # wiki/Windows-Code-Signing.md). NSIS's own `!uninstfinalize` hook runs
+      # a command against the uninstaller stub right after makensis compiles
+      # it internally (inside the Package step below), before it's embedded
+      # as a resource blob in the installer -- the only point it can be
+      # signed, since WriteUninstaller later copies those exact bytes out
+      # unchanged. This step only fetches the tools that command needs; the
+      # Azure OIDC session from "Azure login" above covers its actual
+      # signtool call, which fires later, during Package.
+      - name: Prepare NSIS uninstaller signing (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        env:
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe not found under Windows Kits (expected the Windows SDK bundled with the VS toolchain)' }
+          Write-Host "signtool: $($signtool.FullName)"
+
+          # Pinned rather than fetched via `nuget install` so a compromised or
+          # yanked package can't silently swap in a different dlib -- same
+          # supply-chain discipline as "Ensure NSIS" above. To bump: download
+          # microsoft.artifactsigning.client.<ver>.nupkg from
+          # https://www.nuget.org/packages/Microsoft.ArtifactSigning.Client
+          # and update both values below (`sha256sum <file>.nupkg`).
+          $dlibVersion = '1.0.128'
+          $dlibSha256  = '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40'
+          $tmp = Join-Path $env:RUNNER_TEMP 'artifact-signing-client'
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $nupkg = Join-Path $tmp 'package.nupkg'
+          Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/$dlibVersion/microsoft.artifactsigning.client.$dlibVersion.nupkg" -OutFile $nupkg
+          $actualHash = (Get-FileHash $nupkg -Algorithm SHA256).Hash
+          if ($actualHash -ne $dlibSha256) { throw "Microsoft.ArtifactSigning.Client hash mismatch: expected $dlibSha256, got $actualHash" }
+          Copy-Item $nupkg (Join-Path $tmp 'package.zip')
+          Expand-Archive -Path (Join-Path $tmp 'package.zip') -DestinationPath $tmp -Force
+
+          $dlib = Get-ChildItem $tmp -Recurse -Filter 'Azure.CodeSigning.Dlib.dll' |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (-not $dlib) {
+            Write-Error 'Azure.CodeSigning.Dlib.dll not found anywhere under the extracted package'
+            Get-ChildItem $tmp -Recurse -File | Select-Object -First 100 FullName
+            exit 1
+          }
+          Write-Host "dlib: $($dlib.FullName)"
+
+          $metadataPath = Join-Path $tmp 'metadata.json'
+          @{
+            Endpoint               = $env:AZURE_SIGNING_ENDPOINT
+            CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
+            CertificateProfileName = $env:AZURE_SIGNING_PROFILE
+          } | ConvertTo-Json | Set-Content -Path $metadataPath -Encoding utf8
+
+          # %1 is substituted by NSIS with the path to the generated
+          # uninstaller stub; NSIS does not quote it, so the command must.
+          $signCmd = '"' + $signtool.FullName + '" sign /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "' + $dlib.FullName + '" /dmdf "' + $metadataPath + '" "%1"'
+          $define = "!uninstfinalize '$signCmd'"
+          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$define"
+
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
       # Versioned, arch-labelled filenames; version comes from the release tag
       # (published release or backfill) or a dev placeholder (test dispatch).
@@ -369,9 +437,14 @@ jobs:
           else
             generator="DragNDrop"; name="clearCore-${version}-macOS-universal"
           fi
+          extra_defines=()
+          if [ -n "${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE:-}" ]; then
+            extra_defines+=(-D "CPACK_NSIS_DEFINES=${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE}")
+          fi
           cpack -G "$generator" \
                 -D CPACK_PACKAGE_VERSION="$version" \
-                -D CPACK_PACKAGE_FILE_NAME="$name" -V
+                -D CPACK_PACKAGE_FILE_NAME="$name" \
+                "${extra_defines[@]}" -V
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
@@ -397,6 +470,7 @@ jobs:
         shell: pwsh
         env:
           PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          SIGNING_CONFIGURED: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $installer = Join-Path $env:GITHUB_WORKSPACE "build\release\$env:PACKAGE_NAME.exe"
@@ -433,6 +507,22 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $instDir 'Uninstall.exe'))) { throw 'Uninstall.exe was not installed' }
           if (-not (Test-Path $menuDir))            { throw 'Start Menu shortcuts were not created' }
+
+          # Regression guard for the Uninstall.exe signing gap: every one of
+          # these used to pass -- both before and after that bug existed --
+          # because nothing here checked signatures. Only meaningful when
+          # signing is actually configured; an unsigned build ships on
+          # purpose otherwise (see wiki/Windows-Code-Signing.md).
+          if ($env:SIGNING_CONFIGURED -eq 'true') {
+            $toVerify = @(Get-ChildItem $instDir -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue) |
+              Where-Object { $_.Name -ne 'vc_redist.x64.exe' }
+            foreach ($exe in $toVerify) {
+              $sig = Get-AuthenticodeSignature $exe.FullName
+              if ($sig.Status -ne 'Valid') {
+                throw "$($exe.FullName) is not validly signed (status: $($sig.Status))"
+              }
+            }
+          }
           if (-not (Get-ClearCoreEntries)) {
             Get-ChildItem $uninstKeys -ErrorAction SilentlyContinue |
               ForEach-Object { '{0} = {1}' -f $_.Name, (Get-ItemProperty $_.PSPath).DisplayName } |

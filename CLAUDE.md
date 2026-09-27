@@ -343,6 +343,16 @@ Windows-specific hazards, all currently handled in-file:
    of that entry must read both registry views; reading only the 64-bit one failed the v0.3.6
    release build and kept the Windows installer off that release.
 
+6. **Unsigned uninstaller** — `Uninstall.exe` is not a build artifact; NSIS writes it to disk on
+   the *end user's* machine at install time (`WriteUninstaller`), so it exists for neither the
+   pre-`cpack` app-binary signing pass nor the post-`cpack` installer signing pass to catch. Left
+   unsigned, Defender's ASR rule blocks it exactly like an unsigned app exe, just discovered later
+   — on a real machine, as "Windows cannot access the specified device, path, or file" from
+   Add/Remove Programs. Signed instead via NSIS's `!uninstfinalize` hook, which runs a `signtool`
+   command against the uninstaller *stub* at `cpack`/`makensis` compile time, before it's embedded
+   as a resource blob — see the "Prepare NSIS uninstaller signing (Windows)" step and
+   `wiki/Windows-Code-Signing.md`.
+
 **To diagnose a failure:** open the run on GitHub → expand each step → the first red step is the
 cause. `gh run view <id> --log | grep "^windows-x64"` filters to the Windows leg.
 
