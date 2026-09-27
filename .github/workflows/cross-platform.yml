@@ -256,19 +256,21 @@ jobs:
       # it internally (inside the Package step below), before it's embedded
       # as a resource blob in the installer -- the only point it can be
       # signed, since WriteUninstaller later copies those exact bytes out
-      # unchanged. This step only fetches the tools that command needs and
-      # exports the resulting NSIS directive as CLEARCORE_NSIS_UNINSTALLER_
-      # SIGN_DEFINE, consumed by "Configure (Windows)" below; the Azure OIDC
-      # session from the later "Azure login" step covers the command's actual
-      # signtool call, which doesn't fire until Package, well after login.
+      # unchanged. The Azure OIDC session from the later "Azure login" step
+      # covers the command's actual signtool call, which doesn't fire until
+      # Package, well after login.
       #
-      # This has to run through pwsh, and CPACK_NSIS_DEFINES has to be set at
-      # `cmake configure` time rather than passed to `cpack -D` at package
-      # time: the value contains /fd, /tr, /td, /dlib, /dmdf -- Git Bash's
-      # MSYS layer rewrites lone `/word` tokens into Windows paths exactly
-      # like the `/S` NSIS flag above, silently corrupting the define so
-      # !uninstfinalize never made it into project.nsi. pwsh's native-process
-      # argument marshalling doesn't do that POSIX-path guessing.
+      # `!uninstfinalize` is delivered via nsisconf.nsh, not CPACK_NSIS_DEFINES:
+      # this project's NSIS package uses CPack COMPONENT installs (headers,
+      # license, applications), and cmCPackNSISGenerator.cxx unconditionally
+      # calls SetOption("CPACK_NSIS_DEFINES", ...) in its component-install
+      # branch -- overwriting anything set via `-D`, cache or CPackConfig.cmake,
+      # right before the NSIS.template.in substitution runs. No amount of
+      # correct escaping gets past that; the value never reaches project.nsi
+      # regardless of which shell sets it. nsisconf.nsh sidesteps CPack's
+      # variable plumbing entirely: makensis auto-`!include`s it from its own
+      # install directory before compiling any script, unless invoked with
+      # `/NOCONFIG` (CPack's NSIS generator doesn't pass that flag).
       - name: Prepare NSIS uninstaller signing (Windows)
         if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
         shell: pwsh
@@ -310,11 +312,27 @@ jobs:
           }
           Write-Host "dlib: $($dlib.FullName)"
 
+          # Excludes the same credential sources "Sign application binaries"
+          # (the azure/trusted-signing-action step, below) already excludes on
+          # this exact runner -- narrows DefaultAzureCredential down to the
+          # environment/OIDC and Azure CLI credentials the "Azure login" step
+          # actually sets up, instead of probing (and potentially hanging on)
+          # managed identity, Visual Studio, or interactive browser auth.
           $metadataPath = Join-Path $tmp 'metadata.json'
           @{
             Endpoint               = $env:AZURE_SIGNING_ENDPOINT
             CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
             CertificateProfileName = $env:AZURE_SIGNING_PROFILE
+            ExcludeCredentials     = @(
+              'ManagedIdentityCredential',
+              'WorkloadIdentityCredential',
+              'SharedTokenCacheCredential',
+              'VisualStudioCredential',
+              'VisualStudioCodeCredential',
+              'AzurePowerShellCredential',
+              'AzureDeveloperCliCredential',
+              'InteractiveBrowserCredential'
+            )
           } | ConvertTo-Json | Set-Content -Path $metadataPath -Encoding utf8
 
           # %1 is substituted by NSIS with the path to the generated
@@ -322,39 +340,20 @@ jobs:
           $signCmd = '"' + $signtool.FullName + '" sign /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "' + $dlib.FullName + '" /dmdf "' + $metadataPath + '" "%1"'
           $define = "!uninstfinalize '$signCmd'"
 
-          # CPack writes CPACK_NSIS_DEFINES into the generated CPackConfig.cmake
-          # as a plain `set(CPACK_NSIS_DEFINES "<value>")` line with no escaping
-          # of its own, then `cpack` later re-reads that file as ordinary CMake
-          # code -- where backslashes and quotes ARE escape-significant. A raw
-          # Windows path or embedded quote in $define therefore breaks CMake's
-          # own string-literal parser ("Invalid character escape '\P'") when
-          # cpack runs, even though the value passed the initial `cmake -D`
-          # configure step untouched. Escaping here so the value round-trips
-          # through exactly one extra layer of CMake string parsing back to
-          # the original text by the time NSIS sees it.
-          $cmakeEscaped = $define -replace '\\', '\\' -replace '"', '\"'
-          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$cmakeEscaped"
+          # Written straight into NSIS's own auto-included config file -- see
+          # the comment above this step for why CPACK_NSIS_DEFINES can't carry
+          # this. Plain NSIS script text, no CMake involved, so no escaping.
+          # Same install directory "Ensure NSIS" (above) installed into.
+          $nsisConfPath = "${env:ProgramFiles(x86)}\NSIS\nsisconf.nsh"
+          Add-Content -Path $nsisConfPath -Value $define
+          Write-Host "wrote to ${nsisConfPath}:"
+          Write-Host $define
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cmake --preset release `
-            -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON `
-            -DCPACK_NSIS_DEFINES="$env:CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE"
-
-      # TEMPORARY diagnostic -- cheap, fast check (no build needed) of exactly
-      # what landed in the generated CPackConfig.cmake right after configure,
-      # to localize where the value is getting lost/mangled. Removed once the
-      # uninstaller signing gap is confirmed working end to end.
-      - name: DEBUG CPackConfig.cmake (Windows)
-        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
-        shell: pwsh
-        run: |
-          Write-Host "=== CPACK_NSIS_DEFINES cache entry ==="
-          Select-String -Path build\release\CMakeCache.txt -Pattern 'CPACK_NSIS_DEFINES'
-          Write-Host "=== CPackConfig.cmake line(s) ==="
-          Select-String -Path build\release\CPackConfig.cmake -Pattern 'CPACK_NSIS_DEFINES'
+        run: >
+          cmake --preset release
+          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
 
       - name: Configure (macOS, universal)
         if: runner.os == 'macOS'
@@ -483,16 +482,18 @@ jobs:
 
       # TEMPORARY diagnostic -- CPack's NSIS generator doesn't surface
       # makensis's own stdout when it exits 0, so there's no visibility into
-      # whether !uninstfinalize actually ran. Removed once the uninstaller
-      # signing gap is confirmed working end to end.
+      # whether !uninstfinalize actually ran. !uninstfinalize now lives in
+      # nsisconf.nsh (auto-included by makensis), not project.nsi itself, so
+      # this checks nsisconf.nsh directly and re-runs makensis to surface its
+      # actual signtool output. Removed once confirmed working end to end.
       - name: DEBUG uninstfinalize (Windows)
         if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
         shell: pwsh
         run: |
+          Write-Host "=== nsisconf.nsh content ==="
+          Get-Content "C:\Program Files (x86)\NSIS\nsisconf.nsh" -ErrorAction SilentlyContinue
           $nsi = Get-ChildItem -Recurse -Path build\release\_CPack_Packages -Filter 'project.nsi' | Select-Object -First 1
           if (-not $nsi) { Write-Host "project.nsi not found"; exit 0 }
-          Write-Host "=== project.nsi: uninstfinalize line(s) ==="
-          Select-String -Path $nsi.FullName -Pattern 'uninstfinalize' -SimpleMatch
           Write-Host "=== re-running makensis /V4 to capture its own output ==="
           $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
           & $makensis /V4 $nsi.FullName 2>&1 | Tee-Object -Variable nsisOutput | Out-Null
