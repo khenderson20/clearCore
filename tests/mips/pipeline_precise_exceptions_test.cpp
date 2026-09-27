@@ -29,11 +29,16 @@ constexpr uint32_t R(uint32_t rs, uint32_t rt, uint32_t rd, uint32_t shamt, uint
 constexpr uint32_t I(uint32_t op, uint32_t rs, uint32_t rt, uint16_t imm) {
     return (op << 26) | (rs << 21) | (rt << 16) | imm;
 }
-constexpr uint32_t zero = 0, t0 = 8, t1 = 9;
+constexpr uint32_t zero = 0, t0 = 8, t1 = 9, t2 = 10;
 constexpr uint32_t ADDI = 0x08, BEQ = 0x04, LW = 0x23;
 constexpr uint32_t F_JR     = 0x08;
 constexpr uint32_t SYSCALL  = 0x0C;
 constexpr uint32_t kIllegal = 0xFFFF'FFFFu;  // opcode 0x3F: not decodable
+
+// mtc0 $rt, $rd — COP0 opcode, MT sub-op in the rs field.
+constexpr uint32_t mtc0(uint32_t rt, uint32_t rd) {
+    return (0x10u << 26) | (0x04u << 21) | (rt << 16) | (rd << 11);
+}
 
 // `j` to its own address: the project's halt idiom.
 constexpr uint32_t halt_at(uint32_t byte_addr) {
@@ -119,11 +124,35 @@ static void test_older_fault_wins_over_younger_syscall() {
     CHECK(pl.cp0().epc() == 4u);
 }
 
+// A faulting load (MEM) with an MTC0 right behind it (EX): the MTC0 is squashed
+// with everything younger than the fault, so it must not write CP0 either.
+static void test_squashed_mtc0_writes_no_cp0_register() {
+    using namespace enc;
+    const std::vector<uint32_t> prog = {I(ADDI, zero, t0, 1),             // t0 = 1 (misaligned)
+                                        I(ADDI, zero, t2, 1),             // t2 = Status.IE
+                                        I(LW, t0, t1, 0),                 // AdEL in MEM
+                                        mtc0(t2, mips::Cp0::kRegStatus),  // in EX, same cycle
+                                        halt_at(16)};
+    mips::SingleCycleCpu        sc(1u << 12);
+    mips::PipelinedCpu          pl(1u << 12);
+    for (mips::IProcessor* cpu :
+         {static_cast<mips::IProcessor*>(&sc), static_cast<mips::IProcessor*>(&pl)}) {
+        CHECK(cpu->load_program(prog, 0));
+        CHECK(run_to_stop(*cpu) == mips::StepResult::Exception);
+    }
+    // Exception entry sets only EXL; a leaked MTC0 would also have set IE (bit 0).
+    CHECK(sc.cp0().status() == mips::Cp0::kStatusEXL);  // oracle
+    CHECK(pl.cp0().status() == mips::Cp0::kStatusEXL);
+    CHECK(pl.cp0().last_exception() == mips::ExceptionCode::AdEL);
+    CHECK(pl.cp0().epc() == 8u);
+}
+
 int main() {
     test_taken_branch_over_illegal_word();
     test_jr_over_illegal_words();
     test_taken_branch_wrong_path_fetch_past_end();
     test_older_fault_wins_over_younger_syscall();
+    test_squashed_mtc0_writes_no_cp0_register();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
