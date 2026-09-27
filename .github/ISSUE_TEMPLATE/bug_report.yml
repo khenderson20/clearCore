@@ -1,49 +1,68 @@
+# Written in ASD-STE100 Simplified Technical English: short sentences, active
+# voice, one instruction in each sentence. Keep that style when you edit this form.
 name: Bug report
-description: Report a reproducible defect in clearCore
+description: Tell us about a defect in clearCore. Give the steps that cause it.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the sections below so we can
-        reproduce and fix it quickly. For questions or ideas, use the **Custom
-        issue** template or [Discussions](https://github.com/khenderson20/clearCore/discussions) instead.
+        Use this form for one defect only.
+        Write short sentences. Write one action in each step.
+        Do not use this form for a security problem. Use the private "Security vulnerability" link on the "New issue" page.
 
   - type: checkboxes
     id: preflight
     attributes:
-      label: Preflight checklist
+      label: Before you send the report
       options:
-        - label: I searched existing issues (open and closed) and this is not a duplicate.
+        - label: I searched the open and the closed issues. No issue records this defect.
           required: true
-        - label: I am running the latest release or `main`, or I've noted my version below.
+        - label: I use the latest release or the `main` branch. If not, I give my version in "Environment".
           required: true
 
   - type: textarea
     id: summary
     attributes:
-      label: What happened?
-      description: A clear and concise description of the bug and what you expected instead.
-      placeholder: |
-        When I ..., clearCore does X. I expected it to do Y.
+      label: Summary
+      description: Tell what occurs. Use one or two sentences.
+      placeholder: When I step a `lw` instruction in the pipelined model, the Registers panel shows an incorrect value.
     validations:
       required: true
 
   - type: textarea
-    id: repro
+    id: steps
     attributes:
-      label: Steps to reproduce
-      description: Minimal, exact steps. Include an assembly snippet or ELF if relevant.
+      label: Steps that cause the defect
+      description: Write one action in each step. If the defect occurs only with a program, include the program.
       placeholder: |
-        1. Start clearCore with `...`
-        2. Load / type this program:
+        1. Start `clearCore-gui`.
+        2. Type this program in the Code Editor:
            ```mips
            addi $t0, $zero, 5
-           ...
+           lw   $t1, 0($t0)
            ```
-        3. Step / run to ...
-        4. See error
+        3. Click Assemble. Then click Load.
+        4. Click Step two times.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Correct result
+      description: Tell what must occur.
+      placeholder: The Registers panel shows `$t0 = 0x00000005`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Result that occurs
+      description: Tell what occurs. If clearCore shows an error, copy the error text.
+      placeholder: The Registers panel shows `$t0 = 0x00000000`.
     validations:
       required: true
 
@@ -51,17 +70,31 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of clearCore is affected? (Note the engine — single-cycle or pipeline — in the repro steps if relevant.)
+      description: Select the part of clearCore that has the defect.
       options:
         - Core / simulation engine
+        - Assembler
         - Terminal UI (FTXUI)
         - Qt6 Widgets GUI
         - Qt Quick / QML GUI
-        - GDB remote stub / debugging
+        - GDB remote stub
         - Number-system converter
         - Build system / CI
         - Documentation
-        - Other / not sure
+        - Other / not known
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: CPU model
+      description: Select the CPU model that has the defect.
+      options:
+        - Pipelined (5-stage)
+        - Single-cycle
+        - Both models
+        - Not applicable
     validations:
       required: true
 
@@ -69,21 +102,21 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Run `cmake --version` and note your compiler/OS. Qt version only if using a GUI.
+      description: Give the versions. Run `cmake --version` to get the CMake version.
       placeholder: |
-        - clearCore version / commit:
-        - OS:
-        - Compiler (GCC/Clang + version):
+        - clearCore version or commit:
+        - Operating system:
+        - Compiler and version:
         - CMake version:
-        - Qt version (if applicable):
+        - Qt version (GUI only):
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: Logs, backtrace, or screenshots
-      description: Paste relevant output. Terminal logs are automatically formatted, no backticks needed.
+      label: Log, backtrace or screenshot
+      description: Paste the output. The form shows it as code. Attach a screenshot below the output.
       render: shell
     validations:
       required: false

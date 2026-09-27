@@ -1,47 +1,61 @@
+# Written in ASD-STE100 Simplified Technical English: short sentences, active
+# voice, one instruction in each sentence. Keep that style when you edit this form.
 name: Feature request
-description: Suggest a new capability or improvement for clearCore
+description: Ask for a new capability in clearCore.
 title: "[Feature]: "
-labels: ["enhancement"]
+labels: ["feature"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve clearCore! Please describe the problem you're
-        trying to solve, not just the solution — it helps us find the best fit.
+        Use this form for one new capability.
+        First, tell the problem. Then, tell the change that you want.
+        To improve a capability that clearCore has now, use the "Quality or maintenance task" form.
 
   - type: checkboxes
     id: preflight
     attributes:
-      label: Preflight checklist
+      label: Before you send the request
       options:
-        - label: I searched existing issues (open and closed) and this is not a duplicate.
+        - label: I searched the open and the closed issues. No issue records this request.
           required: true
-        - label: I checked the README and docs to confirm this doesn't already exist.
+        - label: I read the README and the wiki. clearCore does not have this capability.
           required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: Problem / motivation
-      description: What are you trying to do, and what's getting in the way today?
-      placeholder: |
-        I'm always frustrated when ... / It's hard to ... because ...
+      label: Problem
+      description: Tell the problem that you have now. Tell who has the problem.
+      placeholder: A student cannot see which branch predictions are incorrect.
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: What would you like clearCore to do? Sketch the behavior or UI if you can.
+      label: Change that you want
+      description: Tell what clearCore must do. Give the commands, the panels or the output that you want.
+      placeholder: The Pipeline Events panel shows each incorrect prediction in a different color.
     validations:
       required: true
 
   - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Write one check on each line. Each check must have a clear pass or fail result.
+      placeholder: |
+        - [ ] The Statistics panel shows the prediction accuracy as a percentage.
+        - [ ] A unit test in `tests/mips/` checks the accuracy for a known loop.
+    validations:
+      required: false
+
+  - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Other approaches, workarounds, or prior art (e.g. how Ripes/DrMIPS/MARS handle it).
+      label: Other solutions
+      description: Tell the other solutions that you examined. Include other tools that do this now, for example Ripes or MARS.
     validations:
       required: false
 
@@ -49,24 +63,25 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of clearCore would this affect?
+      description: Select the part of clearCore that the change affects.
       options:
         - Core / simulation engine
+        - Assembler
         - Terminal UI (FTXUI)
         - Qt6 Widgets GUI
         - Qt Quick / QML GUI
-        - GDB remote stub / debugging
+        - GDB remote stub
         - Number-system converter
         - Build system / CI
         - Documentation
-        - Other / not sure
+        - Other / not known
     validations:
       required: true
 
   - type: textarea
-    id: additional
+    id: context
     attributes:
-      label: Additional context
-      description: Screenshots, references, links, or anything else that helps.
+      label: Other information
+      description: Attach screenshots. Give links or references.
     validations:
       required: false
