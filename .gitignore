@@ -32,3 +32,6 @@ Makefile
 
 # Misc
 *.log
+
+# Generated fuzz seeds (tests/fuzz/make_elf_corpus.py); never commit binaries
+tests/fuzz/corpus/

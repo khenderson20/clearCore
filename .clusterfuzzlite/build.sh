@@ -18,6 +18,9 @@ cp build/fuzz_hex_loader build/fuzz_elf_loader "$OUT/"
 
 # Seed corpus for the ELF target. Fuzzing a binary format from an empty corpus
 # burns most of the budget rediscovering the magic bytes and header layout;
-# ClusterFuzzLite unpacks <target>_seed_corpus.zip automatically. The cd is
-# absolute because this script's working directory is not the source tree.
-(cd "$SRC/clearCore/tests/fuzz/corpus/elf" && zip -qr "$OUT/fuzz_elf_loader_seed_corpus.zip" .)
+# ClusterFuzzLite unpacks <target>_seed_corpus.zip automatically. The seeds are
+# generated here instead of committed, because OpenSSF Scorecard's
+# Binary-Artifacts check counts every checked-in ELF file.
+seed_dir="$(mktemp -d)"
+python3 "$SRC/clearCore/tests/fuzz/make_elf_corpus.py" "$seed_dir"
+(cd "$seed_dir" && zip -qr "$OUT/fuzz_elf_loader_seed_corpus.zip" .)

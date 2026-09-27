@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
-"""Regenerate the fuzz_elf_loader seed corpus.
+"""Generate the fuzz_elf_loader seed corpus.
 
 Fuzzing an ELF parser from an empty corpus spends most of its budget
 rediscovering the magic bytes and header layout, so the seeds below hand it a
 structurally valid starting point plus the shapes that exercise the loader's
-validation paths.  Run from the repo root:
+validation paths.
 
-    python3 tests/fuzz/make_elf_corpus.py
+The seeds are generated, not committed: OpenSSF Scorecard's Binary-Artifacts
+check counts every checked-in ELF file against the project.
+.clusterfuzzlite/build.sh runs this script at build time and zips the output.
+To inspect the seeds locally, run from the repo root:
+
+    python3 tests/fuzz/make_elf_corpus.py [OUTPUT_DIR]
+
+OUTPUT_DIR defaults to tests/fuzz/corpus/elf, which .gitignore excludes.
 """
 
 import pathlib
 import struct
+import sys
 
-OUT = pathlib.Path(__file__).resolve().parent / "corpus" / "elf"
+DEFAULT_OUT = pathlib.Path(__file__).resolve().parent / "corpus" / "elf"
 
 EHDR_FMT = "<16sHHIIIIIHHHHHH"  # 52 bytes
 PHDR_FMT = "<8I"  # 32 bytes
@@ -81,12 +89,14 @@ SEEDS = {
 assert struct.unpack("<8I", SEEDS["oom_filesz_4gib.elf"][52:84])[4] == 0xFFFF_0000
 
 
-def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+def main(argv):
+    """Write every seed into argv[1], or DEFAULT_OUT when no path is given."""
+    out = pathlib.Path(argv[1]) if len(argv) > 1 else DEFAULT_OUT
+    out.mkdir(parents=True, exist_ok=True)
     for name, content in SEEDS.items():
-        (OUT / name).write_bytes(content)
+        (out / name).write_bytes(content)
         print(f"{name}: {len(content)} bytes")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
