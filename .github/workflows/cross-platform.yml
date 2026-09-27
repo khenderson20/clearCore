@@ -244,11 +244,92 @@ jobs:
           done
           echo "::error::NSIS could not be installed"; exit 1
 
+      # NSIS writes Uninstall.exe to disk on the *end user's* machine at
+      # install time (WriteUninstaller), not as a build artifact, so neither
+      # of the two signing passes below (app binaries before cpack, installer
+      # after cpack) ever touches it. Left unsigned, it's the one binary
+      # Defender's ASR rule can still block post-install -- same "Windows
+      # cannot access the specified device, path, or file" symptom as an
+      # unsigned app exe, just discovered later, on Uninstall.exe (see
+      # wiki/Windows-Code-Signing.md). NSIS's own `!uninstfinalize` hook runs
+      # a command against the uninstaller stub right after makensis compiles
+      # it internally (inside the Package step below), before it's embedded
+      # as a resource blob in the installer -- the only point it can be
+      # signed, since WriteUninstaller later copies those exact bytes out
+      # unchanged. This step only fetches the tools that command needs and
+      # exports the resulting NSIS directive as CLEARCORE_NSIS_UNINSTALLER_
+      # SIGN_DEFINE, consumed by "Configure (Windows)" below; the Azure OIDC
+      # session from the later "Azure login" step covers the command's actual
+      # signtool call, which doesn't fire until Package, well after login.
+      #
+      # This has to run through pwsh, and CPACK_NSIS_DEFINES has to be set at
+      # `cmake configure` time rather than passed to `cpack -D` at package
+      # time: the value contains /fd, /tr, /td, /dlib, /dmdf -- Git Bash's
+      # MSYS layer rewrites lone `/word` tokens into Windows paths exactly
+      # like the `/S` NSIS flag above, silently corrupting the define so
+      # !uninstfinalize never made it into project.nsi. pwsh's native-process
+      # argument marshalling doesn't do that POSIX-path guessing.
+      - name: Prepare NSIS uninstaller signing (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        env:
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe not found under Windows Kits (expected the Windows SDK bundled with the VS toolchain)' }
+          Write-Host "signtool: $($signtool.FullName)"
+
+          # Pinned rather than fetched via `nuget install` so a compromised or
+          # yanked package can't silently swap in a different dlib -- same
+          # supply-chain discipline as "Ensure NSIS" above. To bump: download
+          # microsoft.artifactsigning.client.<ver>.nupkg from
+          # https://www.nuget.org/packages/Microsoft.ArtifactSigning.Client
+          # and update both values below (`sha256sum <file>.nupkg`).
+          $dlibVersion = '1.0.128'
+          $dlibSha256  = '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40B'
+          $tmp = Join-Path $env:RUNNER_TEMP 'artifact-signing-client'
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $nupkg = Join-Path $tmp 'package.nupkg'
+          Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/$dlibVersion/microsoft.artifactsigning.client.$dlibVersion.nupkg" -OutFile $nupkg
+          $actualHash = (Get-FileHash $nupkg -Algorithm SHA256).Hash
+          if ($actualHash -ne $dlibSha256) { throw "Microsoft.ArtifactSigning.Client hash mismatch: expected $dlibSha256, got $actualHash" }
+          Copy-Item $nupkg (Join-Path $tmp 'package.zip')
+          Expand-Archive -Path (Join-Path $tmp 'package.zip') -DestinationPath $tmp -Force
+
+          $dlib = Get-ChildItem $tmp -Recurse -Filter 'Azure.CodeSigning.Dlib.dll' |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (-not $dlib) {
+            Write-Error 'Azure.CodeSigning.Dlib.dll not found anywhere under the extracted package'
+            Get-ChildItem $tmp -Recurse -File | Select-Object -First 100 FullName
+            exit 1
+          }
+          Write-Host "dlib: $($dlib.FullName)"
+
+          $metadataPath = Join-Path $tmp 'metadata.json'
+          @{
+            Endpoint               = $env:AZURE_SIGNING_ENDPOINT
+            CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
+            CertificateProfileName = $env:AZURE_SIGNING_PROFILE
+          } | ConvertTo-Json | Set-Content -Path $metadataPath -Encoding utf8
+
+          # %1 is substituted by NSIS with the path to the generated
+          # uninstaller stub; NSIS does not quote it, so the command must.
+          $signCmd = '"' + $signtool.FullName + '" sign /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "' + $dlib.FullName + '" /dmdf "' + $metadataPath + '" "%1"'
+          $define = "!uninstfinalize '$signCmd'"
+          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$define"
+
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: >
-          cmake --preset release
-          -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON
+        shell: pwsh
+        run: |
+          cmake --preset release `
+            -DBUILD_NYXSTONE=OFF -DGOLDEN_TESTS=OFF -DCLEARCORE_BUNDLE_QT=ON `
+            -DCPACK_NSIS_DEFINES="$env:CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE"
 
       - name: Configure (macOS, universal)
         if: runner.os == 'macOS'
@@ -350,74 +431,6 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      # NSIS writes Uninstall.exe to disk on the *end user's* machine at
-      # install time (WriteUninstaller), not as a build artifact, so neither
-      # signing pass above ever touches it. Left unsigned, it's the one
-      # binary Defender's ASR rule can still block post-install -- same
-      # "Windows cannot access the specified device, path, or file" symptom
-      # as an unsigned app exe, just discovered later, on Uninstall.exe (see
-      # wiki/Windows-Code-Signing.md). NSIS's own `!uninstfinalize` hook runs
-      # a command against the uninstaller stub right after makensis compiles
-      # it internally (inside the Package step below), before it's embedded
-      # as a resource blob in the installer -- the only point it can be
-      # signed, since WriteUninstaller later copies those exact bytes out
-      # unchanged. This step only fetches the tools that command needs; the
-      # Azure OIDC session from "Azure login" above covers its actual
-      # signtool call, which fires later, during Package.
-      - name: Prepare NSIS uninstaller signing (Windows)
-        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
-        shell: pwsh
-        env:
-          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
-          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $signtool) { throw 'signtool.exe not found under Windows Kits (expected the Windows SDK bundled with the VS toolchain)' }
-          Write-Host "signtool: $($signtool.FullName)"
-
-          # Pinned rather than fetched via `nuget install` so a compromised or
-          # yanked package can't silently swap in a different dlib -- same
-          # supply-chain discipline as "Ensure NSIS" above. To bump: download
-          # microsoft.artifactsigning.client.<ver>.nupkg from
-          # https://www.nuget.org/packages/Microsoft.ArtifactSigning.Client
-          # and update both values below (`sha256sum <file>.nupkg`).
-          $dlibVersion = '1.0.128'
-          $dlibSha256  = '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40B'
-          $tmp = Join-Path $env:RUNNER_TEMP 'artifact-signing-client'
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $nupkg = Join-Path $tmp 'package.nupkg'
-          Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/$dlibVersion/microsoft.artifactsigning.client.$dlibVersion.nupkg" -OutFile $nupkg
-          $actualHash = (Get-FileHash $nupkg -Algorithm SHA256).Hash
-          if ($actualHash -ne $dlibSha256) { throw "Microsoft.ArtifactSigning.Client hash mismatch: expected $dlibSha256, got $actualHash" }
-          Copy-Item $nupkg (Join-Path $tmp 'package.zip')
-          Expand-Archive -Path (Join-Path $tmp 'package.zip') -DestinationPath $tmp -Force
-
-          $dlib = Get-ChildItem $tmp -Recurse -Filter 'Azure.CodeSigning.Dlib.dll' |
-            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
-          if (-not $dlib) {
-            Write-Error 'Azure.CodeSigning.Dlib.dll not found anywhere under the extracted package'
-            Get-ChildItem $tmp -Recurse -File | Select-Object -First 100 FullName
-            exit 1
-          }
-          Write-Host "dlib: $($dlib.FullName)"
-
-          $metadataPath = Join-Path $tmp 'metadata.json'
-          @{
-            Endpoint               = $env:AZURE_SIGNING_ENDPOINT
-            CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
-            CertificateProfileName = $env:AZURE_SIGNING_PROFILE
-          } | ConvertTo-Json | Set-Content -Path $metadataPath -Encoding utf8
-
-          # %1 is substituted by NSIS with the path to the generated
-          # uninstaller stub; NSIS does not quote it, so the command must.
-          $signCmd = '"' + $signtool.FullName + '" sign /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "' + $dlib.FullName + '" /dmdf "' + $metadataPath + '" "%1"'
-          $define = "!uninstfinalize '$signCmd'"
-          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$define"
-
       # ── Package (bundles Qt via windeployqt/macdeployqt at install time) ─────
       # Versioned, arch-labelled filenames; version comes from the release tag
       # (published release or backfill) or a dev placeholder (test dispatch).
@@ -437,25 +450,9 @@ jobs:
           else
             generator="DragNDrop"; name="clearCore-${version}-macOS-universal"
           fi
-          # macOS's /bin/bash is 3.2 (Apple ships no newer GPLv3 bash), where
-          # "${arr[@]}" on a zero-element array is an unbound-variable error
-          # under `set -u` -- unlike bash >= 4.4. Guarding on array length
-          # avoids the expansion entirely instead of relying on a version-gated
-          # bash feature.
-          extra_defines=()
-          if [ -n "${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE:-}" ]; then
-            extra_defines+=(-D "CPACK_NSIS_DEFINES=${CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE}")
-          fi
-          if [ ${#extra_defines[@]} -gt 0 ]; then
-            cpack -G "$generator" \
-                  -D CPACK_PACKAGE_VERSION="$version" \
-                  -D CPACK_PACKAGE_FILE_NAME="$name" \
-                  "${extra_defines[@]}" -V
-          else
-            cpack -G "$generator" \
-                  -D CPACK_PACKAGE_VERSION="$version" \
-                  -D CPACK_PACKAGE_FILE_NAME="$name" -V
-          fi
+          cpack -G "$generator" \
+                -D CPACK_PACKAGE_VERSION="$version" \
+                -D CPACK_PACKAGE_FILE_NAME="$name" -V
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
