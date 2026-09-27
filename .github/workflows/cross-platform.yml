@@ -459,6 +459,25 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -la "$name".* || true
 
+      # TEMPORARY diagnostic -- CPack's NSIS generator doesn't surface
+      # makensis's own stdout when it exits 0, so there's no visibility into
+      # whether !uninstfinalize actually ran. Removed once the uninstaller
+      # signing gap is confirmed working end to end.
+      - name: DEBUG uninstfinalize (Windows)
+        if: runner.os == 'Windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          $nsi = Get-ChildItem -Recurse -Path build\release\_CPack_Packages -Filter 'project.nsi' | Select-Object -First 1
+          if (-not $nsi) { Write-Host "project.nsi not found"; exit 0 }
+          Write-Host "=== project.nsi: uninstfinalize line(s) ==="
+          Select-String -Path $nsi.FullName -Pattern 'uninstfinalize' -SimpleMatch
+          Write-Host "=== re-running makensis /V4 to capture its own output ==="
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          & $makensis /V4 $nsi.FullName 2>&1 | Tee-Object -Variable nsisOutput | Out-Null
+          $nsisOutput | Select-String -Pattern 'uninstfinalize|warning|error|sign'
+          Write-Host "=== last 40 lines of makensis output ==="
+          $nsisOutput | Select-Object -Last 40
+
       # Sign the NSIS installer itself so SmartScreen trusts the download and
       # doesn't show an "unknown publisher" wall. Reuses the OIDC login above.
       - name: Sign installer (Windows)
