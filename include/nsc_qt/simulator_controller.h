@@ -36,7 +36,7 @@ struct SimulatorStatistics {
 // replacement for the QTimer, whose start()/stop() only work on its own
 // thread; a mutex alone could not make that safe. See #244.) Debug builds
 // assert the confinement on every state-changing call.
-class SimulatorController : public QObject {
+class SimulatorController final : public QObject {
     Q_OBJECT
 
 public:

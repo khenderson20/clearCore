@@ -20,7 +20,7 @@ namespace mips {
 
 #if CLEARCORE_NYXSTONE_ENABLED
 
-class NyxstoneBackend {
+class NyxstoneBackend final {
 public:
     // Outcome of an assemble/disassemble call. On failure `error` is non-empty
     // and carries LLVM's diagnostic; `value` is then unspecified.

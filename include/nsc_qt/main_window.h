@@ -28,7 +28,7 @@ class PipelineTraceWidget;
 class PipelineEventsWidget;
 class CodeEditor;
 
-class MainWindow : public QMainWindow {
+class MainWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
@@ -68,7 +68,7 @@ private:
     void resetLayout();
     // True if at least one dock panel is open; a restored layout with none is
     // degenerate (an empty window) and must be discarded.
-    bool hasOpenPanel() const;
+    [[nodiscard]] bool hasOpenPanel() const;
     // Syncs the Run/Pause action text AND icon so every code path that changes
     // run state (Stop menu, Reset, Halt, Fault, Breakpoint) stays consistent.
     void setRunState(bool running);
@@ -87,6 +87,10 @@ private:
     // near-identical status-bar strings -- the "peak" moment of finishing a
     // program should feel different from crashing (audit Opportunity #7).
     void flashStatusBanner(bool success, const QString& text);
+
+    // Asks before a load discards a run in progress; true when there is no run
+    // or the user agrees.
+    [[nodiscard]] bool confirmDiscardCurrentRun();
 
     // Colours the CPI value and its Statistics card for cpi_band_ and the
     // current colour scheme.

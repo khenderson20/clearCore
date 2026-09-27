@@ -207,7 +207,7 @@ static void test_controller_step_signal() {
     QObject::connect(&ctrl, &SimulatorController::cycleExecuted,
                      [&](uint64_t n) { received_count = n; });
     QObject::connect(&ctrl, &SimulatorController::pipelineStateChanged,
-                     [&](mips::PipelineState) { ps_received = true; });
+                     [&](const mips::PipelineState&) { ps_received = true; });
 
     ctrl.stepCycle();
     CHECK(received_count == 1);

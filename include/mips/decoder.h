@@ -100,7 +100,7 @@ struct DecodedInstr {
 
 // ─── Decoder ──────────────────────────────────────────────────────────────────
 
-class Decoder {
+class Decoder final {
 public:
     // Decode a 32-bit instruction word.
     // Returns std::nullopt for any unrecognized opcode or funct code.

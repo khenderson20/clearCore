@@ -7,8 +7,7 @@
 #include "nsc_qt/assembler.h"
 #include "nsc_qt/examples.h"
 
-#include <QChar>
-
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -267,8 +266,9 @@ QStringList QuickSimulator::memoryRows(quint32 base, int rows) const {
             const auto byte = mem.read_byte(addr + static_cast<quint32>(b));
             if (byte) {
                 hex += QStringLiteral("%1 ").arg(*byte, 2, 16, QLatin1Char('0'));
-                const QChar c(*byte);
-                ascii += (c.isPrint() && *byte < 0x7F) ? c : QLatin1Char('.');
+                // Printable ASCII only; anything else shows as '.'.
+                ascii += (*byte >= 0x20 && *byte < 0x7F) ? QLatin1Char(static_cast<char>(*byte))
+                                                         : QLatin1Char('.');
             } else {
                 hex += QStringLiteral("-- ");
                 ascii += QLatin1Char(' ');

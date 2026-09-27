@@ -239,8 +239,12 @@ static Element render_instr_decode(const mips::IProcessor& cpu) {
         }
         f1.push_back(text(std::format("   [fn:0x{:02X}]", static_cast<unsigned>(r.funct))) | dim);
     } else if (dec.format == mips::InstrFormat::I) {
-        const auto& i    = dec.i();
-        int32_t     simm = mips::Decoder::sign_extend(i.imm);
+        const auto& i = dec.i();
+        // Show the immediate as the extender hands it to the ALU: ANDI, ORI,
+        // XORI and LUI zero-extend, so "ori …, 0xFFFF" reads +65535, not -1.
+        const bool    zero_ext = mips::derive_control(dec).ext == mips::Control::Ext::Zero;
+        const int32_t simm =
+            zero_ext ? static_cast<int32_t>(i.imm) : mips::Decoder::sign_extend(i.imm);
         f1.push_back(text("rt") | dim);
         f1.push_back(text(std::format(":${:<4}", kRegNames[i.rt])) | color(Color::GreenLight) |
                      bold);
@@ -250,10 +254,13 @@ static Element render_instr_decode(const mips::IProcessor& cpu) {
         f1.push_back(text("  imm") | dim);
         f1.push_back(text(std::format(":{:+d}", simm)) | color(Color::MagentaLight) | bold);
         f1.push_back(text(std::format(" [0x{:04X}]", i.imm)) | dim);
+        // Loads and stores also show their effective-address expression.
         const bool is_mem = (dec.opcode == mips::Opcode::LW || dec.opcode == mips::Opcode::LBU ||
                              dec.opcode == mips::Opcode::LHU || dec.opcode == mips::Opcode::SW);
         if (is_mem) f1.push_back(text(std::format("  → ${}+{:+d}", kRegNames[i.rs], simm)) | dim);
     } else {
+        // Pseudo-direct addressing: PC+4 supplies the top 4 bits, the 26-bit
+        // target the middle, and the low 2 bits are zero (word aligned).
         uint32_t jaddr = ((pc + 4) & 0xF000'0000u) | (dec.j().target << 2);
         f1.push_back(text("target") | dim);
         f1.push_back(text(std::format(":0x{:07X}", dec.j().target)) | color(Color::CyanLight) |
@@ -273,6 +280,7 @@ static Element render_instr_decode(const mips::IProcessor& cpu) {
     lbls.push_back(text("         ") | dim);
 
     auto add_field = [&](int hi, int lo, Color col, const char* lbl) {
+        // A 32-bit field takes the all-ones mask: 1u << 32 is undefined.
         uint32_t mask = (hi - lo < 31) ? ((1u << (hi - lo + 1)) - 1u) : 0xFFFFFFFFu;
         uint32_t fv   = (raw >> lo) & mask;
         int      w    = hi - lo + 1;
@@ -426,88 +434,6 @@ static Element render_flow_strip(std::size_t frame, bool active) {
         }
     }
     return canvas(std::move(c)) | flex;
-}
-
-// ─── Ambient oscilloscope panel ─────────────────────────────────────────────
-// Same visual technique as the startup splash (runSplash, below): a graticule
-// grid with three phase-shifted sine traces, drawn with DrawPointLine between
-// consecutive samples so the curves look continuous rather than dotted. Sized
-// for an in-app panel rather than fullscreen. Tied to live state in a small
-// way, mirroring render_flow_strip's "calm when idle" rule: phase advances
-// and amplitude swells while the CPU is auto-running, and settles to a slow
-// idle breathing pattern while paused/stepping, so it's lively without being
-// a distraction during step-by-step inspection.
-// Currently unreferenced: superseded as the ambient panel by the Core Pulse
-// animation, kept as an alternative visualisation.
-[[maybe_unused]] static Element render_oscilloscope_panel(std::size_t frame, bool active,
-                                                          std::size_t cycle_count) {
-    // D: the (width, height) passed to canvas(w, h, fn) are only a minimum-
-    // size *requirement hint* for FTXUI's layout pass — at actual render
-    // time CanvasNodeBase rebuilds the Canvas to match whatever box this
-    // element ends up assigned (box_.x_max/y_max), then calls `fn` against
-    // that. That's the difference from canvas(std::move(fixed_canvas)),
-    // which bakes in a literal size up front and leaves everything past it
-    // blank if the assigned box turns out bigger — which is exactly what
-    // caused the dead space on the right/bottom previously.
-    constexpr int kMinW = 60, kMinH = 16;
-
-    return canvas(kMinW, kMinH,
-                  [frame, active, cycle_count](Canvas& c) {
-                      const int W   = c.width();
-                      const int H   = c.height();
-                      const int mid = H / 2;
-
-                      const float ph = static_cast<float>(frame) * (active ? 0.22f : 0.05f);
-
-                      // Graticule: dim grid + brighter center axis, same as the splash.
-                      for (int x = 0; x < W; x += 20)
-                          for (int y = 0; y < H; y += 4)
-                              c.DrawPoint(x, y, true, Color::GrayDark);
-                      for (int y = 0; y < H; y += 16)
-                          for (int x = 0; x < W; x += 2)
-                              c.DrawPoint(x, y, true, Color::GrayDark);
-                      for (int x = 0; x < W; ++x)
-                          c.DrawPoint(x, mid, true, Color::Blue);
-
-                      auto draw_wave = [&](float amp, float k, float phase, Color col) {
-                          int prev_x = 0;
-                          int prev_y = mid + static_cast<int>(amp * std::sin(k * 0.0f + phase));
-                          for (int x = 1; x < W; ++x) {
-                              const float u = static_cast<float>(x);
-                              const int   y = mid + static_cast<int>(amp * std::sin(k * u + phase));
-                              c.DrawPointLine(prev_x, prev_y, x, y, col);
-                              prev_x = x;
-                              prev_y = y;
-                          }
-                      };
-
-                      // Idle: ~60% amplitude, slow breathing. Running: full swing, livelier.
-                      const float base_env = active ? 1.0f : 0.6f;
-                      const float env      = base_env * (0.8f + 0.2f * std::sin(ph * 0.5f));
-
-                      // Scale amplitude to the granted height so the waves use the whole
-                      // panel on a large terminal instead of a fixed pixel swing that'd
-                      // look tiny once the dead-space bug above is fixed.
-                      const float amp_scale = static_cast<float>(H) / 48.0f;
-                      draw_wave(20.0f * env * amp_scale, 0.11f, ph, Color::CyanLight);
-                      draw_wave(14.0f * env * amp_scale, 0.16f, ph * 1.3f + 1, Color::GreenLight);
-                      draw_wave(8.0f * env * amp_scale, 0.23f, -ph * 1.7f + 2, Color::MagentaLight);
-
-                      // DrawText expects x even / y a multiple of 4 (one terminal cell).
-                      auto align_x = [](int v) { return std::max(0, (v / 2) * 2); };
-                      auto align_y = [](int v) { return std::max(0, (v / 4) * 4); };
-
-                      const int title_x = align_x(W / 2 - 18);
-                      c.DrawText(title_x, align_y(4), "CLEARCORE", [](Cell& p) {
-                          p.foreground_color = Color::CyanLight;
-                          p.bold             = true;
-                      });
-
-                      const int cycle_x = align_x(W / 2 - 26);
-                      c.DrawText(cycle_x, align_y(H - 8), std::format("cycle {:<6}", cycle_count),
-                                 Color::GrayLight);
-                  }) |
-           flex;
 }
 
 // ─── Startup splash animation ─────────────────────────────────────────────────
@@ -1046,6 +972,18 @@ int runApp() {
         exec_trace.clear();
     };
 
+    // Status-line text for a trap: its name and the EPC, from CP0 when the
+    // backend is MIPS.
+    auto exception_status = [&] {
+        std::string name = "exception";
+        uint32_t    epc  = cpu->pc();
+        if (const auto* m = dynamic_cast<const mips::IMipsProcessor*>(cpu.get())) {
+            name = std::string(mips::exception_name(m->cp0().last_exception()));
+            epc  = m->cp0().epc();
+        }
+        return std::format("Exception {} at 0x{:08X} — PC at exception vector.", name, epc);
+    };
+
     // do_step — UI thread only.  Updates telemetry and execution trace.
     auto do_step = [&] {
         auto result = cpu->step();
@@ -1067,18 +1005,9 @@ int runApp() {
         if (ps.fwd_ex_to_ex_a || ps.fwd_ex_to_ex_b || ps.fwd_mem_to_ex_a || ps.fwd_mem_to_ex_b)
             ++tel_forwards;
         if (result != mips::StepResult::Ok) auto_run.store(false);
-        if (result == mips::StepResult::Exception) {
-            // Surface the trap where the loader/config status line already
-            // lives, otherwise a SYSCALL or overflow just silently stops Run.
-            std::string name = "exception";
-            uint32_t    epc  = cpu->pc();
-            if (const auto* m = dynamic_cast<const mips::IMipsProcessor*>(cpu.get())) {
-                name = std::string(mips::exception_name(m->cp0().last_exception()));
-                epc  = m->cp0().epc();
-            }
-            loader_status =
-                std::format("Exception {} at 0x{:08X} — PC at exception vector.", name, epc);
-        }
+        // Surface a trap where the loader/config status line already lives,
+        // otherwise a SYSCALL or overflow just silently stops Run.
+        if (result == mips::StepResult::Exception) loader_status = exception_status();
         return result;
     };
 
@@ -1146,10 +1075,25 @@ int runApp() {
     Component btn_auto = Button("", [&] { auto_run.store(!auto_run.load()); }, auto_opt);
 
     Component btn_run = Button(" Run→Halt ", [&] {
+        constexpr std::size_t kRunBudget = 100'000;
         auto_run.store(false);
-        cpu->run(100'000);
-        tel_cycles = cpu->cycle_count();
+        const mips::StepResult result = cpu->run(kRunBudget);
+        tel_cycles                    = cpu->cycle_count();
         exec_trace.clear();
+        switch (result) {
+        case mips::StepResult::Halt:
+            loader_status = std::format("Halted after {} cycles.", tel_cycles);
+            break;
+        case mips::StepResult::Exception:
+            loader_status = exception_status();
+            break;
+        case mips::StepResult::Fault:
+            loader_status = std::format("Fault at 0x{:08X}.", cpu->pc());
+            break;
+        case mips::StepResult::Ok:
+            loader_status = std::format("Stopped after {} steps without a halt.", kRunBudget);
+            break;
+        }
     });
 
     Component btn_reset = Button(" Reset ", [&] {

@@ -9,10 +9,10 @@ namespace nsc::qt {
 
 struct AssemblerResult {
     std::vector<uint32_t>      words;
-    std::optional<std::string> error;  // "line N: message" on failure
+    std::optional<std::string> error = std::nullopt;  // "line N: message" on failure
 
-    [[nodiscard]] bool ok() const noexcept { return !error.has_value(); }
-    explicit           operator bool() const noexcept { return ok(); }
+    [[nodiscard]] bool     ok() const noexcept { return !error.has_value(); }
+    [[nodiscard]] explicit operator bool() const noexcept { return ok(); }
 };
 
 // Assemble a multi-line MIPS assembly source string into 32-bit words.

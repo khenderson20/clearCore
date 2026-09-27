@@ -1,5 +1,4 @@
-#ifndef NUMBER_SYSTEM_CONVERTER_UI_H
-#define NUMBER_SYSTEM_CONVERTER_UI_H
+#pragma once
 
 namespace nsc {
 // Build and run the interactive terminal UI. Blocks until the user quits.
@@ -7,5 +6,3 @@ namespace nsc {
 int runApp();
 
 }  // namespace nsc
-
-#endif  // NUMBER_SYSTEM_CONVERTER_UI_H

@@ -54,7 +54,7 @@
 
 namespace mips {
 
-class GdbStub {
+class GdbStub final {
 public:
     // Construct a stub attached to `cpu`, listening on TCP `port`.
     // The stub does NOT take ownership of the processor.

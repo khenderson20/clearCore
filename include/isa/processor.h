@@ -92,7 +92,7 @@ public:
     // Step until Fault/Halt or the step budget is exhausted.
     // Default implementation simply loops over step(); concrete classes may
     // override for performance, but the semantics must be identical.
-    virtual StepResult run(std::size_t max_steps = 100'000) {
+    [[nodiscard]] virtual StepResult run(std::size_t max_steps = 100'000) {
         for (std::size_t i = 0; i < max_steps; ++i) {
             const StepResult r = step();
             if (r != StepResult::Ok) return r;

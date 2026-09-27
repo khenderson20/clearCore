@@ -20,14 +20,14 @@ class LineNumberArea;
 // adapted to this app's dark/light theme. Drop-in replacement for
 // QPlainTextEdit: toPlainText(), setPlainText(), setFont(), and
 // setPlaceholderText() all still work unchanged.
-class CodeEditor : public QPlainTextEdit {
+class CodeEditor final : public QPlainTextEdit {
     Q_OBJECT
 
 public:
     explicit CodeEditor(QWidget* parent = nullptr);
 
-    void lineNumberAreaPaintEvent(QPaintEvent* event);
-    int  lineNumberAreaWidth() const;
+    void              lineNumberAreaPaintEvent(QPaintEvent* event);
+    [[nodiscard]] int lineNumberAreaWidth() const;
 
     void setDarkMode(bool dark);
 
@@ -52,11 +52,13 @@ private:
 
 // The gutter widget itself. All painting is delegated back to CodeEditor,
 // which is the only class that needs to know about text-block geometry.
-class LineNumberArea : public QWidget {
+class LineNumberArea final : public QWidget {
 public:
     explicit LineNumberArea(CodeEditor* editor) : QWidget(editor), code_editor_(editor) {}
 
-    QSize sizeHint() const override { return QSize(code_editor_->lineNumberAreaWidth(), 0); }
+    [[nodiscard]] QSize sizeHint() const override {
+        return QSize(code_editor_->lineNumberAreaWidth(), 0);
+    }
 
 protected:
     void paintEvent(QPaintEvent* event) override { code_editor_->lineNumberAreaPaintEvent(event); }

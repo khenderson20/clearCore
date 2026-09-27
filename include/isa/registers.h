@@ -16,7 +16,7 @@ namespace isa {
 // Register 0 is hardwired to 0: reads always return 0 and writes are silently
 // discarded. This mirrors the hardware and lets the ISA use it as both a
 // constant-0 source and a discard sink.
-class RegisterFile {
+class RegisterFile final {
 public:
     static constexpr std::size_t kCount = 32;
 

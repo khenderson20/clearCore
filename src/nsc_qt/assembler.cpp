@@ -255,8 +255,6 @@ AssemblerResult assemble(const std::string& source) {
         const auto& ops   = ln.operands;
         const int   ln_no = ln.lineno;
 
-        // REMOVED: const uint32_t word_addr = static_cast<uint32_t>(idx * 4);
-
         auto err = [&](const std::string& msg) -> AssemblerResult {
             AssemblerResult e;
             e.error = make_error(ln_no, msg);

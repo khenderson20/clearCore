@@ -11,7 +11,7 @@ namespace nsc {
 // This is the piece that used to live as loose lambdas inside main(): the
 // `value`, the parse-on-edit, and the re-format. The UI layer owns only the
 // editable string buffers and drives this class.
-class Converter {
+class Converter final {
 public:
     enum class Base : std::uint8_t {  // value doubles as the radix
         Binary  = 2,

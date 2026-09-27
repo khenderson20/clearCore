@@ -1,5 +1,6 @@
 #include "nsc_qt/widgets/schematic_datapath_widget.h"
 #include "mips/processor.h"
+#include "mips/registers.h"
 #include "nsc_qt/instr_format.h"
 #include "nsc_qt/ui_scale.h"
 
@@ -103,7 +104,7 @@ inline const Theme& theme(bool dark) {
 // stated tips and junction dots where a bus splits. `setActive()` switches
 // between the dim resting look and a bright highlighted one — that's how
 // forwarding paths, the branch flush path, and the write-back loop light up.
-class WireItem : public QGraphicsItem {
+class WireItem final : public QGraphicsItem {
 public:
     struct Tip {
         QPointF at;
@@ -699,11 +700,12 @@ void SchematicDatapathWidget::applyState() {
             text  = QStringLiteral("nop (stall)");
             color = t.stall;
         } else if (snap.valid) {
-            text = snap.raw == 0 ? QStringLiteral("nop")
-                                 : QString::fromStdString(
-                                       decoded[static_cast<std::size_t>(i)]
-                                           ? format_decoded(*decoded[static_cast<std::size_t>(i)])
-                                           : "(?/?)");
+            text = snap.raw == 0
+                       ? QStringLiteral("nop")
+                       : QString::fromStdString(
+                             decoded[static_cast<std::size_t>(i)]
+                                 ? format_decoded(*decoded[static_cast<std::size_t>(i)], snap.pc)
+                                 : "(?/?)");
         } else {
             text  = QStringLiteral("—");
             color = t.wire_dim;
@@ -813,15 +815,17 @@ void SchematicDatapathWidget::applyState() {
     QString hz;
     QColor  hz_color;
     if (state_.branch_flush) {
-        hz       = tr("Branch taken: %1 — PC redirected, younger instructions flushed")
-                       .arg(decoded[3] ? QString::fromStdString(format_decoded(*decoded[3]))
-                                       : QStringLiteral("branch"));
+        hz = tr("Branch taken: %1 — PC redirected, younger instructions flushed")
+                 .arg(decoded[3]
+                          ? QString::fromStdString(format_decoded(*decoded[3], state_.stages[3].pc))
+                          : QStringLiteral("branch"));
         hz_color = t.flush;
     } else if (state_.load_stall) {
-        hz       = tr("Load-use hazard: %1 — its data arrives after MEM, so the "
-                      "dependent instruction waits one cycle")
-                       .arg(decoded[2] ? QString::fromStdString(format_decoded(*decoded[2]))
-                                       : QStringLiteral("lw"));
+        hz = tr("Load-use hazard: %1 — its data arrives after MEM, so the "
+                "dependent instruction waits one cycle")
+                 .arg(decoded[2]
+                          ? QString::fromStdString(format_decoded(*decoded[2], state_.stages[2].pc))
+                          : QStringLiteral("lw"));
         hz_color = t.stall;
     }
     if (hz.isEmpty()) {
@@ -867,7 +871,7 @@ void SchematicDatapathWidget::updateTooltips() {
     auto instr_label = [](const mips::StageSnapshot& s, const OptDecoded& d) -> QString {
         if (!s.valid) return QStringLiteral("—");
         if (s.raw == 0) return QStringLiteral("nop");
-        return d ? QString::fromStdString(format_decoded(*d)) : QStringLiteral("(?/?)");
+        return d ? QString::fromStdString(format_decoded(*d, s.pc)) : QStringLiteral("(?/?)");
     };
 
     pc_box_->setToolTip(tr("Program Counter — holds the address of the instruction "

@@ -74,7 +74,7 @@ private:
     void applyTheme();
 
     // Stage column index (0–4) at a view position, or -1.
-    int stageAtViewPos(const QPoint& pos) const;
+    [[nodiscard]] int stageAtViewPos(const QPoint& pos) const;
     // Zoom-to-fit while the user hasn't zoomed manually.
     void fitSchematic();
     // Refresh the live parts of the educational component tooltips. Only called

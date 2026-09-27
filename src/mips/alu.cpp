@@ -2,6 +2,81 @@
 
 namespace mips {
 
+namespace {
+
+// R-type: the funct field selects the operation.
+std::optional<AluOp> r_type_op(FunctCode funct) {
+    switch (funct) {
+    case FunctCode::ADD:
+        return AluOp::ADD;
+    case FunctCode::ADDU:
+        return AluOp::ADDU;
+    case FunctCode::SUB:
+        return AluOp::SUB;
+    case FunctCode::SUBU:
+        return AluOp::SUBU;
+    case FunctCode::AND:
+        return AluOp::AND;
+    case FunctCode::OR:
+        return AluOp::OR;
+    case FunctCode::XOR:
+        return AluOp::XOR;
+    case FunctCode::NOR:
+        return AluOp::NOR;
+    case FunctCode::SLT:
+        return AluOp::SLT;
+    case FunctCode::SLTU:
+        return AluOp::SLTU;
+    case FunctCode::SLL:
+    case FunctCode::SLLV:
+        return AluOp::SLL;
+    case FunctCode::SRL:
+    case FunctCode::SRLV:
+        return AluOp::SRL;
+    case FunctCode::SRA:
+        return AluOp::SRA;
+    case FunctCode::JR:
+    case FunctCode::JALR:
+        return AluOp::PASS_A;
+    default:
+        return std::nullopt;
+    }
+}
+
+// I-type: the opcode selects the operation.
+std::optional<AluOp> i_type_op(Opcode op) {
+    switch (op) {
+    case Opcode::ADDI:
+        return AluOp::ADD;
+    case Opcode::ADDIU:
+        return AluOp::ADDU;
+    case Opcode::SLTI:
+        return AluOp::SLT;
+    case Opcode::SLTIU:
+        return AluOp::SLTU;
+    case Opcode::ANDI:
+        return AluOp::AND;
+    case Opcode::ORI:
+        return AluOp::OR;
+    case Opcode::XORI:
+        return AluOp::XOR;
+    case Opcode::LUI:
+        return AluOp::LUI;
+    case Opcode::LW:
+    case Opcode::LBU:
+    case Opcode::LHU:
+    case Opcode::SW:
+        return AluOp::ADDU;  // effective address
+    case Opcode::BEQ:
+    case Opcode::BNE:
+        return AluOp::SUBU;  // compare via zero flag
+    default:
+        return std::nullopt;
+    }
+}
+
+}  // anonymous namespace
+
 // ─── Alu::control ─────────────────────────────────────────────────────────────
 // The ALU control block (H&H Figure 7.10).
 // Takes the decoded instruction and produces the AluOp the execute() needs.
@@ -13,80 +88,17 @@ namespace mips {
 //   BEQ/BNE   → SUBU     : CPU checks the zero flag to decide branch taken
 std::optional<AluOp> Alu::control(const DecodedInstr& instr) {
     switch (instr.format) {
-
     case InstrFormat::R:
-        switch (instr.r().funct) {
-        case FunctCode::ADD:
-            return AluOp::ADD;
-        case FunctCode::ADDU:
-            return AluOp::ADDU;
-        case FunctCode::SUB:
-            return AluOp::SUB;
-        case FunctCode::SUBU:
-            return AluOp::SUBU;
-        case FunctCode::AND:
-            return AluOp::AND;
-        case FunctCode::OR:
-            return AluOp::OR;
-        case FunctCode::XOR:
-            return AluOp::XOR;
-        case FunctCode::NOR:
-            return AluOp::NOR;
-        case FunctCode::SLT:
-            return AluOp::SLT;
-        case FunctCode::SLTU:
-            return AluOp::SLTU;
-        case FunctCode::SLL:
-        case FunctCode::SLLV:
-            return AluOp::SLL;
-        case FunctCode::SRL:
-        case FunctCode::SRLV:
-            return AluOp::SRL;
-        case FunctCode::SRA:
-            return AluOp::SRA;
-        case FunctCode::JR:
-        case FunctCode::JALR:
-            return AluOp::PASS_A;
-        default:
-            return std::nullopt;
-        }
-
+        return r_type_op(instr.r().funct);
     case InstrFormat::I:
-        switch (instr.opcode) {
-        case Opcode::ADDI:
-            return AluOp::ADD;
-        case Opcode::ADDIU:
-            return AluOp::ADDU;
-        case Opcode::SLTI:
-            return AluOp::SLT;
-        case Opcode::SLTIU:
-            return AluOp::SLTU;
-        case Opcode::ANDI:
-            return AluOp::AND;
-        case Opcode::ORI:
-            return AluOp::OR;
-        case Opcode::XORI:
-            return AluOp::XOR;
-        case Opcode::LUI:
-            return AluOp::LUI;
-        case Opcode::LW:
-        case Opcode::LBU:
-        case Opcode::LHU:
-        case Opcode::SW:
-            return AluOp::ADDU;  // effective address
-        case Opcode::BEQ:
-        case Opcode::BNE:
-            return AluOp::SUBU;  // compare via zero flag
-        default:
-            return std::nullopt;
-        }
-
+        return i_type_op(instr.opcode);
     case InstrFormat::J:
         // J and JAL form their target as { PC[31:28], target, 2'b00 }.
         // No ALU involved — the CPU stage handles it.
-    default:
+    case InstrFormat::Unknown:
         return std::nullopt;
     }
+    return std::nullopt;
 }
 
 // ─── Signed overflow helpers ──────────────────────────────────────────────────

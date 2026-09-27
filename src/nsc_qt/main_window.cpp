@@ -541,15 +541,7 @@ void MainWindow::onOpenFile() {
     // Confirm before discarding an in-progress run -- only asked once we
     // have a validated replacement program ready, not before the file
     // picker (audit Critical #2: Load/Open silently wiped simulation state).
-    if (controller_->cycleCount() > 0) {
-        const auto reply =
-            QMessageBox::question(this, tr("Discard Current Run?"),
-                                  tr("Loading this program will discard the current simulation "
-                                     "progress (%1 cycles executed). Continue?")
-                                      .arg(static_cast<qulonglong>(controller_->cycleCount())),
-                                  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
-        if (reply != QMessageBox::Yes) return;
-    }
+    if (!confirmDiscardCurrentRun()) return;
 
     onReset();
     if (!controller_->loadProgram(prog.words)) {
@@ -599,16 +591,7 @@ void MainWindow::onLoad() {
         return;
     }
 
-    // Same discard confirmation as onOpenFile() -- see audit Critical #2.
-    if (controller_->cycleCount() > 0) {
-        const auto reply =
-            QMessageBox::question(this, tr("Discard Current Run?"),
-                                  tr("Loading this program will discard the current simulation "
-                                     "progress (%1 cycles executed). Continue?")
-                                      .arg(static_cast<qulonglong>(controller_->cycleCount())),
-                                  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
-        if (reply != QMessageBox::Yes) return;
-    }
+    if (!confirmDiscardCurrentRun()) return;
 
     onReset();
     if (!controller_->loadProgram(assembled_words_)) {
@@ -713,6 +696,19 @@ void MainWindow::applyCpiStyle() {
                 "QFrame#statCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
                 .arg(QLatin1String(dark_mode_ ? c.bg_dark : c.bg_light),
                      QLatin1String(dark_mode_ ? c.bdr_dark : c.bdr_light)));
+}
+
+// Loading a program resets the simulator. Ask first when a run is in progress
+// (audit Critical #2: Load and Open used to wipe the simulation silently).
+bool MainWindow::confirmDiscardCurrentRun() {
+    if (controller_->cycleCount() == 0) return true;
+    const auto reply =
+        QMessageBox::question(this, tr("Discard Current Run?"),
+                              tr("Loading this program will discard the current simulation "
+                                 "progress (%1 cycles executed). Continue?")
+                                  .arg(static_cast<qulonglong>(controller_->cycleCount())),
+                              QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    return reply == QMessageBox::Yes;
 }
 
 void MainWindow::onHalted() {

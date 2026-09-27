@@ -20,7 +20,7 @@ constexpr int kKindRole = Qt::UserRole;
 
 QString instr_or(const mips::StageSnapshot& s, const QString& fallback) {
     if (!s.valid || s.raw == 0) return fallback;
-    return QString::fromStdString(format_instr(s.raw));
+    return QString::fromStdString(format_instr(s.raw, s.pc));
 }
 
 }  // anonymous namespace
