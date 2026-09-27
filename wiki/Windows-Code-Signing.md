@@ -30,14 +30,15 @@ Crucially, the ASR rule inspects the **installed** `clearCore-gui.exe`, not just
 
 ## <img src="assets/azure-icons/workflow.svg" width="26" align="top" alt=""> What the release workflow does
 
-Signing lives in the `windows-x64` job of [`cross-platform.yml`](https://github.com/khenderson20/clearCore/blob/main/.github/workflows/cross-platform.yml) and runs in two passes:
+Signing lives in the `windows-x64` job of [`cross-platform.yml`](https://github.com/khenderson20/clearCore/blob/main/.github/workflows/cross-platform.yml) and runs in three passes:
 
 1. **Before `cpack`** — sign the three application executables in the build tree:
    `clearCore-gui.exe`, `clearCore-quick.exe`, `number_system_converter.exe`.
    `cpack` then copies the already-signed binaries into the NSIS package. This pass is what clears the ASR block on the installed app. (Qt's own runtime DLLs bundled by `windeployqt` are already signed upstream by The Qt Company.)
-2. **After `cpack`** — sign the generated NSIS installer, so SmartScreen trusts the download and drops the "unknown publisher" wall.
+2. **During `cpack`** — sign the generated **uninstaller**. `Uninstall.exe` is not a build artifact: NSIS writes it to disk on the *end user's* machine at install time (`WriteUninstaller`), so it doesn't exist yet for pass 1 to catch and it isn't the file pass 3 signs either. NSIS's own `!uninstfinalize` hook runs a command against the uninstaller *stub* right after `makensis` compiles it internally, before that stub is embedded as a resource blob in the installer — the only point it can be signed, since `WriteUninstaller` later copies those exact bytes out unchanged. The "Prepare NSIS uninstaller signing (Windows)" step fetches `signtool.exe` (already on the runner, under the Windows SDK) and the `Microsoft.ArtifactSigning.Client` dlib (pinned by version + SHA-256, same discipline as the NSIS installer download below), writes a `metadata.json`, and appends the resulting `!uninstfinalize` line straight into `nsisconf.nsh` in the NSIS install directory — `makensis` auto-`!include`s that file before compiling any script. (`CPACK_NSIS_DEFINES`, the variable that looks like the obvious injection point, isn't: this package uses CPack component installs, and CPack's own NSIS generator unconditionally overwrites that variable in the component-install code path, before the template substitution that would otherwise use it. `nsisconf.nsh` bypasses CPack's variable plumbing entirely.) Left unsigned, this binary produces the exact same ASR symptom described above, just on `Uninstall.exe` instead of `clearCore-gui.exe` — Add/Remove Programs and Explorer alike refuse to launch it.
+3. **After `cpack`** — sign the generated NSIS installer, so SmartScreen trusts the download and drops the "unknown publisher" wall.
 
-Both passes use the **`azure/artifact-signing-action`** action, pinned to a commit SHA. The workflow still references it under its former path `azure/trusted-signing-action` — GitHub redirects that to the renamed repository, and it resolves to the same commit (`v2.0.0`), so the pin keeps working unchanged. The action still accepts the legacy `trusted-signing-account-name` input alongside the newer `signing-account-name`; both map to the same value.
+Passes 1 and 3 use the **`azure/artifact-signing-action`** action, pinned to a commit SHA. The workflow still references it under its former path `azure/trusted-signing-action` — GitHub redirects that to the renamed repository, and it resolves to the same commit (`v2.0.0`), so the pin keeps working unchanged. The action still accepts the legacy `trusted-signing-account-name` input alongside the newer `signing-account-name`; both map to the same value. Pass 2 can't use the action at all — it runs inside `makensis`, not as a GitHub Actions step — so it calls `signtool.exe` directly via the dlib, following [Microsoft's documented SignTool integration](https://learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations#set-up-signtool-to-use-artifact-signing) instead.
 
 Authentication uses **OIDC federated login** (`azure/login`) — no client secret is stored in the repo. The job is scoped to a `release-signing` GitHub Environment, which gives the OIDC token a stable subject (`repo:khenderson20/clearCore:environment:release-signing`) so a single Entra federated credential covers every release regardless of tag name.
 
@@ -125,6 +126,8 @@ Get-AuthenticodeSignature "clearCore-gui.exe" | Format-List Status, SignerCertif
 
 A `Status` of `Valid` means the binary is trusted; installing and launching it should no longer produce "Access is denied", and no Defender ASR exclusion is needed.
 
+`Uninstall.exe` isn't in the downloaded artifact — NSIS only writes it once you actually install — so checking it means installing the package first and pointing the same command at `C:\Program Files\clearCore\Uninstall.exe`. The "Test install / uninstall (Windows)" step in `cross-platform.yml` does exactly this automatically on every signed build, so a broken `!uninstfinalize` command fails CI instead of surfacing as a user-reported "Windows cannot access the specified device, path, or file."
+
 > **SmartScreen reputation is separate.** A valid Authenticode signature clears the ASR block immediately, but the SmartScreen "unknown publisher" prompt on downloads fades only as the signed file's hash accrues download history. This builds automatically over time; nothing more is required in the workflow.
 
 ---
@@ -141,7 +144,8 @@ A `Status` of `Valid` means the binary is trusted; installing and launching it s
   # later:
   Remove-MpPreference -AttackSurfaceReductionOnlyExclusions "C:\Program Files\clearCore\bin\clearCore-gui.exe"
   ```
-  This is a local workaround only — it does nothing for end users, which is why the binaries are signed in CI instead.
+  This is a local workaround only — it does nothing for end users, which is why the binaries are signed in CI instead. The same trick works for `Uninstall.exe` if *that's* what's being blocked (see below) — just point the exclusion at `C:\Program Files\clearCore\Uninstall.exe` instead.
+- **Uninstalling fails with "Windows cannot access the specified device, path, or file."** This is the ASR block landing on `Uninstall.exe` specifically — check `Get-AuthenticodeSignature "C:\Program Files\clearCore\Uninstall.exe"`. A release built before the uninstaller-signing pass existed will never have a signed `Uninstall.exe`; reinstalling the latest release fixes it going forward. If a *current* release still fails this check: `cpack`'s own log won't show anything wrong even when `!uninstfinalize`'s `signtool` call fails, because NSIS treats a nonzero exit from that hook as a compiler *warning*, not a build error, and CPack doesn't surface `makensis`'s stdout on success either way — the "Test install / uninstall (Windows)" step's `Get-AuthenticodeSignature` assertion is the only thing in CI that actually catches this. Check the "Prepare NSIS uninstaller signing (Windows)" step's log for the tool/dlib paths it resolved, and confirm `nsisconf.nsh` under the NSIS install directory actually contains the `!uninstfinalize` line (a stale or truncated file — e.g. from an append landing on the wrong line — silently drops it).
 
 ---
 
