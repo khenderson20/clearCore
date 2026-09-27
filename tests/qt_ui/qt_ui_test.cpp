@@ -13,6 +13,8 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <QApplication>
+#include <QHexView/model/qhexdocument.h>
+#include <QHexView/qhexview.h>
 #include <QLabel>
 #include <QMainWindow>
 #include <QString>
@@ -266,6 +268,49 @@ static void test_memory_widget_construct() {
     CHECK(true);
 }
 
+// The view shows the widget's own snapshot and refreshes it incrementally: only
+// changed bytes are copied, and exactly those are highlighted (#241, #245).
+static void test_memory_widget_incremental_refresh() {
+    using namespace nsc::qt;
+
+    MemoryWidget mw;
+    isa::Memory  mem(1u << 14);  // 16 KiB: four 4 KiB comparison pages
+    CHECK(mem.write_word(0x100, 0x1111'1111u));
+
+    mw.updateDisplay(mem);  // first refresh: full copy, nothing highlighted
+    CHECK(mw.changedRanges().empty());
+    auto* view = mw.findChild<QHexView*>();
+    CHECK(view != nullptr && view->hexDocument() != nullptr);
+    CHECK(view->hexDocument()->length() == static_cast<qint64>(mem.size()));
+    CHECK(view->hexDocument()->read(0x100, 4) == QByteArray("\x11\x11\x11\x11", 4));
+
+    mw.updateDisplay(mem);  // nothing changed
+    CHECK(mw.changedRanges().empty());
+
+    CHECK(mem.write_byte(0x20, 0xAB));
+    CHECK(mem.write_word(0x2000, 0xDEAD'BEEFu));
+    // A run that crosses the 4 KiB page boundary is still one range.
+    CHECK(mem.write_word(0x0FFE & ~3u, 0xFFFF'FFFFu));
+    CHECK(mem.write_word(0x1000, 0xFFFF'FFFFu));
+    mw.updateDisplay(mem);
+    const auto& r = mw.changedRanges();
+    CHECK(r.size() == 3);
+    CHECK((r.size() == 3 && r[0] == std::pair<qint64, qint64>(0x20, 1)));
+    CHECK((r.size() == 3 && r[1] == std::pair<qint64, qint64>(0x0FFC, 8)));
+    CHECK((r.size() == 3 && r[2] == std::pair<qint64, qint64>(0x2000, 4)));
+    CHECK(view->hexDocument()->read(0x2000, 4) == QByteArray("\xEF\xBE\xAD\xDE", 4));
+    CHECK(view->hexDocument()->read(0x20, 1) == QByteArray("\xAB", 1));
+
+    // The document is patched in place, not replaced (which reset the cursor).
+    const QHexDocument* doc = view->hexDocument();
+    mw.updateDisplay(mem);
+    CHECK(view->hexDocument() == doc);
+    CHECK(mw.changedRanges().empty());  // highlights last one refresh
+
+    mw.setDarkMode(true);  // must not need the simulator's memory
+    CHECK(true);
+}
+
 // ── PipelineTraceWidget timeline ─────────────────────────────────────────────
 
 static void test_trace_widget_clear() {
@@ -403,6 +448,7 @@ int main(int argc, char* argv[]) {
     test_controller_exception_signal();
     test_register_widget_clear();
     test_memory_widget_construct();
+    test_memory_widget_incremental_refresh();
     test_trace_widget_clear();
     test_events_widget_log();
     test_dock_panels_carry_content();
