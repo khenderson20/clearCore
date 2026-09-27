@@ -1,0 +1,54 @@
+# Codecov configuration for clearCore.
+#
+# Coverage scope: mips_core + nsc_core (core-only CMake preset).
+# Qt GUI code (nsc_qt/, nsc_quick/) is excluded — it is not instrumented
+# by the CI coverage job and would artificially deflate the numbers.
+#
+# Docs: https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  # Wait up to 60 s for all flags to arrive before posting a status check.
+  # With one uploader (core-only), this is effectively instant.
+  wait_for_ci: true
+  notify:
+    after_n_builds: 1
+
+coverage:
+  # ── Project-level gate ────────────────────────────────────────────────────
+  # Fail the CI status check if overall project coverage drops below this.
+  # The core MIPS/NSC logic is well-exercised; 70 % is a realistic floor that
+  # still leaves headroom for new, partially-tested features.
+  status:
+    project:
+      default:
+        target: 70%
+        # Allow up to 2 % drop before the check turns red — avoids noise from
+        # small refactors that don't change coverage materially.
+        threshold: 2%
+        # Only consider lines changed in the last commit, not the full history.
+        base: auto
+    # ── Patch gate ──────────────────────────────────────────────────────────
+    # New code added in a PR must be at least 60 % covered.  Lower than the
+    # project floor because new features often land before all edge-case tests
+    # are written.
+    patch:
+      default:
+        target: 60%
+        threshold: 5%
+
+# ── PR comment ───────────────────────────────────────────────────────────────
+# Post a single collapsible comment on each PR with a coverage diff and the
+# files that changed the most.
+comment:
+  layout: "diff, files, footer"
+  behavior: default       # update the existing comment rather than adding new ones
+  require_changes: true   # stay silent on PRs that don't touch covered files
+  require_base: true      # skip comment if there is no base commit to diff against
+
+# ── Ignore paths ─────────────────────────────────────────────────────────────
+# FetchContent third-party sources land in build/; IDE and CI metadata is not
+# application code.
+ignore:
+  - "build/**"
+  - "tests/**"
+  - ".github/**"

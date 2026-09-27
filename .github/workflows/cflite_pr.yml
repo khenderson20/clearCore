@@ -1,0 +1,56 @@
+name: ClusterFuzzLite PR fuzzing
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'fuzz/**'
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  security-events: write
+jobs:
+  PR:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # Read-only clone of the corpus cflite_batch.yml builds up on the
+      # cifuzz-corpus branch (this is a public repo, so no token is needed to
+      # read it). Lets PR fuzzing start from a seeded corpus instead of empty,
+      # and — once the corpus has coverage data — fuzz only the targets a PR
+      # actually touches.
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: c++
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+      - name: Run Fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 120
+          mode: 'code-change'
+          output-sarif: true
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+
+      # run_fuzzers only writes the SARIF file; it doesn't upload it. Without
+      # this step security-events:write above is requested but never used.
+      - name: Upload crash SARIF
+        if: always() && steps.build.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif

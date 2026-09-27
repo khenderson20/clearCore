@@ -1,0 +1,58 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# Derive the next version from labels on merged PRs.
+# PR with the highest-priority label wins; default bump is patch.
+version-resolver:
+  major:
+    labels:
+      - 'breaking-change'
+  minor:
+    labels:
+      - 'feature'
+  patch:
+    labels:
+      - 'enhancement'
+      - 'bug'
+      - 'security'
+      - 'documentation'
+      - 'dependencies'
+      - 'ci'
+  default: patch
+
+categories:
+  - title: '🚀 Added'
+    labels:
+      - 'feature'
+  - title: '🔄 Changed'
+    labels:
+      - 'enhancement'
+  - title: '🐛 Fixed'
+    labels:
+      - 'bug'
+  - title: '🔒 Security'
+    labels:
+      - 'security'
+  - title: '📖 Documentation'
+    labels:
+      - 'documentation'
+  - title: '⬆️ Dependencies'
+    labels:
+      - 'dependencies'
+  - title: '⚙️ CI / Internal'
+    labels:
+      - 'ci'
+
+# PRs with these labels are excluded from release notes entirely.
+exclude-labels:
+  - 'skip-changelog'
+
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&'
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog:** https://github.com/khenderson20/clearCore/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

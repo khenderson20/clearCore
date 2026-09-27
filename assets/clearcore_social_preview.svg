@@ -1,0 +1,179 @@
+<svg viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono','Courier New',monospace">
+  <defs>
+    <style>
+      .amber { fill:#E8B339; }
+      .amberStroke { stroke:#E8B339; }
+      .blue { fill:#268BD2; }
+      .blueStroke { stroke:#268BD2; }
+      .gray { fill:#8B8F98; }
+      .lightgray { fill:#C8CCD4; }
+      .line { stroke:#2A2C34; stroke-width:1; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="640" fill="#0B0C10"/>
+
+  <!-- Decorative circuit traces, top-right -->
+  <g class="line" fill="none">
+    <path d="M760 0 L760 55 L825 55 L825 90"/>
+    <path d="M900 0 L900 70"/>
+    <path d="M960 0 L960 90 L1020 90 L1020 40"/>
+    <path d="M1080 0 L1080 60 L1120 60"/>
+    <path d="M690 100 L690 165"/>
+    <path d="M690 220 L690 260 L720 260"/>
+    <path d="M690 315 L690 355"/>
+    <path d="M690 410 L690 450 L720 450"/>
+    <path d="M760 640 L760 590"/>
+    <path d="M1120 640 L1120 590"/>
+  </g>
+  <g fill="#0B0C10" stroke="#E8B339" stroke-width="1.5">
+    <rect x="754" y="52" width="8" height="8"/>
+    <rect x="1114" y="60" width="8" height="8"/>
+    <rect x="684" y="216" width="8" height="8"/>
+    <rect x="684" y="311" width="8" height="8"/>
+    <rect x="754" y="595" width="8" height="8"/>
+    <rect x="1114" y="595" width="8" height="8"/>
+  </g>
+
+  <!-- LEFT: Title block -->
+  <text x="83" y="150" font-size="66" font-weight="bold" class="amber">clearCore</text>
+  <text x="84" y="185" font-size="19" letter-spacing="2" class="lightgray">CPU ARCHITECTURE SIMULATOR &amp; DEBUGGER</text>
+
+  <!-- Feature bullets, drawn from actual README/feature set -->
+  <g font-size="15.5" font-family="'JetBrains Mono','Courier New',monospace">
+    <text x="83" y="245" class="gray">&gt; </text>
+    <text x="103" y="245" class="lightgray">single-cycle &amp; 5-stage pipeline engines, swap at runtime</text>
+
+    <text x="83" y="278" class="gray">&gt; </text>
+    <text x="103" y="278" class="lightgray">hazard detection, data forwarding &amp; CP0 exceptions</text>
+
+    <text x="83" y="311" class="gray">&gt; </text>
+    <text x="103" y="311" class="lightgray">attach real GDB via a built-in remote stub</text>
+
+    <text x="83" y="344" class="gray">&gt; </text>
+    <text x="103" y="344" class="lightgray">three front ends: FTXUI TUI &#183; Qt6 Widgets &#183; Qt Quick/QML</text>
+
+    <text x="83" y="377" class="gray">&gt; </text>
+    <text x="103" y="377" class="blue">MIPS today &#8212; RISC-V (RV32I) next, same core</text>
+  </g>
+
+  <!-- Footer: tech stack -->
+  <text x="84" y="470" font-size="15" letter-spacing="1" class="gray">C++20 &#183; FTXUI &#183; Qt6 &#183; CMake &#183; MIT LICENSE</text>
+
+  <text x="84" y="565" font-size="19" class="amber">github.com/khenderson20/clearCore</text>
+
+  <!-- RIGHT: Chip diagram -->
+  <rect x="754" y="110" width="380" height="410" rx="4" fill="#14151B" stroke="#E8B339" stroke-width="2"/>
+
+  <!-- Stage pipeline row -->
+  <g font-size="12" text-anchor="middle">
+    <rect x="772" y="148" width="60" height="32" rx="2" fill="#E8B339"/>
+    <text x="802" y="169" fill="#14151B" font-weight="bold">IF</text>
+
+    <rect x="840" y="148" width="60" height="32" rx="2" fill="none" stroke="#5C6068"/>
+    <text x="870" y="169" class="gray">ID</text>
+
+    <rect x="908" y="148" width="60" height="32" rx="2" fill="none" stroke="#5C6068"/>
+    <text x="938" y="169" class="gray">EX</text>
+
+    <rect x="976" y="148" width="60" height="32" rx="2" fill="none" stroke="#5C6068"/>
+    <text x="1006" y="169" class="gray">MEM</text>
+
+    <rect x="1044" y="148" width="60" height="32" rx="2" fill="none" stroke="#5C6068"/>
+    <text x="1074" y="169" class="gray">WB</text>
+  </g>
+
+  <!-- Forwarding path: EX -> ID, dashed -->
+  <path d="M938 148 C 938 122, 870 122, 870 148" fill="none" stroke="#E8B339" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="904" y="118" font-size="10" text-anchor="middle" class="amber">forwarding</text>
+
+  <!-- Engine toggle pills -->
+  <g font-size="11" text-anchor="middle">
+    <rect x="798" y="200" width="118" height="26" rx="13" fill="none" stroke="#5C6068"/>
+    <text x="857" y="217" class="gray">single-cycle</text>
+
+    <rect x="928" y="200" width="150" height="26" rx="13" fill="#E8B339"/>
+    <text x="1003" y="217" fill="#14151B" font-weight="bold">5-stage pipeline</text>
+  </g>
+
+  <!-- Register file grid -->
+  <text x="772" y="256" font-size="11" letter-spacing="1" class="gray">REGISTER FILE</text>
+  <g>
+    <!-- row 1 -->
+    <rect x="772" y="266" width="14" height="14" fill="#E8B339"/>
+    <rect x="792" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="812" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="832" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="852" y="266" width="14" height="14" fill="#E8B339"/>
+    <rect x="872" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="892" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="912" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="932" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="952" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="972" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="992" y="266" width="14" height="14" fill="#E8B339"/>
+    <rect x="1012" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1032" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1052" y="266" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1072" y="266" width="14" height="14" fill="#2A2C34"/>
+    <!-- row 2 -->
+    <rect x="772" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="792" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="812" y="286" width="14" height="14" fill="#E8B339"/>
+    <rect x="832" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="852" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="872" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="892" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="912" y="286" width="14" height="14" fill="#E8B339"/>
+    <rect x="932" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="952" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="972" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="992" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1012" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1032" y="286" width="14" height="14" fill="#E8B339"/>
+    <rect x="1052" y="286" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1072" y="286" width="14" height="14" fill="#2A2C34"/>
+    <!-- row 3 -->
+    <rect x="772" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="792" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="812" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="832" y="306" width="14" height="14" fill="#E8B339"/>
+    <rect x="852" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="872" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="892" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="912" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="932" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="952" y="306" width="14" height="14" fill="#E8B339"/>
+    <rect x="972" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="992" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1012" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1032" y="306" width="14" height="14" fill="#2A2C34"/>
+    <rect x="1052" y="306" width="14" height="14" fill="#E8B339"/>
+    <rect x="1072" y="306" width="14" height="14" fill="#2A2C34"/>
+  </g>
+
+  <!-- CP0 / exceptions + hex memory strip -->
+  <text x="772" y="345" font-size="11" letter-spacing="1" class="gray">MEMORY  0x8000_0180</text>
+  <rect x="772" y="352" width="314" height="16" fill="none" stroke="#2A2C34"/>
+  <text x="780" y="364" font-size="10" class="gray">2712FFF8 AFA20000 0C000420 00000000 8FA20000</text>
+
+  <!-- Divider -->
+  <line x1="772" y1="392" x2="1086" y2="392" stroke="#2A2C34"/>
+
+  <!-- Wordmark inside chip -->
+  <text x="929" y="430" font-size="30" font-weight="bold" text-anchor="middle" class="amber">clearCore</text>
+  <text x="929" y="452" font-size="12" letter-spacing="2" text-anchor="middle" class="gray">MIPS CPU SIMULATOR</text>
+
+  <!-- GDB / remote stub tag -->
+  <g font-size="11" text-anchor="middle">
+    <rect x="859" y="470" width="140" height="24" rx="12" fill="none" stroke="#268BD2"/>
+    <text x="929" y="486" class="blue">remote GDB stub</text>
+  </g>
+
+  <!-- RISC-V next tag, top-right corner of chip -->
+  <g font-size="10" text-anchor="middle">
+    <rect x="1000" y="118" width="118" height="20" rx="10" fill="none" stroke="#268BD2" stroke-dasharray="3,2"/>
+    <text x="1059" y="132" class="blue">RV32I &#8212; next</text>
+  </g>
+</svg>

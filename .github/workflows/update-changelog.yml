@@ -1,0 +1,91 @@
+name: Update CHANGELOG on release
+
+# Triggers when a GitHub Release is published (not a draft).
+# Converts the [Unreleased] section in CHANGELOG.md to the released version,
+# inserts a fresh [Unreleased] header, and commits back to develop.
+
+on:
+  release:
+    types: [published]
+
+permissions: read-all
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: develop
+          # persist-credentials stays true (default): the "Open a pull request"
+          # step below does `git push` using the credential helper this checkout
+          # sets up. Token is the job-scoped GITHUB_TOKEN (contents: write), not
+          # a long-lived secret.
+          # zizmor: ignore[artipacked]
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Promote [Unreleased] to versioned entry
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_DATE: ${{ github.event.release.published_at }}
+        run: |
+          python3 - <<'EOF'
+          import os, re
+
+          tag_raw = os.environ["RELEASE_TAG"]
+          tag     = tag_raw[1:] if tag_raw.startswith("v") else tag_raw  # v0.1.0 -> 0.1.0
+          date    = os.environ["RELEASE_DATE"][:10]                     # YYYY-MM-DD
+
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+
+          # Rename the current [Unreleased] heading to the released version and add a
+          # fresh, empty [Unreleased] above it. The existing Unreleased content stays
+          # in place and becomes the body of the released entry.
+          new_section = (
+              "## [Unreleased]\n\n"
+              "---\n\n"
+              f"## [{tag}] - {date}"
+          )
+          updated, n = re.subn(r"## \[Unreleased\]", new_section, content, count=1)
+          if n == 0:
+              raise SystemExit("error: no '## [Unreleased]' section found in CHANGELOG.md")
+
+          with open("CHANGELOG.md", "w") as f:
+              f.write(updated)
+          print(f"Promoted [Unreleased] -> [{tag}] - {date}")
+          EOF
+
+      - name: Open a pull request with the CHANGELOG promotion
+        # The develop branch ruleset forbids direct pushes ("changes must be made
+        # through a pull request"), so open a PR instead of pushing to develop.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "No CHANGELOG changes to commit"; exit 0
+          fi
+          branch="chore/changelog-${RELEASE_TAG}"
+          git switch -c "$branch"
+          git add CHANGELOG.md
+          git commit -m "chore: promote [Unreleased] to ${RELEASE_TAG} in CHANGELOG"
+          git push --force-with-lease origin "$branch"
+          # skip-changelog: this promotion PR should not appear in the next release's notes.
+          gh pr create \
+            --base develop \
+            --head "$branch" \
+            --title "chore: promote CHANGELOG for ${RELEASE_TAG}" \
+            --body "Automated CHANGELOG promotion for the ${RELEASE_TAG} release, opened by \`update-changelog.yml\` (direct pushes to \`develop\` are blocked by the branch ruleset). Review and merge to record the release in CHANGELOG.md." \
+            --label skip-changelog \
+            || echo "PR already exists for $branch"

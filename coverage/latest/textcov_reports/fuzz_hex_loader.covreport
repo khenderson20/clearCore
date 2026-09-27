@@ -1,0 +1,80 @@
+_ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
+   13|    180|HexProgram parse_hex_program(std::istream& in) {
+   14|    180|    HexProgram  out;
+   15|    180|    std::string line;
+   16|    180|    int         n = 0;
+   17|       |
+   18|  5.08k|    while (std::getline(in, line)) {
+  ------------------
+  |  Branch (18:12): [True: 4.96k, False: 119]
+  ------------------
+   19|  4.96k|        ++n;
+   20|       |
+   21|       |        // Strip trailing comment.
+   22|  4.96k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
+  ------------------
+  |  Branch (22:45): [True: 407, False: 4.56k]
+  ------------------
+   23|       |
+   24|       |        // Strip all whitespace.
+   25|  4.96k|        std::string clean;
+   26|  4.96k|        clean.reserve(line.size());
+   27|  4.96k|        for (const char c : line)
+  ------------------
+  |  Branch (27:27): [True: 21.2k, False: 4.96k]
+  ------------------
+   28|  21.2k|            if (!std::isspace(static_cast<unsigned char>(c))) clean += c;
+  ------------------
+  |  Branch (28:17): [True: 7.86k, False: 13.3k]
+  ------------------
+   29|       |
+   30|  4.96k|        if (clean.empty()) continue;
+  ------------------
+  |  Branch (30:13): [True: 2.12k, False: 2.84k]
+  ------------------
+   31|       |
+   32|       |        // Optional "0x"/"0X" prefix — std::from_chars does not accept one.
+   33|  2.84k|        std::string_view tok{clean};
+   34|  2.84k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
+  ------------------
+  |  Branch (34:13): [True: 1.18k, False: 1.65k]
+  |  Branch (34:31): [True: 595, False: 592]
+  |  Branch (34:49): [True: 194, False: 401]
+  |  Branch (34:66): [True: 194, False: 207]
+  ------------------
+   35|    388|            tok.remove_prefix(2);
+   36|       |
+   37|       |        // from_chars into uint32_t rather than std::stoul: `unsigned long` is
+   38|       |        // 64-bit on LP64 but 32-bit on Windows (LLP64), so stoul accepted an
+   39|       |        // over-wide token on Linux (silently truncating via the cast) while
+   40|       |        // throwing out_of_range on Windows — the same file parsed differently
+   41|       |        // per platform. from_chars is width-explicit and rejects overflow
+   42|       |        // identically everywhere. It also reports failure by return value,
+   43|       |        // which is the core's error convention.
+   44|  2.84k|        uint32_t   v     = 0;
+   45|  2.84k|        const auto first = tok.data();
+   46|  2.84k|        const auto last  = first + tok.size();
+   47|       |
+   48|  2.84k|        if (const auto [ptr, ec] = std::from_chars(first, last, v, 16);
+   49|  2.84k|            ec != std::errc{} || ptr != last) {
+  ------------------
+  |  Branch (49:13): [True: 38, False: 2.80k]
+  |  Branch (49:34): [True: 23, False: 2.78k]
+  ------------------
+   50|     61|            out.words.clear();
+   51|     61|            out.error = std::format("Bad hex on line {}", n);
+   52|     61|            return out;
+   53|     61|        }
+   54|  2.78k|        out.words.push_back(v);
+   55|  2.78k|    }
+   56|    119|    return out;  // error == nullopt ⇒ success (an empty program is valid)
+   57|    180|}
+
+LLVMFuzzerTestOneInput:
+    8|    180|extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+    9|    180|    std::istringstream in(std::string(reinterpret_cast<const char*>(data), size));
+   10|    180|    auto               result = mips::parse_hex_program(in);
+   11|    180|    (void)result;
+   12|    180|    return 0;
+   13|    180|}
+

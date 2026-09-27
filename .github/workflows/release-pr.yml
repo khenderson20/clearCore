@@ -1,0 +1,62 @@
+name: Release PR (develop → main)
+
+# Keeps a standing release-promotion PR from develop into main. On each push to
+# develop it opens the PR if none is open; an existing PR tracks new commits
+# automatically, so you just merge it when you're ready to cut a release.
+#
+# Requires: Settings → Actions → General → Workflow permissions →
+# "Allow GitHub Actions to create and approve pull requests" (same as update-changelog.yml).
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Open or refresh the develop → main release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main develop
+
+          if [ -z "$(git log origin/main..origin/develop --oneline)" ]; then
+            echo "develop is not ahead of main; nothing to promote."
+            exit 0
+          fi
+
+          existing=$(gh pr list --base main --head develop --state open \
+                       --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Release PR #$existing already open; it tracks new commits automatically."
+            exit 0
+          fi
+
+          # Suggested next version from the current draft release (release-drafter).
+          version=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+                      --jq 'map(select(.draft)) | .[0].tag_name // ""' 2>/dev/null || true)
+
+          # List the merged PRs that would ship.
+          included=$(git log origin/main..origin/develop --merges \
+                       --pretty='- %s' | sed -E 's/Merge pull request (#[0-9]+) from .*/\1/')
+
+          gh pr create \
+            --base main --head develop \
+            --title "release: promote develop → main${version:+ (${version})}" \
+            --label skip-changelog \
+            --body "$(printf 'Automated release-promotion PR from `develop` into `main`, opened by `release-pr.yml`.\n\n## Included\n%s\n\nReview, confirm the version bump, and merge to cut a release — release-drafter updates the draft on merge to `main`, and you publish the draft when ready.' "$included")"

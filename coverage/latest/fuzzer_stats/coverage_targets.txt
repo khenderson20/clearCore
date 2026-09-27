@@ -1,0 +1,2 @@
+fuzz_elf_loader
+fuzz_hex_loader
