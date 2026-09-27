@@ -343,9 +343,13 @@ jobs:
           # Written straight into NSIS's own auto-included config file -- see
           # the comment above this step for why CPACK_NSIS_DEFINES can't carry
           # this. Plain NSIS script text, no CMake involved, so no escaping.
-          # Same install directory "Ensure NSIS" (above) installed into.
+          # Same install directory "Ensure NSIS" (above) installed into. The
+          # stock nsisconf.nsh NSIS ships (ending in `!macroend`) has no
+          # trailing newline, so a bare Add-Content glues $define onto that
+          # line as `!macroend!uninstfinalize ...` -- an unterminated-macro
+          # parse error. A leading blank line guarantees separation.
           $nsisConfPath = "${env:ProgramFiles(x86)}\NSIS\nsisconf.nsh"
-          Add-Content -Path $nsisConfPath -Value $define
+          Add-Content -Path $nsisConfPath -Value "`n$define"
           Write-Host "wrote to ${nsisConfPath}:"
           Write-Host $define
 
