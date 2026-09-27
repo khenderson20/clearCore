@@ -24,7 +24,57 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+- **Workflow tokens are least-privilege.** `cross-platform.yml` grants `contents: read` at the top
+  level; only the signing job keeps `id-token: write` (Azure OIDC). `cflite_pr.yml` and
+  `update-changelog.yml` drop `read-all` for `contents: read`.
+- **No committed binaries.** The ELF fuzz seeds are generated at build time by
+  `tests/fuzz/make_elf_corpus.py` instead of being checked in (OpenSSF Scorecard Binary-Artifacts).
+- **GDB stub: bounded input, no SIGPIPE.** A packet longer than the advertised `PacketSize` (0x4000)
+  is NAKed without being stored, and replies use `MSG_NOSIGNAL` / `SO_NOSIGPIPE`, so a debugger that
+  disconnects mid-reply no longer kills the emulator (#219).
+
+### Fixed
+- **Precise exceptions in the pipelined model** (#218). IF and ID only record a fault; EX and MEM
+  raise it, oldest first. A wrong-path fetch past the program or an undecodable word behind a taken
+  branch no longer traps, an older faulting load wins over a younger illegal word, and a squashed
+  MTC0 writes no CP0 register. A COP0 word whose low bits read as JR or BREAK is no longer
+  dispatched as one. A 4,000-program differential test against the single-cycle model shows no
+  mismatch.
+- **GDB stub** (#219): Ctrl-C interrupts a running `c`, and each Ctrl-C gets exactly one stop reply;
+  `k` and `D` end the session.
+- **Assembler** (#233): out-of-range immediates, branch offsets and jump targets are errors instead
+  of being silently truncated into a different program.
+- **Pipeline Trace** (#238, #239): columns are real simulator cycles, and rows are dynamic
+  instructions, so a short loop whose PC is in two stages at once shows both.
+- **Memory panel** (#241, #245): bytes written by the last step are highlighted (the feature was
+  documented but never wired up), and a refresh copies only the changed pages instead of 1 MiB.
+- **Register panel and Datapath highlights** use the pipeline's own read/write rules: a shift no
+  longer lights `rs`, and `mfc0` lights `rt` instead of the CP0 register number.
+- **Immediates display as the hardware extends them**: `ori $t0, $zero, 0xffff` no longer reads
+  `-1` in the TUI decode panel or the Datapath. The Widgets GUI now prints the same assembly as the
+  TUI and the Quick GUI (it showed operands for `syscall` and none for `mfc0`/`mtc0`).
+- **TUI Run→Halt** reports how the run ended (halt, trap, fault, or step budget exhausted); it used
+  to discard the result.
+
+### Changed
+- **Hidden panels cost almost nothing per cycle** (#242, #243). A closed dock or a background tab
+  skips its redraw and catches up when shown; the Datapath scene is derived once per cycle instead
+  of twice, and its tooltips are built on hover. The CPI card is restyled only when its band
+  changes.
+- `SimulatorController` is GUI-thread confined and has no mutex (#244); the unused `DatapathWidget`
+  and the Qt OpenGL dependency are removed (#103).
+- `PipelinedCpu::step()` is split into per-stage functions, with the hazard and forwarding units as
+  pure functions in `mips/pipeline_units.h` and one load/store helper shared by both models (#220).
+
 ### CI / Internal
+- API clean-ups for in-tree consumers: `isa::Memory` / `isa::RegisterFile` everywhere and the
+  `mips::` aliases removed (#237); `nsc_core` functions renamed to snake_case (#249).
+- Conventions applied: `final` on leaf classes (#247), `[[nodiscard]]` on queries including
+  `IProcessor::run()` (#248), `#pragma once` in `ui.h` (#250), one QML registration macro per type
+  (#251), and the #105 review findings.
+- clang-tidy backlog cleared in the core, TUI and Qt sources (#246), and the CodeQL
+  security-and-quality notes (long switch cases, dead code, commented-out code).
 - **Trunk-based development: `main` is the only long-lived branch.** Pull requests branch from and target
   `main`; `develop` and the release-promotion machinery are gone. Release promotions were squash-merged, so
   `develop` never became an ancestor of `main`: release PRs went out of date or conflicted and needed

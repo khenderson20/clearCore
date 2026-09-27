@@ -132,8 +132,8 @@ These types carry nothing MIPS-specific and live in `include/isa/`, ready to be 
 | `Disassembler`    | `include/mips/disassembler.h`    | Machine code → assembly text; hex program loader              |
 | `SingleCycleCpu`  | `src/mips/single_cycle_cpu.cpp`  | Simulates all five stages in one `step()` call                |
 | `PipelinedCpu`    | `src/mips/pipelined_cpu.cpp`     | Concurrent pipeline with five pipeline registers               |
-| Hazard detection  | (internal to `PipelinedCpu`)     | Load-use stall detection, branch/jump flush                    |
-| Forwarding unit   | (internal to `PipelinedCpu`)     | EX/MEM → EX and MEM/WB → EX forwarding paths                   |
+| Hazard detection  | `include/mips/pipeline_units.h`  | `load_use_hazard()`: load-use stall detection (flushes are resolved in `PipelinedCpu::step()`) |
+| Forwarding unit   | `include/mips/pipeline_units.h`  | `forward_operands()`: EX/MEM → EX and MEM/WB → EX forwarding paths; `source_registers()` / `destination_register()` give each instruction's reads and write |
 | Trace log         | `include/mips/trace.h`           | Shared spdlog logger for instruction/pipeline/exception tracing; quiet by default, enable with `CLEARCORE_LOG_LEVEL` |
 | `NyxstoneBackend` | `include/mips/nyxstone_backend.h` (optional, `CLEARCORE_NYXSTONE_ENABLED`) | LLVM-based text ↔ machine-code assembler/disassembler; pimpl'd so no LLVM headers leak. Differentially validates the Decoder/Disassembler (see `nyxstone_test`). Built when LLVM 15–20 is found at configure time |
 
