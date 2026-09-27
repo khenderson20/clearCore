@@ -7,7 +7,7 @@
 // are QGraphicsItems laid out in a fixed logical coordinate space; wires are
 // orthogonal painter paths with arrowheads and junction dots.
 //
-// Live state binding (setPipelineState):
+// Live state binding (setCycleState):
 //   • a mnemonic label above each stage column (like Ripes' top labels)
 //   • pipeline-register bars tint red on flush / amber on stall
 //   • forwarding wires light up when the fwd_* flags are set
@@ -35,18 +35,19 @@ namespace nsc::qt {
 
 class WireItem;
 
-class SchematicDatapathWidget : public QGraphicsView {
+class SchematicDatapathWidget final : public QGraphicsView {
     Q_OBJECT
 
 public:
     explicit SchematicDatapathWidget(QWidget* parent = nullptr);
 
-    void setPipelineState(const mips::PipelineState& state);
+    // The one per-cycle entry point: the pipeline snapshot plus the live
+    // register file (for the write-back value and the operand tooltips), so the
+    // scene is re-derived once per cycle. While the widget is hidden it only
+    // stores them and redraws once when shown.
+    void setCycleState(const mips::PipelineState& state, const std::array<uint32_t, 32>& regs);
     void setBreakpoints(const std::unordered_set<uint32_t>& bps);
     void setDarkMode(bool dark);
-    // Live register-file contents, used to enrich component tooltips with the
-    // actual operand values of the instructions in flight.
-    void setRegisterValues(const std::array<uint32_t, 32>& regs);
 
 signals:
     void breakpointToggleRequested(uint32_t pc);
@@ -61,6 +62,9 @@ protected:
     void resizeEvent(QResizeEvent* ev) override;
     void focusInEvent(QFocusEvent* ev) override;
     void focusOutEvent(QFocusEvent* ev) override;
+    void showEvent(QShowEvent* ev) override;
+    // Builds the component tooltips just before one is shown (see updateTooltips).
+    bool viewportEvent(QEvent* ev) override;
 
 private:
     // Scene construction (runs once; items are retained and re-themed).
@@ -73,7 +77,9 @@ private:
     int stageAtViewPos(const QPoint& pos) const;
     // Zoom-to-fit while the user hasn't zoomed manually.
     void fitSchematic();
-    // Refresh the live parts of the educational component tooltips.
+    // Refresh the live parts of the educational component tooltips. Only called
+    // when a tooltip is about to be shown and the state changed since the last
+    // one: the text is read on hover, never on the per-cycle path.
     void updateTooltips();
     // Multiply the current view scale by `factor`, clamped; marks user zoom.
     void zoomBy(qreal factor);
@@ -143,6 +149,8 @@ private:
     bool                         dark_mode_      = false;
     bool                         user_zoomed_    = false;
     int                          selected_stage_ = 0;
+    bool                         dirty_          = false;  // state changed while hidden
+    bool                         tooltips_dirty_ = true;   // state changed since last tooltip
 };
 
 }  // namespace nsc::qt

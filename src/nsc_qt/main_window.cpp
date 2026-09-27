@@ -488,6 +488,10 @@ void MainWindow::setupConnections() {
         setRunState(false);
     });
 
+    // The memory panel skips refreshes while hidden, so it catches up when shown.
+    connect(memory_widget_, &MemoryWidget::shown, this,
+            [this] { memory_widget_->updateDisplay(controller_->memory()); });
+
     connect(datapath_widget_, &SchematicDatapathWidget::breakpointToggleRequested, this,
             &MainWindow::onBreakpointToggle);
     connect(datapath_widget_, &SchematicDatapathWidget::stageDetailRequested, this,
@@ -637,21 +641,21 @@ void MainWindow::onCycleExecuted(uint64_t count) {
     status_cycles_lbl_->setText(tr("Cycles: %1").arg(count));
 }
 
-void MainWindow::onPipelineStateChanged(mips::PipelineState state) {
-    datapath_widget_->setPipelineState(state);
-    trace_widget_->updateCycle(state);
-    events_widget_->updateCycle(state);
-
-    // Gather register values once, then push state + values to RegisterWidget
-    // together so it refreshes each of its 32 cells exactly once per cycle.
+// Every panel keeps its own model current but draws only while it is visible.
+// QADS hides a closed dock and every tab that is not in front, so a hidden
+// panel costs almost nothing per cycle and redraws once in its showEvent()
+// (#242). The memory panel copies from the controller, so it is refreshed only
+// while visible, and from its shown() signal.
+void MainWindow::onPipelineStateChanged(const mips::PipelineState& state) {
     std::array<uint32_t, 32> reg_vals{};
     for (int i = 0; i < 32; ++i)
-        reg_vals[i] = controller_->registerValue(static_cast<uint8_t>(i));
-    register_widget_->updateCycle(state, reg_vals);
-    datapath_widget_->setRegisterValues(reg_vals);  // live operand tooltips
+        reg_vals[static_cast<std::size_t>(i)] = controller_->registerValue(static_cast<uint8_t>(i));
 
-    // Refresh memory
-    memory_widget_->updateDisplay(controller_->memory());
+    datapath_widget_->setCycleState(state, reg_vals);
+    register_widget_->updateCycle(state, reg_vals);
+    trace_widget_->updateCycle(state);
+    events_widget_->updateCycle(state);
+    if (memory_widget_->isVisible()) memory_widget_->updateDisplay(controller_->memory());
 }
 
 void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
@@ -663,37 +667,14 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
     stat_cycles_lbl_->setText(QString::number(stats.cycles_executed));
     stat_instrs_lbl_->setText(QString::number(stats.instructions_retired));
 
-    if (cpi > 0) {
-        stat_cpi_lbl_->setText(QString::number(cpi, 'f', 2));
-        const QColor text_color = cpi >= 2.0   ? QColor("#F44336")
-                                  : cpi >= 1.5 ? QColor("#FF9800")
-                                               : QColor("#4CAF50");
-        stat_cpi_lbl_->setStyleSheet(
-            QString("color: %1; font-weight: bold;").arg(text_color.name()));
-        // Color the card background to give a glanceable health signal even
-        // when the user isn't reading the exact number.
-        if (stat_cpi_card_) {
-            const QColor bg  = dark_mode_ ? (cpi >= 2.0   ? QColor("#3D1515")
-                                             : cpi >= 1.5 ? QColor("#3D2D10")
-                                                          : QColor("#152D15"))
-                                          : (cpi >= 2.0   ? QColor("#FFEBEE")
-                                             : cpi >= 1.5 ? QColor("#FFF3E0")
-                                                          : QColor("#E8F5E9"));
-            const QColor bdr = dark_mode_ ? (cpi >= 2.0   ? QColor("#7C2020")
-                                             : cpi >= 1.5 ? QColor("#7C5810")
-                                                          : QColor("#1E7C1E"))
-                                          : (cpi >= 2.0   ? QColor("#EF9A9A")
-                                             : cpi >= 1.5 ? QColor("#FFCC80")
-                                                          : QColor("#A5D6A7"));
-            stat_cpi_card_->setStyleSheet(
-                QString(
-                    "QFrame#statCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
-                    .arg(bg.name(), bdr.name()));
-        }
-    } else {
-        stat_cpi_lbl_->setText("—");
-        stat_cpi_lbl_->setStyleSheet("");
-        if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
+    stat_cpi_lbl_->setText(cpi > 0 ? QString::number(cpi, 'f', 2) : QStringLiteral("—"));
+    const CpiBand band = cpi <= 0     ? CpiBand::None
+                         : cpi >= 2.0 ? CpiBand::Bad
+                         : cpi >= 1.5 ? CpiBand::Warning
+                                      : CpiBand::Good;
+    if (band != cpi_band_) {
+        cpi_band_ = band;
+        applyCpiStyle();
     }
 
     stat_data_haz_lbl_->setText(QString::number(stats.data_hazards));
@@ -701,6 +682,37 @@ void MainWindow::onStatisticsUpdated(nsc::qt::SimulatorStatistics stats) {
     stat_fwd_lbl_->setText(QString::number(stats.forwarding_events));
     stat_stalls_lbl_->setText(QString::number(stats.stalls));
     stat_flushes_lbl_->setText(QString::number(stats.flushes));
+}
+
+void MainWindow::applyCpiStyle() {
+    if (cpi_band_ == CpiBand::None) {
+        stat_cpi_lbl_->setStyleSheet(QString());
+        if (stat_cpi_card_) stat_cpi_card_->setStyleSheet(QString());
+        return;
+    }
+    // {text, light background, light border, dark background, dark border}
+    struct Colors {
+        const char* text;
+        const char* bg_light;
+        const char* bdr_light;
+        const char* bg_dark;
+        const char* bdr_dark;
+    };
+    const Colors c = cpi_band_ == CpiBand::Bad
+                         ? Colors{"#F44336", "#FFEBEE", "#EF9A9A", "#3D1515", "#7C2020"}
+                     : cpi_band_ == CpiBand::Warning
+                         ? Colors{"#FF9800", "#FFF3E0", "#FFCC80", "#3D2D10", "#7C5810"}
+                         : Colors{"#4CAF50", "#E8F5E9", "#A5D6A7", "#152D15", "#1E7C1E"};
+    stat_cpi_lbl_->setStyleSheet(
+        QStringLiteral("color: %1; font-weight: bold;").arg(QLatin1String(c.text)));
+    // The card background gives a glanceable health signal even when the user
+    // is not reading the exact number.
+    if (stat_cpi_card_)
+        stat_cpi_card_->setStyleSheet(
+            QStringLiteral(
+                "QFrame#statCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
+                .arg(QLatin1String(dark_mode_ ? c.bg_dark : c.bg_light),
+                     QLatin1String(dark_mode_ ? c.bdr_dark : c.bdr_light)));
 }
 
 void MainWindow::onHalted() {
@@ -1231,8 +1243,7 @@ QScrollArea#dockWidgetScrollArea { background: transparent; border: none; }
         dock_manager_->setStyleSheet(ads_base + ads_theme);
     }
 
-    // Reset the CPI card to the QSS default (color re-applied by onStatisticsUpdated).
-    if (stat_cpi_card_) stat_cpi_card_->setStyleSheet("");
+    applyCpiStyle();  // the card colours depend on the scheme
 
     datapath_widget_->setDarkMode(dark);
     register_widget_->setDarkMode(dark);

@@ -20,7 +20,7 @@ Project-internal types:
 
 ## 3. Class Hierarchy and Role
 
-`MemoryWidget` inherits [`QWidget`](https://doc.qt.io/qt-6/qwidget.html) and is `final`. It hosts one `QHexView` whose document is backed by `MemorySnapshotBuffer`, a private `QHexBuffer` subclass that holds the widget's own copy of memory.
+`MemoryWidget` inherits [`QWidget`](https://doc.qt.io/qt-6/qwidget.html) and is `final`. It hosts one `QHexView` whose document is backed by `MemorySnapshotBuffer`, a private `QHexBuffer` subclass that holds the widget's own copy of memory. It overrides `showEvent()` to emit `shown()`.
 
 ## 4. Public Methods
 
@@ -36,7 +36,10 @@ Re-colours the header text and the current highlights. It does not touch the sim
 #### `const std::vector<std::pair<qint64, qint64>>& changedRanges() const noexcept`
 The `{offset, length}` byte ranges highlighted by the last refresh. For tests.
 
-## 5. Protected / Private Slots
+## 5. Signals and Private Slots
+
+#### `void shown()` *(signal)*
+Emitted from `showEvent()`, when the panel becomes visible (its dock opens or its tab comes to the front). `MainWindow` skips refreshes while the panel is hidden and answers this signal with `updateDisplay()`. The widget cannot refresh itself because it keeps no reference to the simulator's memory. The first refresh after a hidden period highlights every byte that changed while the panel was hidden.
 
 #### `void onAddressChanged(int value)` *(private slot)*
 Connected to the address spin box. Moves the hex cursor to `value`.

@@ -5,6 +5,7 @@
 #include "nsc_qt/widgets/pipeline_events_widget.h"
 #include "nsc_qt/widgets/pipeline_trace_widget.h"
 #include "nsc_qt/widgets/register_widget.h"
+#include "nsc_qt/widgets/schematic_datapath_widget.h"
 
 #include "mips/pipelined_cpu.h"
 #include "mips/single_cycle_cpu.h"
@@ -13,6 +14,10 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <QApplication>
+#include <QGraphicsItem>
+#include <QGraphicsScene>
+#include <QGraphicsSimpleTextItem>
+#include <QHelpEvent>
 #include <QHexView/model/qhexdocument.h>
 #include <QHexView/qhexview.h>
 #include <QLabel>
@@ -451,6 +456,12 @@ static void test_events_widget_log() {
     ew.updateCycle(st);
     CHECK(ew.eventCount() == 3);
 
+    // The same kind of event for a different instruction is a new event.
+    st.stages[2].raw = 0x012B'5020u;  // add $t2,$t1,$t3
+    st.cycle         = 10;
+    ew.updateCycle(st);
+    CHECK(ew.eventCount() == 4);
+
     ew.clear();
     CHECK(ew.eventCount() == 0);
 }
@@ -480,6 +491,91 @@ static void test_dock_panels_carry_content() {
     // First call opens a central area; the second tabs into the same one.
     CHECK(area != nullptr);
     CHECK(manager->dockWidgetsMap().size() == 2);
+}
+
+// ── Hidden panels (#242, #243) ────────────────────────────────────────────────
+
+static bool has_label_text(const QWidget& w, const QString& text) {
+    const auto labels = w.findChildren<QLabel*>();
+    return std::any_of(labels.begin(), labels.end(),
+                       [&](const QLabel* l) { return l->text() == text; });
+}
+
+static bool scene_has_text(const QGraphicsView& v, const QString& text) {
+    const auto items = v.scene()->items();
+    return std::any_of(items.begin(), items.end(), [&](QGraphicsItem* it) {
+        const auto* t = qgraphicsitem_cast<QGraphicsSimpleTextItem*>(it);
+        return t != nullptr && t->text() == text;
+    });
+}
+
+static bool scene_has_tooltip(const QGraphicsView& v, const QString& part) {
+    const auto items = v.scene()->items();
+    return std::any_of(items.begin(), items.end(),
+                       [&](QGraphicsItem* it) { return it->toolTip().contains(part); });
+}
+
+// QADS hides every tab that is not in front, so the per-cycle updates skip
+// those panels; each one catches up when its tab comes to the front.
+static void test_hidden_tab_panels_catch_up_when_shown() {
+    using namespace nsc::qt;
+
+    auto  main_window = std::make_unique<QMainWindow>();
+    auto* manager     = new ads::CDockManager(main_window.get());
+
+    ads::CDockAreaWidget* area     = nullptr;
+    auto*                 regs     = new RegisterWidget;
+    auto*                 mem      = new MemoryWidget;
+    auto*                 dp       = new SchematicDatapathWidget;
+    auto*                 reg_dock = addDockPanel(manager, area, "Registers", regs);
+    auto*                 mem_dock = addDockPanel(manager, area, "Memory", mem);
+    auto*                 dp_dock  = addDockPanel(manager, area, "Datapath", dp);
+
+    int mem_shown = 0;
+    QObject::connect(mem, &MemoryWidget::shown, [&] { ++mem_shown; });
+
+    dp_dock->setAsCurrentTab();
+    main_window->show();
+    CHECK(dp->isVisible());
+    CHECK(!regs->isVisible());  // background tabs are hidden, not just covered
+    CHECK(!mem->isVisible());
+    CHECK(mem_shown == 0);
+
+    // WB: addi $t0,$zero,42 writes $t0; ID: add $t2,$t0,$t1 reads $t0 and $t1.
+    mips::PipelineState st{};
+    st.stages[1] = {"ID", true, false, false, 0x0C, 0x0109'5020u};
+    st.stages[4] = {"WB", true, false, false, 0x00, 0x2008'002Au};
+    st.cycle     = 5;
+    std::array<uint32_t, 32> vals{};
+    vals[8] = 42;
+
+    // The register panel stores the values but does not redraw while hidden.
+    regs->updateCycle(st, vals);
+    CHECK(regs->value(8) == 42u);
+    CHECK(!has_label_text(*regs, QStringLiteral("0x0000002a")));
+    reg_dock->setAsCurrentTab();
+    CHECK(regs->isVisible());
+    CHECK(has_label_text(*regs, QStringLiteral("0x0000002a")));
+
+    // The memory panel asks for a refresh when it comes to the front.
+    mem_dock->setAsCurrentTab();
+    CHECK(mem->isVisible());
+    CHECK(mem_shown == 1);
+
+    // The datapath defers the whole scene while hidden…
+    CHECK(!dp->isVisible());
+    dp->setCycleState(st, vals);
+    const QString wb_label = QStringLiteral("$t0 = 0x0000002a");
+    CHECK(!scene_has_text(*dp, wb_label));
+    dp_dock->setAsCurrentTab();
+    CHECK(scene_has_text(*dp, wb_label));
+
+    // …and builds its tooltips only when one is about to be shown.
+    const QString id_reads = QStringLiteral("$t0 = 0x0000002a");
+    CHECK(!scene_has_tooltip(*dp, id_reads));
+    QHelpEvent tip(QEvent::ToolTip, QPoint(1, 1), dp->viewport()->mapToGlobal(QPoint(1, 1)));
+    QApplication::sendEvent(dp->viewport(), &tip);
+    CHECK(scene_has_tooltip(*dp, id_reads));
 }
 
 // ── Statistics / exception reporting ─────────────────────────────────────────
@@ -555,6 +651,7 @@ int main(int argc, char* argv[]) {
     test_trace_widget_defers_redraw_while_hidden();
     test_events_widget_log();
     test_dock_panels_carry_content();
+    test_hidden_tab_panels_catch_up_when_shown();
 
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;

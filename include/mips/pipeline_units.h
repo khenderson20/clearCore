@@ -26,6 +26,12 @@ struct SourceRegisters {
 // manufacture phantom stalls that corrupt the cycle and CPI telemetry.
 [[nodiscard]] SourceRegisters source_registers(const DecodedInstr& d);
 
+// Write-register select (the RegDst mux plus JAL's hard-wired $ra): the GPR the
+// instruction writes in WB, or -1 when it writes none. MFC0 writes rt; MTC0,
+// ERET, stores, branches, J, JR, SYSCALL and BREAK write no GPR. A write to
+// $zero is reported as 0, because the hardware still selects it.
+[[nodiscard]] int destination_register(const DecodedInstr& d);
+
 // Hazard-detection unit: true when the load now in EX writes a register that
 // the instruction now in ID reads, so ID must wait one cycle.
 [[nodiscard]] bool load_use_hazard(const IdEx& in_ex, const IfId& in_id);

@@ -23,6 +23,7 @@
 #include <QPainterPath>
 #include <QPen>
 #include <QPolygonF>
+#include <QShowEvent>
 #include <QStringList>
 #include <QToolButton>
 #include <QVariantAnimation>
@@ -665,10 +666,11 @@ void SchematicDatapathWidget::applyTheme() {
 }
 
 void SchematicDatapathWidget::applyState() {
+    dirty_         = false;
     const Theme& t = theme(dark_mode_);
 
-    // Pre-decode each stage once; reuse results everywhere in this function
-    // and in updateTooltips() to avoid repeated Decoder::decode() calls per cycle.
+    // Decode each stage once for this function. The tooltips decode on their
+    // own, and only when one is about to be shown (see viewportEvent).
     using OptDecoded = std::optional<mips::DecodedInstr>;
     std::array<OptDecoded, 5> decoded;
     for (std::size_t i = 0; i < 5; ++i) {
@@ -840,7 +842,7 @@ void SchematicDatapathWidget::applyState() {
         hazard_text_->setVisible(true);
     }
 
-    updateTooltips();
+    tooltips_dirty_ = true;
 }
 
 void SchematicDatapathWidget::updateTooltips() {
@@ -932,11 +934,30 @@ void SchematicDatapathWidget::updateTooltips() {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-void SchematicDatapathWidget::setPipelineState(const mips::PipelineState& state) {
+void SchematicDatapathWidget::setCycleState(const mips::PipelineState&      state,
+                                            const std::array<uint32_t, 32>& regs) {
     const mips::PipelineState old = state_;
     state_                        = state;
+    reg_values_                   = regs;
+    if (!isVisible()) {  // a closed panel or a background tab: draw once when shown
+        dirty_ = true;
+        return;
+    }
     applyState();
     startTokenAnimation(old);
+}
+
+void SchematicDatapathWidget::showEvent(QShowEvent* ev) {
+    QGraphicsView::showEvent(ev);
+    if (dirty_) applyState();
+}
+
+bool SchematicDatapathWidget::viewportEvent(QEvent* ev) {
+    if (ev->type() == QEvent::ToolTip && tooltips_dirty_) {
+        updateTooltips();
+        tooltips_dirty_ = false;
+    }
+    return QGraphicsView::viewportEvent(ev);
 }
 
 void SchematicDatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>& bps) {
@@ -947,11 +968,6 @@ void SchematicDatapathWidget::setBreakpoints(const std::unordered_set<uint32_t>&
 void SchematicDatapathWidget::setDarkMode(bool dark) {
     dark_mode_ = dark;
     applyTheme();
-}
-
-void SchematicDatapathWidget::setRegisterValues(const std::array<uint32_t, 32>& regs) {
-    reg_values_ = regs;
-    applyState();  // refreshes the WB value label and operand tooltips
 }
 
 void SchematicDatapathWidget::startTokenAnimation(const mips::PipelineState& old_state) {

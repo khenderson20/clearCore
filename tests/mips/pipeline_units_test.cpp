@@ -87,6 +87,34 @@ static void test_source_registers() {
     CHECK(reads(cop0(0x10, 0, 0, 0x18), -1, -1));    // eret
 }
 
+static int dest(uint32_t word) {
+    const auto d = mips::Decoder::decode(word);
+    return d ? mips::destination_register(*d) : -2;
+}
+
+static void test_destination_register() {
+    using namespace enc;
+    constexpr uint32_t SYSCALL = 0x0C, BNE = 0x05, JAL_TO_0 = 0x0C00'0000u;
+    CHECK(dest(R(t0, t1, t2, 0, ADD)) == static_cast<int>(t2));    // R-format: rd
+    CHECK(dest(R(zero, t1, t2, 4, SLL)) == static_cast<int>(t2));  // shift: rd
+    CHECK(dest(0) == 0);                                           // nop selects $zero
+    CHECK(dest(I(ADDI, t0, t1, 5)) == static_cast<int>(t1));       // ALU-immediate: rt
+    CHECK(dest(I(LUI, zero, t1, 1)) == static_cast<int>(t1));      // lui: rt
+    CHECK(dest(I(LW, t0, t1, 0)) == static_cast<int>(t1));         // load: rt
+    CHECK(dest(I(SW, t0, t1, 0)) == -1);                           // store: none
+    CHECK(dest(I(BEQ, t0, t1, 0)) == -1);                          // branches: none
+    CHECK(dest(I(BNE, t0, t1, 0)) == -1);
+    CHECK(dest(J_TO_0) == -1);                                      // j: none
+    CHECK(dest(JAL_TO_0) == 31);                                    // jal links $ra
+    CHECK(dest(R(t0, zero, t2, 0, JALR)) == static_cast<int>(t2));  // jalr links rd
+    CHECK(dest(R(t0, zero, zero, 0, JR)) == -1);                    // jr: none
+    CHECK(dest(R(zero, zero, zero, 0, SYSCALL)) == -1);             // syscall: none
+    // COP0 decodes as R-format; rd is a CP0 register, never the GPR written.
+    CHECK(dest(cop0(0x00, t1, 12)) == static_cast<int>(t1));  // mfc0 writes rt
+    CHECK(dest(cop0(0x04, t1, 12)) == -1);                    // mtc0 writes CP0
+    CHECK(dest(cop0(0x10, 0, 0, 0x18)) == -1);                // eret
+}
+
 static void test_load_use_hazard() {
     using namespace enc;
     const mips::IdEx load_t0 = in_ex(I(LW, zero, t0, 0));
@@ -204,6 +232,7 @@ static void test_load_store_helpers() {
 
 int main() {
     test_source_registers();
+    test_destination_register();
     test_load_use_hazard();
     test_forward_operands();
     test_load_store_helpers();

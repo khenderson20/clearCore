@@ -49,6 +49,15 @@ SourceRegisters source_registers(const DecodedInstr& d) {
     return src;
 }
 
+int destination_register(const DecodedInstr& d) {
+    // COP0 decodes as R-format, so it must be tested before the rd rule: MFC0
+    // (sub-op 0x00) writes rt, and its rd field names a CP0 register.
+    if (d.opcode == Opcode::COP0) return d.r().rs == 0x00 ? d.r().rt : -1;
+    if (d.opcode == Opcode::JAL) return 31;
+    if (!derive_control(d).reg_write) return -1;
+    return d.format == InstrFormat::R ? d.r().rd : d.i().rt;
+}
+
 bool load_use_hazard(const IdEx& in_ex, const IfId& in_id) {
     if (!in_ex.valid || !in_ex.ctrl.mem_read || !in_id.valid || in_id.fetch_fault) return false;
     const auto decoded = Decoder::decode(in_id.instr);

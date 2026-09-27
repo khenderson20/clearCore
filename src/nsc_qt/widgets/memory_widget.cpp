@@ -5,6 +5,7 @@
 #include <QIODevice>
 #include <QLabel>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -172,6 +173,11 @@ void MemoryWidget::applyHighlights() {
     const QColor bg = highlightColor();
     for (const auto& [offset, length] : changed_)
         hex_view_->setBackgroundSize(offset, length, bg);
+}
+
+void MemoryWidget::showEvent(QShowEvent* ev) {
+    QWidget::showEvent(ev);
+    emit shown();
 }
 
 void MemoryWidget::onAddressChanged(int value) {

@@ -8,19 +8,21 @@
 class QLabel;
 class QGridLayout;
 class QPaintEvent;
+class QShowEvent;
 class QTimer;
 
 namespace nsc::qt {
 
-class RegisterWidget : public QWidget {
+class RegisterWidget final : public QWidget {
     Q_OBJECT
 
 public:
     explicit RegisterWidget(QWidget* parent = nullptr);
 
-    // Single per-cycle entry point: figures out which registers are read
-    // this cycle, starts the wall-clock fade animation for any register
-    // written this cycle, stores the fresh values, and refreshes every cell.
+    // Single per-cycle entry point: stores the fresh values and the registers
+    // the ID-stage instruction reads, starts the wall-clock fade for the
+    // register written in WB, and refreshes every cell once. While the widget
+    // is hidden it only stores, and refreshes once when shown.
     void updateCycle(const mips::PipelineState& state, const std::array<uint32_t, 32>& vals);
 
     void setShowAliases(bool show);
@@ -32,12 +34,15 @@ public:
     // Direct read-only access for tests.
     [[nodiscard]] uint32_t value(int idx) const noexcept { return values_[idx]; }
 
+protected:
+    void showEvent(QShowEvent* ev) override;
+
 private:
     // ── Cell ─────────────────────────────────────────────────────────────────
     // A single register cell. Paints its own rounded background/border in
     // paintEvent() instead of going through QWidget::setStyleSheet(), which
     // reparses a full QSS string from scratch on every call.
-    class Cell : public QWidget {
+    class Cell final : public QWidget {
     public:
         explicit Cell(QWidget* parent = nullptr);
 
@@ -78,6 +83,7 @@ private:
     QGridLayout*              grid_         = nullptr;
     bool                      show_aliases_ = true;
     bool                      dark_mode_    = false;
+    bool                      dirty_        = false;  // values changed while hidden
 
     // Registers read by the current instruction in ID stage (highlight cyan).
     uint8_t read_rs_ = 0xFF;

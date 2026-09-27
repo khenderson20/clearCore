@@ -11,6 +11,7 @@ class QHexDocument;
 class QHexView;
 class QSpinBox;
 class QLabel;
+class QShowEvent;
 
 namespace nsc::qt {
 
@@ -23,7 +24,9 @@ class MemorySnapshotBuffer;
 //
 // The widget keeps its own copy of memory and patches only the bytes that
 // changed, so a refresh never re-uploads the whole address space and never
-// holds a reference to the controller's memory between calls.
+// holds a reference to the controller's memory between calls. For the same
+// reason it cannot refresh itself: it emits shown() when it becomes visible,
+// and the owner answers with updateDisplay().
 class MemoryWidget final : public QWidget {
     Q_OBJECT
 
@@ -40,6 +43,14 @@ public:
     [[nodiscard]] const std::vector<std::pair<qint64, qint64>>& changedRanges() const noexcept {
         return changed_;
     }
+
+signals:
+    // The widget became visible (a dock opened, or its tab came to the front).
+    // Refreshes are skipped while it is hidden, so it may be out of date.
+    void shown();
+
+protected:
+    void showEvent(QShowEvent* ev) override;
 
 private slots:
     void onAddressChanged(int value);

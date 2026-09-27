@@ -624,11 +624,13 @@ if (BUILD_QT6_UI)
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
             src/nsc_qt/widgets/pipeline_events_widget.cpp
+            src/nsc_qt/widgets/schematic_datapath_widget.cpp
             include/nsc_qt/simulator_controller.h            # (moc)
             include/nsc_qt/widgets/register_widget.h         # (moc)
             include/nsc_qt/widgets/memory_widget.h           # (moc)
             include/nsc_qt/widgets/pipeline_trace_widget.h   # (moc)
             include/nsc_qt/widgets/pipeline_events_widget.h  # (moc)
+            include/nsc_qt/widgets/schematic_datapath_widget.h  # (moc)
     )
     set_target_properties(qt_ui_test PROPERTIES AUTOMOC ON)
     target_include_directories(qt_ui_test PRIVATE include)
