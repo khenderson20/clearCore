@@ -23,6 +23,7 @@
 #include <format>
 #include <fstream>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <thread>
 #include <utility>
@@ -32,15 +33,25 @@ namespace nsc {
 
 using namespace ftxui;
 
+namespace {
+
 // ─── CPU mode ─────────────────────────────────────────────────────────────────
-enum class CpuMode { SingleCycle, Pipelined };
+enum class CpuMode : std::uint8_t { SingleCycle, Pipelined };
+
+// ─── Execution trace entry ─────────────────────────────────────────────────────
+struct TraceEntry {
+    uint32_t pc;
+    uint32_t raw;
+};
+
+}  // anonymous namespace
 
 // ─── Golden ratio ─────────────────────────────────────────────────────────────
 // Detunes the second wave of the Core Pulse surface so the three sine terms
 // have no common repeat period.  At namespace scope because it is only ever
 // read as a constant inside a lambda, which is not an odr-use — as a local,
 // MSVC reports C4189 "initialized but not referenced" despite the use.
-static constexpr float kPhi = 1.61803398875f;
+static constexpr float kPhi = std::numbers::phi_v<float>;
 
 // ─── Tab labels ───────────────────────────────────────────────────────────────
 // The single source of truth for how many tabs exist.  Container::Tab selects
@@ -62,12 +73,6 @@ static constexpr std::array<std::string_view, 32> kRegNames = {
     "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3", "t0", "t1", "t2",
     "t3",   "t4", "t5", "t6", "t7", "s0", "s1", "s2", "s3", "s4", "s5",
     "s6",   "s7", "t8", "t9", "k0", "k1", "gp", "sp", "fp", "ra"};
-
-// ─── Execution trace entry ─────────────────────────────────────────────────────
-struct TraceEntry {
-    uint32_t pc;
-    uint32_t raw;
-};
 
 // ─── Stage accent colour by index + state ─────────────────────────────────────
 static Color stage_accent(int idx, const mips::StageSnapshot& s) {
@@ -95,7 +100,7 @@ static Color stage_accent(int idx, const mips::StageSnapshot& s) {
 static bool load_hex_file(const std::string& path, mips::IProcessor& cpu, std::string& msg) {
     const mips::HexProgram prog = mips::load_hex_file(path);
     if (!prog.ok()) {
-        msg = *prog.error;
+        msg = prog.error.value_or("unknown error");
         return false;
     }
     if (cpu.load_program(prog.words, 0)) {
@@ -128,7 +133,7 @@ static Element make_stage_box(const mips::StageSnapshot& snap, int idx) {
         }
     }
 
-    Color accent = stage_accent(idx, snap);
+    const Color accent = stage_accent(idx, snap);
 
     // D: mnemonic colour — amber for stall, red for flush, white for valid, dim for empty
     Color mnem_col;
@@ -155,8 +160,8 @@ static Element make_stage_box(const mips::StageSnapshot& snap, int idx) {
     inner.push_back(text(mnemonic) | center | color(mnem_col) | (snap.valid ? bold : dim));
     inner.push_back(text(status) | center | dim | color(accent));
 
-    Element box = window(text(std::string(snap.name)) | bold | color(accent), vbox(inner)) |
-                  size(WIDTH, GREATER_THAN, 10);
+    Element box =
+        window(text(snap.name) | bold | color(accent), vbox(inner)) | size(WIDTH, GREATER_THAN, 10);
     if (!snap.valid) box = box | dim;
     return box;
 }
@@ -200,8 +205,8 @@ static Element render_pipeline(const mips::PipelineState& ps, bool pipelined) {
 // ─── Instruction decode panel ──────────────────────────────────────────────────
 // Rows: field decode | asm reconstruction | binary breakdown (C) + labels
 static Element render_instr_decode(const mips::IProcessor& cpu) {
-    uint32_t pc      = cpu.pc();
-    auto     fetched = cpu.mem().read_word(pc);
+    const uint32_t pc      = cpu.pc();
+    auto           fetched = cpu.mem().read_word(pc);
     if (!fetched) return hbox({text("  "), text("(no word at PC)") | dim});
 
     uint32_t raw     = *fetched;
@@ -218,8 +223,7 @@ static Element render_instr_decode(const mips::IProcessor& cpu) {
     // ── Row 1: coloured field decode ─────────────────────────────────────────
     Elements f1;
     f1.push_back(text("  "));
-    f1.push_back(text(std::string(mips::Decoder::mnemonic(dec))) | bold |
-                 color(Color::YellowLight));
+    f1.push_back(text(mips::Decoder::mnemonic(dec)) | bold | color(Color::YellowLight));
     f1.push_back(text("   "));
 
     if (dec.format == mips::InstrFormat::R) {
@@ -281,9 +285,9 @@ static Element render_instr_decode(const mips::IProcessor& cpu) {
 
     auto add_field = [&](int hi, int lo, Color col, const char* lbl) {
         // A 32-bit field takes the all-ones mask: 1u << 32 is undefined.
-        uint32_t mask = (hi - lo < 31) ? ((1u << (hi - lo + 1)) - 1u) : 0xFFFFFFFFu;
-        uint32_t fv   = (raw >> lo) & mask;
-        int      w    = hi - lo + 1;
+        const uint32_t mask = (hi - lo < 31) ? ((1u << (hi - lo + 1)) - 1u) : 0xFFFFFFFFu;
+        uint32_t       fv   = (raw >> lo) & mask;
+        int            w    = hi - lo + 1;
         bits.push_back(text(std::format("{:0{}b}", fv, w)) | color(col) | bold |
                        size(WIDTH, EQUAL, w + 1));
         lbls.push_back(text(lbl) | color(col) | dim | size(WIDTH, EQUAL, w + 1));
@@ -317,7 +321,7 @@ static Element render_exec_trace(const std::deque<TraceEntry>& trace) {
     Elements rows;
     for (size_t i = 0; i < trace.size(); ++i) {
         const auto& e       = trace[i];
-        bool        is_last = (i == trace.size() - 1);
+        const bool  is_last = (i == trace.size() - 1);
 
         std::string asm_str = "???";
         if (auto d = mips::Decoder::decode(e.raw)) asm_str = reconstruct_asm(*d, e.pc);
@@ -341,9 +345,9 @@ static Element render_registers(const mips::IProcessor& cpu) {
         // read() takes the 5-bit index as uint8_t.  The loop bounds i to 0-31,
         // so the narrowing is safe — made explicit so /W4 does not flag it as
         // the kind of silent int->uint8_t truncation the matrix exists to catch.
-        uint32_t val     = cpu.regs().read(static_cast<uint8_t>(i));
-        bool     changed = (i != 0 && i == cpu.regs().last_written());
-        bool     nonzero = (val != 0);
+        uint32_t   val     = cpu.regs().read(static_cast<uint8_t>(i));
+        const bool changed = (i != 0 && i == cpu.regs().last_written());
+        const bool nonzero = (val != 0);
 
         Color hex_col = Color::GrayDark;
         if (changed)
@@ -373,8 +377,8 @@ static Element render_registers(const mips::IProcessor& cpu) {
 // Shows addr | hex | mnemonic.  PC row is highlighted; halt instruction labelled.
 // Binary breakdown moved to the decode panel (C).
 static Element render_memory(const mips::IProcessor& cpu, uint32_t base, int rows) {
-    uint32_t pc = cpu.pc();
-    Elements lines;
+    const uint32_t pc = cpu.pc();
+    Elements       lines;
     for (int r = 0; r < rows; ++r) {
         uint32_t addr = base + static_cast<uint32_t>(r * 4);
         auto     word = cpu.mem().read_word(addr);
@@ -385,8 +389,8 @@ static Element render_memory(const mips::IProcessor& cpu, uint32_t base, int row
         {
             auto raw_op = static_cast<mips::Opcode>((*word >> 26) & 0x3Fu);
             if (raw_op == mips::Opcode::J || raw_op == mips::Opcode::JAL) {
-                uint32_t tgt   = *word & 0x03FF'FFFFu;
-                uint32_t jaddr = ((addr + 4) & 0xF000'0000u) | (tgt << 2);
+                const uint32_t tgt   = *word & 0x03FF'FFFFu;
+                const uint32_t jaddr = ((addr + 4) & 0xF000'0000u) | (tgt << 2);
                 if (jaddr == addr) is_halt = true;
             }
         }
@@ -395,7 +399,7 @@ static Element render_memory(const mips::IProcessor& cpu, uint32_t base, int row
         if (auto d = mips::Decoder::decode(*word))
             mnem = std::format("{:<7}", std::string(mips::Decoder::mnemonic(*d)));
 
-        bool is_pc = (addr == pc);
+        const bool is_pc = (addr == pc);
 
         Elements row_els;
         row_els.push_back(text(is_pc ? " ▶ " : "   ") | color(Color::CyanLight));
@@ -474,7 +478,7 @@ static void runSplash() {
     constexpr int cx    = kCols / 2;
     constexpr int cy    = kRows / 2;
 
-    enum class Kind { Empty, Border, Pin, Trace, Via, Pad, LabelCpu, LabelCaption };
+    enum class Kind : std::uint8_t { Empty, Border, Pin, Trace, Via, Pad, LabelCpu, LabelCaption };
 
     std::vector<std::string> glyph(static_cast<size_t>(kRows) * kCols, " ");
     std::vector<Kind>        kind(static_cast<size_t>(kRows) * kCols, Kind::Empty);
@@ -489,7 +493,7 @@ static void runSplash() {
     // actual buffer size closes the hole and keeps the clip effective at -O3.
     auto put = [&](int x, int y, const std::string& ch, Kind k) {
         if (x < 0 || x >= kCols || y < 0 || y >= kRows) return;
-        const size_t i = static_cast<size_t>(idx(x, y));
+        const auto i = static_cast<size_t>(idx(x, y));
         if (i >= glyph.size()) return;
         glyph[i] = ch;
         kind[i]  = k;
@@ -575,8 +579,9 @@ static void runSplash() {
     // ── PCB traces: one vertical/horizontal run out of the package, with an
     //    optional single right-angle bend, terminating in a via ─────────────
     auto traceUp = [&](int x) {
-        int vertLen = 2 + static_cast<int>(hashf(x, 11) % 5);
-        int y0 = pkgT - 1, yBend = y0 - vertLen;
+        const int vertLen = 2 + static_cast<int>(hashf(x, 11) % 5);
+        const int y0      = pkgT - 1;
+        const int yBend   = y0 - vertLen;
         for (int y = y0; y > yBend; --y)
             put(x, y, "│", Kind::Trace);
         if (hashf(x, 12) % 3 == 0) {
@@ -584,17 +589,18 @@ static void runSplash() {
             put(x, yBend - 1, "▫", Kind::Via);
             return;
         }
-        bool right  = hashf(x, 13) % 2 == 0;
-        int  runLen = 2 + static_cast<int>(hashf(x, 14) % 5);
-        int  xEnd   = x + (right ? runLen : -runLen);
+        const bool right  = hashf(x, 13) % 2 == 0;
+        const int  runLen = 2 + static_cast<int>(hashf(x, 14) % 5);
+        const int  xEnd   = x + (right ? runLen : -runLen);
         put(x, yBend, right ? "┌" : "┐", Kind::Trace);
         for (int xx = x + (right ? 1 : -1); xx != xEnd; xx += (right ? 1 : -1))
             put(xx, yBend, "─", Kind::Trace);
         put(xEnd, yBend, "▫", Kind::Via);
     };
     auto traceDown = [&](int x) {
-        int vertLen = 2 + static_cast<int>(hashf(x, 21) % 5);
-        int y0 = pkgB + 1, yBend = y0 + vertLen;
+        const int vertLen = 2 + static_cast<int>(hashf(x, 21) % 5);
+        const int y0      = pkgB + 1;
+        const int yBend   = y0 + vertLen;
         for (int y = y0; y < yBend; ++y)
             put(x, y, "│", Kind::Trace);
         if (hashf(x, 22) % 3 == 0) {
@@ -602,17 +608,18 @@ static void runSplash() {
             put(x, yBend + 1, "▫", Kind::Via);
             return;
         }
-        bool right  = hashf(x, 23) % 2 == 0;
-        int  runLen = 2 + static_cast<int>(hashf(x, 24) % 5);
-        int  xEnd   = x + (right ? runLen : -runLen);
+        const bool right  = hashf(x, 23) % 2 == 0;
+        const int  runLen = 2 + static_cast<int>(hashf(x, 24) % 5);
+        const int  xEnd   = x + (right ? runLen : -runLen);
         put(x, yBend, right ? "└" : "┘", Kind::Trace);
         for (int xx = x + (right ? 1 : -1); xx != xEnd; xx += (right ? 1 : -1))
             put(xx, yBend, "─", Kind::Trace);
         put(xEnd, yBend, "▫", Kind::Via);
     };
     auto traceLeft = [&](int yy) {
-        int horizLen = 2 + static_cast<int>(hashf(yy, 31) % 5);
-        int x0 = pkgL - 1, xBend = x0 - horizLen;
+        const int horizLen = 2 + static_cast<int>(hashf(yy, 31) % 5);
+        const int x0       = pkgL - 1;
+        const int xBend    = x0 - horizLen;
         for (int x = x0; x > xBend; --x)
             put(x, yy, "─", Kind::Trace);
         if (hashf(yy, 32) % 3 == 0) {
@@ -620,17 +627,18 @@ static void runSplash() {
             put(xBend - 1, yy, "▫", Kind::Via);
             return;
         }
-        bool down   = hashf(yy, 33) % 2 == 0;
-        int  runLen = 2 + static_cast<int>(hashf(yy, 34) % 4);
-        int  yEnd   = yy + (down ? runLen : -runLen);
+        const bool down   = hashf(yy, 33) % 2 == 0;
+        const int  runLen = 2 + static_cast<int>(hashf(yy, 34) % 4);
+        const int  yEnd   = yy + (down ? runLen : -runLen);
         put(xBend, yy, down ? "┌" : "└", Kind::Trace);
         for (int y2 = yy + (down ? 1 : -1); y2 != yEnd; y2 += (down ? 1 : -1))
             put(xBend, y2, "│", Kind::Trace);
         put(xBend, yEnd, "▫", Kind::Via);
     };
     auto traceRight = [&](int yy) {
-        int horizLen = 2 + static_cast<int>(hashf(yy, 41) % 5);
-        int x0 = pkgR + 1, xBend = x0 + horizLen;
+        const int horizLen = 2 + static_cast<int>(hashf(yy, 41) % 5);
+        const int x0       = pkgR + 1;
+        const int xBend    = x0 + horizLen;
         for (int x = x0; x < xBend; ++x)
             put(x, yy, "─", Kind::Trace);
         if (hashf(yy, 42) % 3 == 0) {
@@ -638,9 +646,9 @@ static void runSplash() {
             put(xBend + 1, yy, "▫", Kind::Via);
             return;
         }
-        bool down   = hashf(yy, 43) % 2 == 0;
-        int  runLen = 2 + static_cast<int>(hashf(yy, 44) % 4);
-        int  yEnd   = yy + (down ? runLen : -runLen);
+        const bool down   = hashf(yy, 43) % 2 == 0;
+        const int  runLen = 2 + static_cast<int>(hashf(yy, 44) % 4);
+        const int  yEnd   = yy + (down ? runLen : -runLen);
         put(xBend, yy, down ? "┐" : "┘", Kind::Trace);
         for (int y2 = yy + (down ? 1 : -1); y2 != yEnd; y2 += (down ? 1 : -1))
             put(xBend, y2, "│", Kind::Trace);
@@ -667,7 +675,10 @@ static void runSplash() {
 
     auto mix = [](int br, int bg, int bb, int pr, int pg, int pb, float t) {
         t         = std::clamp(t, 0.f, 1.f);
-        auto lerp = [&](int a, int b) { return static_cast<unsigned char>(a + (b - a) * t); };
+        auto lerp = [&](int a, int b) {
+            return static_cast<unsigned char>(static_cast<float>(a) +
+                                              static_cast<float>(b - a) * t);
+        };
         return Color::RGB(lerp(br, pr), lerp(bg, pg), lerp(bb, pb));
     };
 
@@ -678,10 +689,10 @@ static void runSplash() {
 
         for (int y = 0; y < kRows; ++y) {
             for (int x = 0; x < kCols; ++x) {
-                Kind k = kind[idx(x, y)];
+                const Kind k = kind[idx(x, y)];
                 if (k == Kind::Empty) continue;
 
-                const float dx = static_cast<float>(x - cx);
+                const auto  dx = static_cast<float>(x - cx);
                 const float dy = static_cast<float>(y - cy) * 2.0f;
                 const float d  = std::max(std::fabs(dx), std::fabs(dy));
                 float       t  = std::exp(-((d - ringPos) * (d - ringPos)) / (2.f * sigma * sigma));
@@ -689,7 +700,7 @@ static void runSplash() {
                 if (k == Kind::Pad) {
                     const float shimmer =
                         0.18f *
-                        (0.5f + 0.5f * std::sin(frame * 0.15f +
+                        (0.5f + 0.5f * std::sin(static_cast<float>(frame) * 0.15f +
                                                 static_cast<float>(hashf(x, y) % 1000) * 0.006f));
                     t = std::min(1.f, t + shimmer);
                 }
@@ -803,15 +814,15 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
         // ── Attractor target ─────────────────────────────────────────────────
         // Mouse position when inside the panel; otherwise a slow, independent
         // Lissajous wander so the field keeps moving instead of freezing.
-        float target_x, target_y;
-        if (mouse_active) {
-            target_x = (static_cast<float>(mouse_x) / static_cast<float>(std::max(1, term.dimx))) *
-                       kCanvasW;
-            target_y = (static_cast<float>(mouse_y) / static_cast<float>(panel_rows)) * kCanvasH;
-        } else {
-            target_x = kCanvasW * 0.5f + std::sin(idle_phase * 0.7f) * (kCanvasW * 0.30f);
-            target_y = kCanvasH * 0.5f + std::cos(idle_phase * 0.9f) * (kCanvasH * 0.30f);
-        }
+        const auto  kW = static_cast<float>(kCanvasW);
+        const auto  kH = static_cast<float>(kCanvasH);
+        const float target_x =
+            mouse_active
+                ? static_cast<float>(mouse_x) / static_cast<float>(std::max(1, term.dimx)) * kW
+                : kW * 0.5f + std::sin(idle_phase * 0.7f) * (kW * 0.30f);
+        const float target_y =
+            mouse_active ? static_cast<float>(mouse_y) / static_cast<float>(panel_rows) * kH
+                         : kH * 0.5f + std::cos(idle_phase * 0.9f) * (kH * 0.30f);
 
         // Exponential smoothing — the attractor glides, it never snaps.
         constexpr float kSmooth = 0.08f;
@@ -851,17 +862,17 @@ static Component create_datapath_3d_background(int& mouse_x, int& mouse_y, bool&
 
         for (int gy = 0; gy < GRID_SIZE; ++gy) {
             for (int gx = 0; gx < GRID_SIZE; ++gx) {
-                const float fx  = (static_cast<float>(gx) / (GRID_SIZE - 1)) * kCanvasW;
-                const float fy  = (static_cast<float>(gy) / (GRID_SIZE - 1)) * kCanvasH;
+                const float fx  = static_cast<float>(gx) / (GRID_SIZE - 1.0f) * kW;
+                const float fy  = static_cast<float>(gy) / (GRID_SIZE - 1.0f) * kH;
                 heights[gy][gx] = surface_height(fx, fy);
             }
         }
 
         auto project = [&](int gx, int gy, float h) -> std::pair<int, int> {
-            const float base_x = (static_cast<float>(gx) / (GRID_SIZE - 1)) * kCanvasW;
-            const float base_y = (static_cast<float>(gy) / (GRID_SIZE - 1)) * kCanvasH;
+            const float base_x = static_cast<float>(gx) / (GRID_SIZE - 1.0f) * kW;
+            const float base_y = static_cast<float>(gy) / (GRID_SIZE - 1.0f) * kH;
             const int   px     = static_cast<int>(base_x + 0.55f * h);
-            const int   py     = static_cast<int>(kCanvasH - base_y - 0.85f * h);
+            const int   py     = static_cast<int>(kH - base_y - 0.85f * h);
             return {px, py};
         };
 
@@ -959,12 +970,12 @@ int runApp() {
     std::string nibble_str = "0000", mnem_str = "SLL";
 
     // Config
-    std::vector<std::string> cpu_mode_names = {"Single-Cycle", "Pipelined (5-stage)"};
-    int                      cpu_mode_idx   = 0;
+    const std::vector<std::string> cpu_mode_names = {"Single-Cycle", "Pipelined (5-stage)"};
+    int                            cpu_mode_idx   = 0;
 
     // Tabs — Menu() wants owning strings, so materialise kTabLabels once.
-    int                      tab_idx = 0;
-    std::vector<std::string> tab_labels(kTabLabels.begin(), kTabLabels.end());
+    int                            tab_idx = 0;
+    const std::vector<std::string> tab_labels(kTabLabels.begin(), kTabLabels.end());
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     auto reset_tel = [&] {
@@ -992,7 +1003,7 @@ int runApp() {
         if (ps.retired) ++tel_retired;
 
         // Execution trace: WB stage for pipelined, EX for single-cycle
-        bool        is_pl = (cpu_mode == CpuMode::Pipelined);
+        const bool  is_pl = (cpu_mode == CpuMode::Pipelined);
         const auto& ts    = ps.stages[is_pl ? 4 : 2];
         if (ts.valid && !ts.stalled) {
             exec_trace.push_back({ts.pc, ts.raw});
@@ -1019,13 +1030,10 @@ int runApp() {
         while (app_live.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(std::max(10, speed_ms)));
             ++anim_frame;
-            if (auto_run.load()) {
-                screen.PostEvent(Event::Custom);
-            } else if (++idle_tick % 6 == 0) {
-                // A gentle ~every-1.2s repaint so the ambient spinner breathes
-                // without burning CPU while the machine is paused.
-                screen.PostEvent(Event::Custom);
-            }
+            // Repaint every tick while running. While paused, a gentle
+            // ~every-1.2s repaint lets the ambient spinner breathe without
+            // burning CPU (idle_tick only counts paused ticks).
+            if (auto_run.load() || ++idle_tick % 6 == 0) screen.PostEvent(Event::Custom);
         }
     });
 
@@ -1037,14 +1045,14 @@ int runApp() {
             if (base != Converter::Base::Decimal) dec_str = converter.as(Converter::Base::Decimal);
             if (base != Converter::Base::Hex) hex_str = converter.as(Converter::Base::Hex);
             if (base != Converter::Base::Binary) bin_str = converter.as(Converter::Base::Binary);
-            nibble_str = converter.bits();
-            uint64_t v = converter.value();
-            mnem_str   = (v <= 0xFFFF'FFFFu)
-                             ? (mips::Decoder::decode(static_cast<uint32_t>(v))
-                                    ? std::string(mips::Decoder::mnemonic(
-                                          *mips::Decoder::decode(static_cast<uint32_t>(v))))
-                                    : "Invalid")
-                             : "(out of 32-bit range)";
+            nibble_str       = converter.bits();
+            const uint64_t v = converter.value();
+            mnem_str         = (v <= 0xFFFF'FFFFu)
+                                   ? (mips::Decoder::decode(static_cast<uint32_t>(v))
+                                          ? std::string(mips::Decoder::mnemonic(
+                                                *mips::Decoder::decode(static_cast<uint32_t>(v))))
+                                          : "Invalid")
+                                   : "(out of 32-bit range)";
         }
         syncing = false;
     };
@@ -1056,25 +1064,25 @@ int runApp() {
     InputOption bin_opt;
     bin_opt.on_change = [&] { update_views(Converter::Base::Binary, bin_str); };
 
-    Component dec_input      = Input(&dec_str, "0", dec_opt);
-    Component hex_input      = Input(&hex_str, "0", hex_opt);
-    Component bin_input      = Input(&bin_str, "0", bin_opt);
-    Component conv_container = Container::Vertical({dec_input, hex_input, bin_input});
+    const Component dec_input      = Input(&dec_str, "0", dec_opt);
+    const Component hex_input      = Input(&hex_str, "0", hex_opt);
+    const Component bin_input      = Input(&bin_str, "0", bin_opt);
+    const Component conv_container = Container::Vertical({dec_input, hex_input, bin_input});
 
     // ── CPU control components ────────────────────────────────────────────────
-    Component btn_step = Button(" Step ", [&] { do_step(); });
+    const Component btn_step = Button(" Step ", [&] { do_step(); });
 
     ButtonOption auto_opt;
     auto_opt.transform = [&](const EntryState& s) {
-        bool    run = auto_run.load();
-        Element e =
+        const bool run = auto_run.load();
+        Element    e =
             text(run ? " ■ Stop " : " ▶ Auto ") | color(run ? Color::Red : Color::GreenLight);
         if (s.focused) e = e | inverted;
         return e | border;
     };
-    Component btn_auto = Button("", [&] { auto_run.store(!auto_run.load()); }, auto_opt);
+    const Component btn_auto = Button("", [&] { auto_run.store(!auto_run.load()); }, auto_opt);
 
-    Component btn_run = Button(" Run→Halt ", [&] {
+    const Component btn_run = Button(" Run→Halt ", [&] {
         constexpr std::size_t kRunBudget = 100'000;
         auto_run.store(false);
         const mips::StepResult result = cpu->run(kRunBudget);
@@ -1096,7 +1104,7 @@ int runApp() {
         }
     });
 
-    Component btn_reset = Button(" Reset ", [&] {
+    const Component btn_reset = Button(" Reset ", [&] {
         auto_run.store(false);
         cpu->reset(false);
         reset_tel();
@@ -1104,9 +1112,9 @@ int runApp() {
         loader_status = "CPU reset.";
     });
 
-    Component speed_slider = Slider("", &speed_ms, 10, 1000, 10);
+    const Component speed_slider = Slider("", &speed_ms, 10, 1000, 10);
 
-    Component ctrl_container =
+    const Component ctrl_container =
         Container::Horizontal({btn_step, btn_auto, btn_run, btn_reset, speed_slider});
 
     // ── Config components ─────────────────────────────────────────────────────
@@ -1119,8 +1127,8 @@ int runApp() {
         if (s.focused) e = e | inverted;
         return e;
     };
-    Component cpu_selector  = Radiobox(&cpu_mode_names, &cpu_mode_idx, rb_opt);
-    Component btn_apply     = Button(" Apply ", [&] {
+    const Component cpu_selector  = Radiobox(&cpu_mode_names, &cpu_mode_idx, rb_opt);
+    const Component btn_apply     = Button(" Apply ", [&] {
         auto_run.store(false);
         cpu->reset(true);
         reset_tel();
@@ -1135,19 +1143,19 @@ int runApp() {
             loader_status = "Switched to Pipelined (5-stage).";
         }
     });
-    Component cfg_container = Container::Vertical({cpu_selector, btn_apply});
+    const Component cfg_container = Container::Vertical({cpu_selector, btn_apply});
 
     // ── Loader components ─────────────────────────────────────────────────────
-    std::string filepath         = "program.hex";
-    Component   filepath_input   = Input(&filepath, "path/to/program.hex");
-    Component   btn_load         = Button(" Load ", [&] {
+    std::string     filepath         = "program.hex";
+    const Component filepath_input   = Input(&filepath, "path/to/program.hex");
+    const Component btn_load         = Button(" Load ", [&] {
         auto_run.store(false);
         cpu->reset(true);
         reset_tel();
         mem_base  = 0;
         loader_ok = load_hex_file(filepath, *cpu, loader_status);
     });
-    Component   loader_container = Container::Vertical({filepath_input, btn_load});
+    const Component loader_container = Container::Vertical({filepath_input, btn_load});
 
     // ── Tab navigation ────────────────────────────────────────────────────────
     MenuOption tab_opt               = MenuOption::HorizontalAnimated();
@@ -1157,14 +1165,14 @@ int runApp() {
         if (s.focused) e = e | inverted;
         return e | size(WIDTH, GREATER_THAN, 16);
     };
-    Component tab_menu = Menu(&tab_labels, &tab_idx, tab_opt);
+    const Component tab_menu = Menu(&tab_labels, &tab_idx, tab_opt);
 
     // D: tabs 4 (Core Pulse) and 5 (Utility Tools) render purely from cpu
     // state with no Input/Button/Slider of their own — these empty containers
     // exist only to keep Container::Tab's child count equal to tab_labels.size()
     // so index 4/5 don't alias onto an earlier tab's live components.
-    Component dp_focus   = Container::Vertical({});
-    Component util_focus = Container::Vertical({});
+    const Component dp_focus   = Container::Vertical({});
+    const Component util_focus = Container::Vertical({});
 
     // D: Container::Tab selects children()[*selector % children().size()].
     // tab_labels has one entry per tab (tab_idx 0-5) but this list once had
@@ -1187,13 +1195,13 @@ int runApp() {
                   "Add a placeholder Container::Vertical({}) for tabs that render purely from "
                   "CPU state.");
 
-    Component main_container = Container::Vertical({
+    const Component main_container = Container::Vertical({
         tab_menu,
         Container::Tab(Components(tab_children.begin(), tab_children.end()), &tab_idx),
     });
 
     // ── Renderer ──────────────────────────────────────────────────────────────
-    Component renderer = Renderer(main_container, [&] {
+    const Component renderer = Renderer(main_container, [&] {
         Element content;
 
         // ══ TAB 0: Converter ══════════════════════════════════════════════════
@@ -1202,9 +1210,10 @@ int runApp() {
 
             // ── R-format bit breakdown (preserved, moved to bottom full-width) ──
             auto field_box = [&](int hi, int lo, Color col, const char* rng, const char* lbl) {
-                uint32_t mask = (hi < 31 || lo > 0) ? ((1u << (hi - lo + 1)) - 1u) : 0xFFFFFFFFu;
-                uint32_t fv   = (v32 >> lo) & mask;
-                int      w    = hi - lo + 1;
+                const uint32_t mask =
+                    (hi < 31 || lo > 0) ? ((1u << (hi - lo + 1)) - 1u) : 0xFFFFFFFFu;
+                const uint32_t fv = (v32 >> lo) & mask;
+                const int      w  = hi - lo + 1;
                 return window(text(rng) | dim | color(col),
                               vbox({
                                   text(std::format("{:0{}b}", fv, w)) | center | color(col) | bold,
@@ -1355,7 +1364,7 @@ int runApp() {
             const auto& ps = cpu->pipeline_state();
 
             // ── PC / mode header bar ─────────────────────────────────────────
-            Element header_bar = hbox({
+            const Element header_bar = hbox({
                 text(" PC: ") | dim,
                 text(std::format("0x{:08X}", cpu->pc())) | bold | color(Color::Cyan),
                 text("   Cycle: ") | dim,
@@ -1366,41 +1375,42 @@ int runApp() {
             });
 
             // ── Pipeline visualization ─────────────────────────────────────
-            Element flow = render_flow_strip(anim_frame, auto_run.load());
-            Element pipeline_panel =
+            const Element flow = render_flow_strip(anim_frame, auto_run.load());
+            const Element pipeline_panel =
                 window(text(cpu_mode == CpuMode::Pipelined ? " Pipeline  IF → ID → EX → MEM → WB "
                                                            : " Execution State "),
                        vbox({header_bar, flow, separatorEmpty(),
                              render_pipeline(ps, cpu_mode == CpuMode::Pipelined)}));
 
             // ── Instruction decode (fields + asm + binary breakdown) ─────────
-            Element decode_panel = window(text(" Instruction Decode "), render_instr_decode(*cpu));
+            const Element decode_panel =
+                window(text(" Instruction Decode "), render_instr_decode(*cpu));
 
             // ── Execution trace ──────────────────────────────────────────────
-            Element trace_panel = window(text(" Execution Trace  (last 8 committed) "),
-                                         render_exec_trace(exec_trace));
+            const Element trace_panel = window(text(" Execution Trace  (last 8 committed) "),
+                                               render_exec_trace(exec_trace));
 
             // ── Memory hex-dump ──────────────────────────────────────────────
-            Element mem_panel =
+            const Element mem_panel =
                 window(text(std::format(" Memory @{:08X}  PgUp/Dn · Home=PC ", mem_base)),
                        render_memory(*cpu, mem_base, 14)) |
                 size(WIDTH, EQUAL, 36);
 
             // ── Telemetry with gauge bars ────────────────────────────────────
-            float stall_pct = tel_cycles > 0
-                                  ? static_cast<float>(tel_stalls) / static_cast<float>(tel_cycles)
-                                  : 0.0f;
-            float fwd_pct = tel_cycles > 0
-                                ? static_cast<float>(tel_forwards) / static_cast<float>(tel_cycles)
-                                : 0.0f;
-            float flush_pct = tel_cycles > 0
-                                  ? static_cast<float>(tel_flushes) / static_cast<float>(tel_cycles)
-                                  : 0.0f;
+            const float stall_pct =
+                tel_cycles > 0 ? static_cast<float>(tel_stalls) / static_cast<float>(tel_cycles)
+                               : 0.0f;
+            const float fwd_pct =
+                tel_cycles > 0 ? static_cast<float>(tel_forwards) / static_cast<float>(tel_cycles)
+                               : 0.0f;
+            const float flush_pct =
+                tel_cycles > 0 ? static_cast<float>(tel_flushes) / static_cast<float>(tel_cycles)
+                               : 0.0f;
             // cycles / retired instructions, the same definition both Qt GUIs
             // use; 1.0 until anything has retired so the gauge has a value.
-            double cpi = tel_retired > 0
-                             ? static_cast<double>(tel_cycles) / static_cast<double>(tel_retired)
-                             : 1.0;
+            const double cpi =
+                tel_retired > 0 ? static_cast<double>(tel_cycles) / static_cast<double>(tel_retired)
+                                : 1.0;
 
             auto tel_cell = [](const char* lbl, std::size_t n, float pct, Color col) {
                 Elements e;
@@ -1411,7 +1421,7 @@ int runApp() {
                 return vbox(e) | flex;
             };
 
-            Element tel_panel =
+            const Element tel_panel =
                 window(text(" Telemetry "),
                        hbox({
                            tel_cell("cycles    ", tel_cycles, 0.0f, Color::White),
@@ -1429,7 +1439,7 @@ int runApp() {
                        }));
 
             // ── Controls ─────────────────────────────────────────────────────
-            Element ctrl_panel = window(
+            const Element ctrl_panel = window(
                 text(" Controls "), hbox({
                                         btn_step->Render(),
                                         text(" "),
@@ -1462,12 +1472,12 @@ int runApp() {
                                                      : (cpu_mode != CpuMode::Pipelined);
 
             // ── Left: selection + active badge + apply ────────────────────────
-            Element active_badge =
+            const Element active_badge =
                 text(cpu_mode == CpuMode::SingleCycle ? "  Single-Cycle " : "  Pipelined ") | bold |
                 color(Color::Black) |
                 bgcolor(cpu_mode == CpuMode::SingleCycle ? Color::GreenLight : Color::YellowLight);
 
-            Element apply_row = hbox({
+            const Element apply_row = hbox({
                 text("  "),
                 btn_apply->Render(),
                 text("  "),
@@ -1557,9 +1567,9 @@ int runApp() {
                                                           }));
 
             // ── Status row ────────────────────────────────────────────────────
-            const Color sc        = loader_ok ? Color::GreenLight : Color::RedLight;
-            const char* sym       = loader_ok ? " ✓  " : " ✗  ";
-            Element     status_el = hbox({
+            const Color   sc        = loader_ok ? Color::GreenLight : Color::RedLight;
+            const char*   sym       = loader_ok ? " ✓  " : " ✗  ";
+            const Element status_el = hbox({
                 text(sym) | color(sc) | bold,
                 text(loader_status) | color(sc),
             });
@@ -1573,8 +1583,8 @@ int runApp() {
                 std::string mn = "       ";
                 if (auto d = mips::Decoder::decode(*w))
                     mn = std::format("{:<7}", std::string(mips::Decoder::mnemonic(*d)));
-                bool     is_pc = (addr == cpu->pc());
-                Elements row;
+                const bool is_pc = (addr == cpu->pc());
+                Elements   row;
                 row.push_back(text(is_pc ? " ▶ " : "   ") | color(Color::CyanLight));
                 row.push_back(text(std::format("{:08X}:", addr)) |
                               (is_pc ? (bold | color(Color::Cyan)) : dim));
@@ -1641,9 +1651,9 @@ int runApp() {
             const auto     fetch_dec = fetch_raw ? mips::Decoder::decode(*fetch_raw) : std::nullopt;
 
             // ── Core Pulse: reactive flow-field background ──────────────────────
-            auto    bg_3d = create_datapath_3d_background(global_mouse_x, global_mouse_y,
-                                                          global_mouse_active, cpu->cycle_count());
-            Element scope_panel = window(text(" ClearCore "), bg_3d->Render());
+            auto bg_3d = create_datapath_3d_background(global_mouse_x, global_mouse_y,
+                                                       global_mouse_active, cpu->cycle_count());
+            const Element scope_panel = window(text(" ClearCore "), bg_3d->Render());
 
             // ── IF: instruction at current PC ────────────────────────────────
             Element if_panel;
@@ -1717,7 +1727,7 @@ int runApp() {
             if (!has_rs && !has_rt)
                 id_els.push_back(text("  (no register reads — J-type or memory empty)") | dim);
 
-            Element id_panel = window(text(" ID  Register File Read "), vbox(id_els));
+            const Element id_panel = window(text(" ID  Register File Read "), vbox(id_els));
 
             // ── EX/MEM/WB: control signals from last committed instruction ────
             // last_control() returns the Control snapshot set during WB.
@@ -1728,7 +1738,7 @@ int runApp() {
                     text(v ? "1" : "0") | color(v ? on_col : Color::GrayDark) | bold,
                 });
             };
-            Element ctrl_panel =
+            const Element ctrl_panel =
                 window(text(" EX / MEM / WB  Control signals (last committed instruction) "),
                        hbox({
                            vbox({
@@ -1890,7 +1900,7 @@ int runApp() {
     // mouse is "inside" the panel — not for pixel-perfect hit testing.
     constexpr int kCorePulseTopRow = 3;
 
-    Component root = CatchEvent(renderer, [&](const Event& event) {
+    const Component root = CatchEvent(renderer, [&](const Event& event) {
         // ── Mouse tracking — only active while inside the Core Pulse panel ──────
         if (event.is_mouse()) {
             auto&     evt = const_cast<Event&>(event);

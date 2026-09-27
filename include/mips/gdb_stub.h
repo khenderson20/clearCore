@@ -129,9 +129,9 @@ private:
     bool remove_breakpoint(uint32_t addr);
 
     // ── Register access (MIPS GDB layout) ────────────────────────────────────
-    static constexpr int kNumRegs = 38;
-    uint32_t             read_gdb_reg(int n) const;
-    void                 write_gdb_reg(int n, uint32_t value);
+    static constexpr int   kNumRegs = 38;
+    [[nodiscard]] uint32_t read_gdb_reg(int n) const;
+    void                   write_gdb_reg(int n, uint32_t value);
 
     // ── Utilities ────────────────────────────────────────────────────────────
     static uint8_t     checksum(const std::string& data) noexcept;
@@ -151,7 +151,7 @@ private:
     static std::string             hex_byte(uint8_t b);
 
     // Signal number to send for a given StepResult / exception code.
-    int stop_signal() const;
+    [[nodiscard]] int stop_signal() const;
 
     IMipsProcessor& cpu_;
     uint16_t        port_;

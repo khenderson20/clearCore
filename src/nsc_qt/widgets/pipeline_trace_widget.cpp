@@ -113,9 +113,7 @@ void PipelineTraceWidget::updateCycle(const mips::PipelineState& state) {
 
     // Drop instances whose every stage has scrolled out of the window.
     const uint64_t first_visible = cycle > kMaxCycles ? cycle - kMaxCycles + 1 : 1;
-    rows_.erase(std::remove_if(rows_.begin(), rows_.end(),
-                               [&](const InstrRow& r) { return r.lastCycle() < first_visible; }),
-                rows_.end());
+    std::erase_if(rows_, [&](const InstrRow& r) { return r.lastCycle() < first_visible; });
 
     if (isVisible())
         rebuildTable();
@@ -136,7 +134,7 @@ void PipelineTraceWidget::rebuildTable() {
     const uint64_t base = last_cycle_ > kMaxCycles ? last_cycle_ - kMaxCycles : 0;
     for (int c = 0; c < kMaxCycles; ++c)
         table_->horizontalHeaderItem(1 + c)->setText(
-            QString::number(static_cast<qulonglong>(base + static_cast<uint64_t>(c) + 1)));
+            QString::number(base + static_cast<uint64_t>(c) + 1));
 
     const int n_rows = static_cast<int>(rows_.size());
     if (table_->rowCount() != n_rows) table_->setRowCount(n_rows);

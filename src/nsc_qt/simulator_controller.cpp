@@ -72,7 +72,8 @@ void SimulatorController::doStep() {
     // Only applies while the run timer is driving execution — a manual
     // stepCycle() must always emit, or the UI silently shows stale state
     // (QTimer's default interval is 0 even when it has never been started).
-    bool throttle = run_timer_->isActive() && (run_timer_->interval() == 0) && (cycle % 5000 != 0);
+    const bool throttle =
+        run_timer_->isActive() && (run_timer_->interval() == 0) && (cycle % 5000 != 0);
 
     // Only emit standard update signals if we aren't throttling, OR if we halted/breaked
     if (!throttle || result != mips::StepResult::Ok || bp_hit) {

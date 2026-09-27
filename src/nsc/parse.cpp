@@ -4,6 +4,19 @@
 
 namespace nsc {
 
+namespace {
+
+// Value of an alphanumeric digit character: '0'-'9' → 0-9, 'a'-'z' and 'A'-'Z'
+// → 10-35. Anything else is -1.
+constexpr int digit_value(unsigned char c) noexcept {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'Z') return c - 'A' + 10;
+    return -1;
+}
+
+}  // anonymous namespace
+
 std::optional<std::uint64_t> parseBase(const std::string& str, int base) {
     // Empty strings are invalid
     if (str.empty()) {
@@ -15,14 +28,8 @@ std::optional<std::uint64_t> parseBase(const std::string& str, int base) {
     // whitespace, and base-16 "0x" prefixes. Reject anything that is not a plain
     // digit for `base` up front so those inputs return nullopt as documented.
     for (const unsigned char c : str) {
-        int digit;
-        if (c >= '0' && c <= '9') {
-            digit = c - '0';
-        } else if (c >= 'a' && c <= 'z') {
-            digit = c - 'a' + 10;
-        } else if (c >= 'A' && c <= 'Z') {
-            digit = c - 'A' + 10;
-        } else {
+        const int digit = digit_value(c);
+        if (digit < 0) {
             return std::nullopt;  // sign, whitespace, '0x' prefix, punctuation, …
         }
         if (digit >= base) {

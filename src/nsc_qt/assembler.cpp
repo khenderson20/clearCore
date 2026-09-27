@@ -43,7 +43,7 @@ static std::optional<uint8_t> parse_reg(std::string_view tok) {
 // Parses a decimal or 0x hex integer; returns nullopt on error.
 static std::optional<int32_t> parse_imm(std::string_view tok) {
     if (tok.empty()) return std::nullopt;
-    bool neg = (tok[0] == '-');
+    const bool neg = (tok[0] == '-');
     if (neg) tok.remove_prefix(1);
     int32_t val = 0;
     if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X')) {
@@ -166,7 +166,7 @@ static void trim(std::string& s) {
 static std::vector<std::string> tokenise(const std::string& line) {
     std::vector<std::string> toks;
     std::string              cur;
-    for (char c : line) {
+    for (const char c : line) {
         if (c == ',' || c == ' ' || c == '\t') {
             if (!cur.empty()) {
                 toks.push_back(cur);
@@ -229,8 +229,8 @@ AssemblerResult assemble(const std::string& source) {
         ln.lineno   = lineno;
         ln.mnemonic = toks[0];
         // Convert mnemonic to lower-case
-        std::transform(ln.mnemonic.begin(), ln.mnemonic.end(), ln.mnemonic.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::ranges::transform(ln.mnemonic, ln.mnemonic.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         for (std::size_t i = 1; i < toks.size(); ++i)
             ln.operands.push_back(toks[i]);
 

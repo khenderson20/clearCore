@@ -72,7 +72,7 @@ MainWindow::MainWindow(QWidget* parent)
     setupConnections();
 
     // Restore preferences
-    QSettings s("nsc-qt", "clearCore-gui");
+    const QSettings s("nsc-qt", "clearCore-gui");
     applyColorScheme(s.value("colorScheme", "light").toString() == "dark");
     controller_->setExecutionSpeed(s.value("executionSpeed", 100).toInt());
 }

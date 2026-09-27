@@ -690,7 +690,7 @@ void GdbStub::dispatch(const std::string& pkt) {
         break;
 
     case 'q':
-        if (args.substr(0, 9) == "Supported") {
+        if (args.starts_with("Supported")) {
             char buf[64];
             std::snprintf(buf, sizeof(buf), "PacketSize=%zx;swbreak+;hwbreak-", kMaxPacketSize);
             send_packet(buf);
@@ -698,17 +698,16 @@ void GdbStub::dispatch(const std::string& pkt) {
             send_packet("1");  // attached to existing process
         } else if (args == "C") {
             send_packet("QC0");
-        } else if (args.substr(0, 6) == "Symbol") {
+        } else if (args.starts_with("Symbol")) {
             send_ok();
         } else {
             send_empty();
         }
         break;
 
-    case 'v':  // vCont? and the other v-packets are unsupported; GDB falls back to 'c'/'s'
-        send_empty();
-        break;
-
+    // vCont? and the other v-packets are unsupported; GDB falls back to 'c'/'s'.
+    // An empty reply is "unsupported" for every other packet too.
+    case 'v':
     default:
         send_empty();
         break;

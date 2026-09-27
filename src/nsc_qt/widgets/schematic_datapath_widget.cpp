@@ -1,4 +1,5 @@
 #include "nsc_qt/widgets/schematic_datapath_widget.h"
+#include "mips/pipeline_units.h"
 #include "mips/processor.h"
 #include "mips/registers.h"
 #include "nsc_qt/instr_format.h"
@@ -101,7 +102,7 @@ inline const Theme& theme(bool dark) {
 
 // ── WireItem ────────────────────────────────────────────────────────────────
 // An orthogonal signal wire: an arbitrary painter path plus arrowheads at the
-// stated tips and junction dots where a bus splits. `setActive()` switches
+// stated tips and junction dots where a bus splits. `setLit()` switches
 // between the dim resting look and a bright highlighted one — that's how
 // forwarding paths, the branch flush path, and the write-back loop light up.
 class WireItem final : public QGraphicsItem {
@@ -125,7 +126,8 @@ public:
         update();
     }
 
-    void setActive(bool on) {
+    // Not setActive(): that would hide QGraphicsItem::setActive (item activation).
+    void setLit(bool on) {
         if (active_ == on) return;
         active_ = on;
         update();
@@ -137,7 +139,9 @@ public:
         update();
     }
 
-    QRectF boundingRect() const override { return path_.boundingRect().adjusted(-8, -8, 8, 8); }
+    [[nodiscard]] QRectF boundingRect() const override {
+        return path_.boundingRect().adjusted(-8, -8, 8, 8);
+    }
 
     void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override {
         const QColor& c = active_ ? lit_ : rest_;
@@ -149,7 +153,8 @@ public:
         p->setRenderHint(QPainter::Antialiasing);
 
         if (active_) {  // soft glow pass under the lit wire
-            QPen glow(QColor(c.red(), c.green(), c.blue(), 70), w + 4, Qt::SolidLine, Qt::RoundCap);
+            const QPen glow(QColor(c.red(), c.green(), c.blue(), 70), w + 4, Qt::SolidLine,
+                            Qt::RoundCap);
             p->setPen(glow);
             p->setBrush(Qt::NoBrush);
             p->drawPath(path_);
@@ -192,7 +197,7 @@ template <typename Base> class HoverShape : public Base {
 public:
     using Base::Base;
 
-    QRectF boundingRect() const override {
+    [[nodiscard]] QRectF boundingRect() const override {
         return Base::boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5);  // room for the halo
     }
 
@@ -733,7 +738,7 @@ void SchematicDatapathWidget::applyState() {
 
     // Pipeline-register bars: red = flushing, amber = stalled, else neutral.
     for (int i = 0; i < 4; ++i) {
-        const auto& snap = state_.stages[static_cast<std::size_t>(i + 1)];
+        const auto& snap = state_.stages[static_cast<std::size_t>(i) + 1];
         QColor      fill = t.comp_fill;
         if (snap.flushed)
             fill = t.flush;
@@ -743,21 +748,25 @@ void SchematicDatapathWidget::applyState() {
         pipe_regs_[static_cast<std::size_t>(i)]->setPen(QPen(t.comp_border, 1.4));
     }
 
-    fwd_exmem_wire_->setActive(state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b);
-    fwd_exmem_stub_->setActive(state_.fwd_ex_to_ex_b);
-    fwd_memwb_wire_->setActive(state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b);
-    fwd_memwb_stub_->setActive(state_.fwd_mem_to_ex_b);
-    branch_wire_->setActive(state_.branch_flush);
+    fwd_exmem_wire_->setLit(state_.fwd_ex_to_ex_a || state_.fwd_ex_to_ex_b);
+    fwd_exmem_stub_->setLit(state_.fwd_ex_to_ex_b);
+    fwd_memwb_wire_->setLit(state_.fwd_mem_to_ex_a || state_.fwd_mem_to_ex_b);
+    fwd_memwb_stub_->setLit(state_.fwd_mem_to_ex_b);
+    branch_wire_->setLit(state_.branch_flush);
 
     // Control-signal accents: light the component that is actually working
     // this cycle, derived from the per-stage instruction's control word.
     const mips::Control mem_ctl = decoded[3] ? mips::derive_control(*decoded[3]) : mips::Control{};
     const mips::Control wb_ctl  = decoded[4] ? mips::derive_control(*decoded[4]) : mips::Control{};
+    // The GPR written in WB, by the pipeline's own rule (MFC0 writes rt, and
+    // has no RegWrite in its control word because CP0 handles writeback).
+    const int  wb_dest   = decoded[4] ? mips::destination_register(*decoded[4]) : -1;
+    const bool wb_writes = wb_dest >= 0;
 
     const QPen base_pen(t.comp_border, 1.4);
     dmem_box_->setPen((mem_ctl.mem_read || mem_ctl.mem_write) ? QPen(t.label, 2.4) : base_pen);
-    regs_box_->setPen(wb_ctl.reg_write ? QPen(t.wb, 2.4) : base_pen);
-    writeback_wire_->setActive(wb_ctl.reg_write);
+    regs_box_->setPen(wb_writes ? QPen(t.wb, 2.4) : base_pen);
+    writeback_wire_->setLit(wb_writes);
 
     // ── Mux select markers ───────────────────────────────────────────────────
     // Selects are derived from the same signals that light the wires, so the
@@ -774,7 +783,7 @@ void SchematicDatapathWidget::applyState() {
     const int sel_b = state_.fwd_ex_to_ex_b ? 1 : state_.fwd_mem_to_ex_b ? 2 : 0;
     place_marker(1, kFwdAMuxPorts[sel_a], sel_a == 1 ? t.fwd_ex : sel_a == 2 ? t.fwd_mem : t.wire);
     place_marker(2, kFwdBMuxPorts[sel_b], sel_b == 1 ? t.fwd_ex : sel_b == 2 ? t.fwd_mem : t.wire);
-    place_marker(3, kWbMuxPorts[wb_ctl.mem_to_reg ? 0 : 1], wb_ctl.reg_write ? t.wb : t.wire);
+    place_marker(3, kWbMuxPorts[wb_ctl.mem_to_reg ? 0 : 1], wb_writes ? t.wb : t.wire);
 
     // ── Pinned wire values ───────────────────────────────────────────────────
     const auto& s_if = state_.stages[0];
@@ -785,27 +794,22 @@ void SchematicDatapathWidget::applyState() {
 
     QString imm_text;
     if (decoded[1] && decoded[1]->format == mips::InstrFormat::I) {
-        const auto imm = static_cast<int16_t>(decoded[1]->i().imm);
-        imm_text       = QStringLiteral("imm=%1").arg(imm);
+        // As the extender hands it to the ALU: ANDI/ORI/XORI/LUI zero-extend.
+        const auto& d  = *decoded[1];
+        const bool  zx = mips::derive_control(d).ext == mips::Control::Ext::Zero;
+        imm_text       = zx ? QStringLiteral("imm=%1").arg(d.i().imm)
+                            : QStringLiteral("imm=%1").arg(static_cast<int16_t>(d.i().imm));
     }
     val_imm_->setText(imm_text);
     val_imm_->setBrush(t.label);
     val_imm_->setPos(490 - val_imm_->boundingRect().width() / 2, 384);
 
     QString wb_text;
-    if (decoded[4] && wb_ctl.reg_write) {
-        const auto& d    = *decoded[4];
-        uint8_t     dest = 0;
-        if (d.format == mips::InstrFormat::R)
-            dest = d.r().rd;
-        else if (d.format == mips::InstrFormat::I)
-            dest = d.i().rt;
-        else if (d.opcode == mips::Opcode::JAL)
-            dest = 31;  // jal writes the return address into $ra
-        if (dest != 0)
-            wb_text = QStringLiteral("$%1 = 0x%2")
-                          .arg(QString::fromStdString(std::string(mips::register_abi_name(dest))))
-                          .arg(reg_values_[dest], 8, 16, QChar('0'));
+    if (wb_dest > 0) {  // $zero never changes, so there is no value to show
+        const auto dest = static_cast<uint8_t>(wb_dest);
+        wb_text = QStringLiteral("$%1 = 0x%2")
+                      .arg(QString::fromStdString(std::string(mips::register_abi_name(dest))))
+                      .arg(reg_values_[dest], 8, 16, QChar('0'));
     }
     val_wb_->setText(wb_text);
     val_wb_->setBrush(t.wb);
@@ -1023,7 +1027,7 @@ void SchematicDatapathWidget::startTokenAnimation(const mips::PipelineState& old
     disconnect(token_anim_, &QVariantAnimation::valueChanged, this, nullptr);
     token_anim_->setStartValue(0.0);
     token_anim_->setEndValue(1.0);
-    connect(token_anim_, &QVariantAnimation::valueChanged, this, [this, moves](const QVariant& v) {
+    connect(token_anim_, &QVariantAnimation::valueChanged, this, [moves](const QVariant& v) {
         const qreal p = v.toReal();
         for (const Move& m : moves)
             m.tok->setPos(m.from_x + (m.to_x - m.from_x) * p, 48);
@@ -1084,9 +1088,9 @@ void SchematicDatapathWidget::contextMenuEvent(QContextMenuEvent* ev) {
 
     // Stage-specific actions only when the cursor is over a stage with a
     // real instruction; view actions are available everywhere.
-    const int idx     = stageAtViewPos(ev->pos());
-    QAction*  bp_act  = nullptr;
-    QAction*  det_act = nullptr;
+    const int      idx     = stageAtViewPos(ev->pos());
+    const QAction* bp_act  = nullptr;
+    const QAction* det_act = nullptr;
     if (idx >= 0 && state_.stages[static_cast<std::size_t>(idx)].valid) {
         const auto& snap   = state_.stages[static_cast<std::size_t>(idx)];
         const bool  has_bp = breakpoints_.count(snap.pc) > 0;
@@ -1094,10 +1098,10 @@ void SchematicDatapathWidget::contextMenuEvent(QContextMenuEvent* ev) {
         det_act            = menu.addAction(tr("Stage Detail…"));
         menu.addSeparator();
     }
-    QAction* fit_act    = menu.addAction(tr("Zoom to Fit"));
-    QAction* export_act = menu.addAction(tr("Export as Image…"));
+    const QAction* fit_act    = menu.addAction(tr("Zoom to Fit"));
+    const QAction* export_act = menu.addAction(tr("Export as Image…"));
 
-    QAction* chosen = menu.exec(ev->globalPos());
+    const QAction* chosen = menu.exec(ev->globalPos());
     if (chosen == nullptr) return;
     if (chosen == fit_act) {
         user_zoomed_ = false;

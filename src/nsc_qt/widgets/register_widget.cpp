@@ -18,9 +18,10 @@ namespace nsc::qt {
 namespace {
 
 QColor lerp_color(QColor a, QColor b, float t) {
-    return QColor(static_cast<int>(a.red() + (b.red() - a.red()) * t),
-                  static_cast<int>(a.green() + (b.green() - a.green()) * t),
-                  static_cast<int>(a.blue() + (b.blue() - a.blue()) * t));
+    const auto mix = [t](int from, int to) {
+        return static_cast<int>(static_cast<float>(from) + static_cast<float>(to - from) * t);
+    };
+    return {mix(a.red(), b.red()), mix(a.green(), b.green()), mix(a.blue(), b.blue())};
 }
 
 }  // anonymous namespace
@@ -146,8 +147,8 @@ void RegisterWidget::buildGrid() {
 }
 
 void RegisterWidget::updateCell(int idx) {
-    auto&         cs = cells_[idx];
-    const uint8_t u  = static_cast<uint8_t>(idx);
+    auto&      cs = cells_[idx];
+    const auto u  = static_cast<uint8_t>(idx);
 
     // Name text (register mnemonics like "$8 (t0)" are notation, not prose --
     // not routed through tr(), consistent with datapath_widget's mnemonics).
