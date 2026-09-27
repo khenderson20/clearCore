@@ -22,7 +22,7 @@ Generated with the `qt-cpp-docs` skill. See also [docs/QT6_ARCHITECTURE.md](../.
 
 | Class | Description |
 |-------|--------------|
-| [DatapathWidget.md](DatapathWidget.md) | Live 5-stage pipeline diagram with breakpoints and keyboard-navigable stage detail. |
+| `SchematicDatapathWidget` (no page yet; see `include/nsc_qt/widgets/schematic_datapath_widget.h`) | Ripes-style circuit schematic of the 5-stage pipeline with breakpoints and keyboard-navigable stage detail. |
 | [RegisterWidget.md](RegisterWidget.md) | 32-register grid with a wall-clock "just written" fade highlight. |
 | [MemoryWidget.md](MemoryWidget.md) | Scrollable hex memory dump with a base-address jump control. |
 | [PipelineTraceWidget.md](PipelineTraceWidget.md) | Instruction × cycle pipeline trace table, bounded to a 20-cycle window. |

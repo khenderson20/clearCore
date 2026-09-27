@@ -343,7 +343,7 @@ option(BUILD_QT6_UI "Build Qt6 desktop GUI for processor simulation" ON)
 
 if (BUILD_QT6_UI)
     find_package(Qt6 6.4
-            COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets
+            COMPONENTS Core Gui Widgets
             QUIET
     )
     if (NOT Qt6_FOUND)
@@ -393,7 +393,6 @@ if (BUILD_QT6_UI)
             src/nsc_qt/dock_panels.cpp
             src/nsc_qt/preferences_dialog.cpp
             src/nsc_qt/widgets/code_editor.cpp
-            src/nsc_qt/widgets/datapath_widget.cpp
             src/nsc_qt/widgets/schematic_datapath_widget.cpp
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
@@ -407,7 +406,6 @@ if (BUILD_QT6_UI)
             include/nsc_qt/ui_scale.h
             include/nsc_qt/examples.h
             include/nsc_qt/widgets/code_editor.h
-            include/nsc_qt/widgets/datapath_widget.h
             include/nsc_qt/widgets/schematic_datapath_widget.h
             include/nsc_qt/widgets/register_widget.h
             include/nsc_qt/widgets/memory_widget.h
@@ -436,7 +434,7 @@ if (BUILD_QT6_UI)
         # macdeployqt bundles Qt and QADS into clearCore-gui.app/Contents/
         # Frameworks; @executable_path/../Frameworks is where the installed
         # binary resolves them at runtime (without it the app aborts with
-        # "Library not loaded: @rpath/QtOpenGLWidgets.framework ... no LC_RPATH's
+        # "Library not loaded: @rpath/Qt<Module>.framework ... no LC_RPATH's
         # found").
         #
         # The trailing entry is what lets the bundling succeed in the first
@@ -444,7 +442,7 @@ if (BUILD_QT6_UI)
         # .dylib, and macdeployqt resolves that dependency through the binary's
         # LC_RPATHs. Exposing QADS's build-tree directory gives macdeployqt a
         # path to the real dylib at deploy time — otherwise it errors ("Cannot
-        # resolve rpath ...") and skips bundling QtOpenGLWidgets. That entry only
+        # resolve rpath ...") and skips bundling the Qt frameworks. That entry only
         # has to exist during `cmake --install`; it is a harmless dead path in
         # the shipped bundle. (QADS stays shared for LGPL compliance — see above
         # — so a static build is not an option here.)
@@ -463,8 +461,6 @@ if (BUILD_QT6_UI)
             Qt6::Core
             Qt6::Gui
             Qt6::Widgets
-            Qt6::OpenGL
-            Qt6::OpenGLWidgets
             ads::qtadvanceddocking-qt6
             QHexView
             clearcore_warnings

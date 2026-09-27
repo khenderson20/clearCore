@@ -10,13 +10,13 @@ A developer reaches for this class exactly once, in `main()` — it is not meant
 
 `MainWindow` is constructed once, in `main.cpp`, and shown with `show()` before the Qt event loop starts.
 
-Qt modules required (via CMake `find_package(Qt6 COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)`):
+Qt modules required (via CMake `find_package(Qt6 COMPONENTS Core Gui Widgets)`):
 - **Qt Widgets** — `QMainWindow`, `QTabWidget`, `QMenuBar`, `QToolBar`, `QAction`, `QLabel`, `QComboBox`, `QPushButton`, `QMessageBox`, `QFileDialog`, `QDialog`, `QDialogButtonBox`, `QFormLayout`, `QFrame`, `QGroupBox`, `QHBoxLayout`, `QVBoxLayout`, `QStatusBar`
 - **Qt Core** — `QSettings`, `QTimer`, `QString`
 
 Project-internal types it depends on:
 - `SimulatorController` (`nsc_qt/simulator_controller.h`) — owns one instance; the bridge to `mips_core`.
-- `DatapathWidget`, `RegisterWidget`, `MemoryWidget`, `PipelineTraceWidget`, `CodeEditor` (`nsc_qt/widgets/`) — the six tab contents (Statistics is built inline, not a separate class).
+- `SchematicDatapathWidget`, `RegisterWidget`, `MemoryWidget`, `PipelineTraceWidget`, `PipelineEventsWidget`, `CodeEditor` (`nsc_qt/widgets/`) — the panel contents (Statistics is built inline, not a separate class).
 - `PreferencesDialog` (`nsc_qt/preferences_dialog.h`) — opened modally from the View menu.
 - `assemble()` / `AssemblerResult` (`nsc_qt/assembler.h`) — used by the Code Editor tab's Assemble action.
 - `exampleProgramCatalog()` / `ExampleProgram` (`nsc_qt/examples.h`) — populates the Code Editor's examples dropdown.
@@ -50,8 +50,8 @@ Constructs the main window. Creates a `SimulatorController` wrapping a fresh `mi
 
 `MainWindow` is the hub that every other `nsc_qt` class ultimately connects through:
 
-- **`SimulatorController` signals → private slots.** Connects `cycleExecuted`, `pipelineStateChanged`, `statisticsUpdated`, `halted`, `faulted`, and `breakpointHit` to its own private slots (`onCycleExecuted`, `onPipelineStateChanged`, `onStatisticsUpdated`, `onHalted`, `onFaulted`, and an inline lambda respectively). These slots fan the resulting state out to whichever tab widgets need it — for example `onPipelineStateChanged()` calls `setPipelineState()` on `DatapathWidget`, `updateCycle()` on `PipelineTraceWidget` and `RegisterWidget`, and `updateDisplay()` on `MemoryWidget` in the same call.
-- **`DatapathWidget` signals → private slots.** Connects `breakpointToggleRequested` to `onBreakpointToggle()` and `stageDetailRequested` to `onStageDetailRequested()`.
+- **`SimulatorController` signals → private slots.** Connects `cycleExecuted`, `pipelineStateChanged`, `statisticsUpdated`, `halted`, `faulted`, and `breakpointHit` to its own private slots (`onCycleExecuted`, `onPipelineStateChanged`, `onStatisticsUpdated`, `onHalted`, `onFaulted`, and an inline lambda respectively). These slots fan the resulting state out to whichever tab widgets need it — for example `onPipelineStateChanged()` calls `setCycleState()` on `SchematicDatapathWidget`, `updateCycle()` on `PipelineTraceWidget` and `RegisterWidget`, and `updateDisplay()` on `MemoryWidget` in the same call.
+- **`SchematicDatapathWidget` signals → private slots.** Connects `breakpointToggleRequested` to `onBreakpointToggle()` and `stageDetailRequested` to `onStageDetailRequested()`.
 - **`PreferencesDialog` signals → mixed targets.** When `onShowPreferences()` opens the dialog, it connects `colorSchemeChanged` to `applyColorScheme()`, `executionSpeedChanged` directly to `SimulatorController::setExecutionSpeed()`, `showRegisterAliasesChanged` directly to `RegisterWidget::setShowAliases()`, and `fontSizeChanged` to a lambda that updates `code_editor_`'s font.
 - **`QComboBox::activated` → `onExampleSelected()`.** User selection in the examples dropdown loads a catalog entry into `code_editor_`.
 - **`QSettings("nsc-qt", "clearCore-gui")`** is read once in the constructor (color scheme, execution speed) and written by `PreferencesDialog::saveSettings()` (a separate class, not by `MainWindow` itself).

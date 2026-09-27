@@ -12,9 +12,6 @@
 //   • pipeline-register bars tint red on flush / amber on stall
 //   • forwarding wires light up when the fwd_* flags are set
 //   • the branch-target wire back to the PC mux lights red on branch_flush
-//
-// Public API and signals mirror DatapathWidget exactly so MainWindow can swap
-// between the two with a one-line change.
 
 #include "mips/processor.h"
 

@@ -46,7 +46,7 @@ Build requirement: compiled into both the `nsc_qt_ui` object library and the `cl
 Emitted after every `stepCycle()` (whether called directly or via the run timer), carrying the processor's new cycle count. Connected slots typically update a "Cycles: N" label.
 
 #### `pipelineStateChanged(mips::PipelineState state)`
-Emitted alongside `cycleExecuted`, carrying a full snapshot of all five pipeline stages. This is the primary signal that drives `DatapathWidget`, `PipelineTraceWidget`, `RegisterWidget`, and `MemoryWidget` updates each cycle.
+Emitted alongside `cycleExecuted`, carrying a full snapshot of all five pipeline stages. This is the primary signal that drives `SchematicDatapathWidget`, `PipelineTraceWidget`, `PipelineEventsWidget`, `RegisterWidget`, and `MemoryWidget` updates each cycle.
 
 #### `breakpointHit(uint32_t pc)`
 Emitted from `doStep()` when the next PC after a step matches an address in `breakpoints_`, immediately after the run timer has been stopped. A connected slot should update UI state (e.g. re-label a Run/Pause action back to "Run") and typically shows the address to the user.
