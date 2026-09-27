@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "mips/alu.h"
+#include "mips/data_memory.h"
 #include "mips/decoder.h"
 #include "mips/disassembler.h"
 #include "mips/trace.h"
@@ -193,22 +194,9 @@ bool SingleCycleCpu::exec_itype(const DecodedInstr& d, uint32_t pc4, uint32_t& n
         return true;
     }
 
-    if (op == Opcode::LW || op == Opcode::LBU || op == Opcode::LHU) {
-        const uint32_t          addr = res.value;
-        std::optional<uint32_t> loaded;
-        switch (op) {
-        case Opcode::LW:
-            loaded = mem_.read_word(addr);
-            break;
-        case Opcode::LBU:
-            if (auto v = mem_.read_byte(addr)) loaded = *v;
-            break;
-        case Opcode::LHU:
-            if (auto v = mem_.read_half(addr)) loaded = *v;
-            break;
-        default:
-            break;
-        }
+    if (ctrl_.mem_read) {
+        const uint32_t addr   = res.value;
+        const auto     loaded = load_data(mem_, op, addr);
         if (!loaded) {
             exc = raise(ExceptionCode::AdEL, pc4 - 4, addr);
             return true;
@@ -217,12 +205,9 @@ bool SingleCycleCpu::exec_itype(const DecodedInstr& d, uint32_t pc4, uint32_t& n
         return true;
     }
 
-    if (op == Opcode::SW) {
+    if (ctrl_.mem_write) {
         const uint32_t addr = res.value;
-        if (!mem_.write_word(addr, rt_val)) {
-            exc = raise(ExceptionCode::AdES, pc4 - 4, addr);
-            return true;
-        }
+        if (!store_data(mem_, op, addr, rt_val)) exc = raise(ExceptionCode::AdES, pc4 - 4, addr);
         return true;
     }
 

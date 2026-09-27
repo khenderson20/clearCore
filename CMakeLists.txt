@@ -241,6 +241,8 @@ add_library(mips_core STATIC
         src/mips/memory.cpp           # Memory subsystem
         src/mips/single_cycle_cpu.cpp # Simple 1-cycle CPU model
         src/mips/pipelined_cpu.cpp    # 5-stage pipelined CPU with hazard logic
+        src/mips/pipeline_units.cpp   # Hazard-detection and forwarding units (pure functions)
+        src/mips/data_memory.cpp      # Load/store access shared by both CPU models
         src/mips/program_loader.cpp   # Load programs into memory
         src/mips/disassembler.cpp     # Machine code back to assembly
         src/mips/cp0.cpp              # Coprocessor 0: exception model (Status/Cause/EPC)
@@ -596,6 +598,7 @@ clearcore_add_test(program_loader_test tests/mips/program_loader_test.cpp mips_c
 clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
 clearcore_add_test(hazard_telemetry_test tests/mips/hazard_telemetry_test.cpp mips_core)  # Stall/forward/flush/retire indicators
 clearcore_add_test(pipeline_precise_exceptions_test tests/mips/pipeline_precise_exceptions_test.cpp mips_core)  # Wrong-path / older-wins exception precision
+clearcore_add_test(pipeline_units_test tests/mips/pipeline_units_test.cpp mips_core)  # Hazard/forwarding units and load/store helper
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
 

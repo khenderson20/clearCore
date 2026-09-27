@@ -20,10 +20,18 @@
 // propagates through all four pipeline registers unchanged. When it exits WB,
 // step() returns StepResult::Halt. All preceding instructions have already
 // retired by then, so register/memory state is final and consistent.
+//
+// Structure: one private function per stage. Each reads only the pipeline
+// registers as they were at the start of the cycle and returns an outcome;
+// step() runs them oldest first and resolves which trap or redirect wins.
 
+#include "mips/cp0.h"
 #include "mips/pipeline_regs.h"
+#include "mips/pipeline_units.h"
 #include "mips/processor.h"
 
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace mips {
@@ -53,6 +61,53 @@ public:
     void                               set_lo(uint32_t v) noexcept override { lo_ = v; }
 
 private:
+    // ── Stage outcomes ───────────────────────────────────────────────────────
+    // A trap a stage detected. step() raises at most one per cycle: the oldest.
+    struct Trap {
+        ExceptionCode code     = ExceptionCode::RI;
+        uint32_t      pc       = 0;
+        uint32_t      bad_addr = 0;
+    };
+
+    // MEM performs its own load or store: no stage older than MEM can trap.
+    struct MemOutcome {
+        MemWb               next{};
+        std::optional<Trap> trap;  // AdEL / AdES
+    };
+
+    // EX changes no state itself. Its CP0 access and control transfer are applied
+    // by step() only when no older stage trapped, so a squashed instruction leaves
+    // no trace.
+    struct Mtc0Write {
+        uint8_t  reg   = 0;
+        uint32_t value = 0;
+    };
+    struct ExOutcome {
+        ExMem                    next{};
+        std::optional<Trap>      trap;      // Sys, Bp, Ov, RI
+        std::optional<uint32_t>  redirect;  // taken branch, JR/JALR target, ERET's EPC
+        bool                     eret = false;
+        std::optional<Mtc0Write> mtc0;
+        ForwardingPaths          forwarded{};
+    };
+
+    struct IdOutcome {
+        IdEx                    next{};
+        std::optional<Trap>     trap;  // RI: the word does not decode
+        std::optional<uint32_t> jump;  // J/JAL target, resolved in ID (1-stage flush)
+    };
+
+    struct IfOutcome {
+        IfId                next{};
+        std::optional<Trap> trap;  // AdEL: the fetch address is out of range or misaligned
+    };
+
+    [[nodiscard]] bool       write_back(const MemWb& in);  // true when a halt retired
+    [[nodiscard]] MemOutcome memory_access(const ExMem& in);
+    [[nodiscard]] ExOutcome execute(const IdEx& in, const ExMem& ex_mem, const MemWb& mem_wb) const;
+    [[nodiscard]] IdOutcome decode(const IfId& in) const;
+    [[nodiscard]] IfOutcome fetch() const;
+
     RegisterFile  regs_;
     Memory        mem_;
     Cp0           cp0_{};
