@@ -321,7 +321,19 @@ jobs:
           # uninstaller stub; NSIS does not quote it, so the command must.
           $signCmd = '"' + $signtool.FullName + '" sign /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "' + $dlib.FullName + '" /dmdf "' + $metadataPath + '" "%1"'
           $define = "!uninstfinalize '$signCmd'"
-          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$define"
+
+          # CPack writes CPACK_NSIS_DEFINES into the generated CPackConfig.cmake
+          # as a plain `set(CPACK_NSIS_DEFINES "<value>")` line with no escaping
+          # of its own, then `cpack` later re-reads that file as ordinary CMake
+          # code -- where backslashes and quotes ARE escape-significant. A raw
+          # Windows path or embedded quote in $define therefore breaks CMake's
+          # own string-literal parser ("Invalid character escape '\P'") when
+          # cpack runs, even though the value passed the initial `cmake -D`
+          # configure step untouched. Escaping here so the value round-trips
+          # through exactly one extra layer of CMake string parsing back to
+          # the original text by the time NSIS sees it.
+          $cmakeEscaped = $define -replace '\\', '\\' -replace '"', '\"'
+          Add-Content $env:GITHUB_ENV "CLEARCORE_NSIS_UNINSTALLER_SIGN_DEFINE=$cmakeEscaped"
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
