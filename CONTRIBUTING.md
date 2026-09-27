@@ -54,6 +54,11 @@ sentences (20 words at most for an instruction), active voice, one instruction
 in each sentence, and approved words ("make sure", not "ensure"). Code
 identifiers, file paths and tool names stay as they are.
 
+The open issues are on a GitHub Project board (Status, Priority, Area, Size).
+`scripts/github/create-project-board.sh` makes or updates it with the GitHub
+CLI (`gh auth refresh -s project` first; `--dry-run` shows the plan), and
+`scripts/github/project-board-items.tsv` holds the start values.
+
 ## Code of Conduct
 
 Participation in this project is governed by our

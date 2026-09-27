@@ -1,0 +1,73 @@
+# Start values for the clearCore GitHub Project board.
+# scripts/github/create-project-board.sh reads this file. It sets a value only
+# when the field on the board is empty, so a change on the board stays.
+#
+# These values are suggestions from the PR #275 triage. Change them here or on
+# the board.
+#
+# Columns (separate them with one TAB; write - for "no value"):
+#   issue   status   priority   area   size
+#   status:   Todo | In Progress | Done
+#   priority: P0 (do now) | P1 | P2 | P3 (low)
+#   area:     Core | Pipeline | Assembler | TUI | Qt GUI | GDB stub | RISC-V | Branch prediction | CI / Build
+#   size:     XS | S | M | L | XL
+#
+# An open issue that is not in this file gets Status Todo and a priority from
+# its labels (bug or security: P1; feature or enhancement: P2; other: P3).
+
+# Fixed by PR #275. The issues close when it merges.
+103	In Progress	P3	Qt GUI	S
+104	In Progress	P2	Qt GUI	S
+105	In Progress	P3	Qt GUI	M
+218	In Progress	P1	Pipeline	L
+219	In Progress	P1	GDB stub	M
+220	In Progress	P2	Pipeline	L
+233	In Progress	P1	Assembler	M
+237	In Progress	P3	Core	S
+238	In Progress	P1	Qt GUI	M
+239	In Progress	P1	Qt GUI	M
+241	In Progress	P1	Qt GUI	M
+242	In Progress	P2	Qt GUI	M
+243	In Progress	P2	Qt GUI	M
+244	In Progress	P3	Qt GUI	S
+245	In Progress	P2	Qt GUI	S
+246	In Progress	P3	CI / Build	L
+247	In Progress	P3	Core	S
+248	In Progress	P3	Core	S
+249	In Progress	P3	Core	S
+250	In Progress	P3	Core	XS
+251	In Progress	P3	Qt GUI	XS
+
+# Follow-ups filed with PR #275.
+276	Todo	P1	Pipeline	S
+277	Todo	P2	CI / Build	XS
+278	Todo	P3	Core	M
+279	Todo	P3	Qt GUI	M
+280	Todo	P2	CI / Build	M
+
+# Features.
+85	Todo	P3	Qt GUI	M
+86	Todo	P3	Core	XL
+184	Todo	P2	Assembler	S
+185	Todo	P2	Assembler	M
+186	Todo	P2	Assembler	L
+187	Todo	P2	Assembler	M
+188	Todo	P3	Assembler	M
+189	Todo	P2	TUI	M
+190	Todo	P3	TUI	S
+191	Todo	P3	Pipeline	M
+192	Todo	P2	Pipeline	M
+194	Todo	P3	Pipeline	M
+197	Todo	P2	Branch prediction	M
+198	Todo	P3	Branch prediction	S
+199	Todo	P3	Branch prediction	S
+200	Todo	P3	Branch prediction	M
+201	Todo	P3	Branch prediction	M
+202	Todo	P3	Branch prediction	M
+203	Todo	P3	Branch prediction	M
+204	Todo	P3	Branch prediction	L
+205	Todo	P2	RISC-V	M
+206	Todo	P2	RISC-V	L
+207	Todo	P2	RISC-V	XL
+208	Todo	P2	RISC-V	S
+209	Todo	P3	RISC-V	L
