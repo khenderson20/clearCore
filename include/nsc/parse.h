@@ -11,6 +11,6 @@ namespace nsc {
 // `base` is one of 2 (binary), 10 (decimal), or 16 (hexadecimal).
 // Returns std::nullopt when the input is empty, contains characters invalid for
 // the base, has trailing garbage, or overflows 64 bits.
-[[nodiscard]] std::optional<std::uint64_t> parseBase(const std::string& str, int base);
+[[nodiscard]] std::optional<std::uint64_t> parse_base(const std::string& str, int base);
 
 }  // namespace nsc

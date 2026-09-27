@@ -1,4 +1,5 @@
 #include "mips/registers.h"
+#include "isa/registers.h"
 
 #include <gsl/gsl>
 

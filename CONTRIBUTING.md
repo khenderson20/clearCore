@@ -42,9 +42,22 @@ The full contributor guide lives in the wiki:
 
 ## Reporting bugs and requesting features
 
-Use the [issue templates](https://github.com/khenderson20/clearCore/issues/new/choose)
-(bug report / feature request). For security issues, follow
+Use the [issue forms](https://github.com/khenderson20/clearCore/issues/new/choose):
+**Bug report** for a defect, **Feature request** for a new capability, and
+**Quality or maintenance task** for a refactor, a performance problem, a test or
+documentation gap, or a CI change. For security issues, follow
 [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
+The forms and the issues are written in
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/): short
+sentences (20 words at most for an instruction), active voice, one instruction
+in each sentence, and approved words ("make sure", not "ensure"). Code
+identifiers, file paths and tool names stay as they are.
+
+The open issues are on a GitHub Project board (Status, Priority, Area, Size).
+`scripts/github/create-project-board.sh` makes or updates it with the GitHub
+CLI (`gh auth refresh -s project` first; `--dry-run` shows the plan), and
+`scripts/github/project-board-items.tsv` holds the start values.
 
 ## Code of Conduct
 

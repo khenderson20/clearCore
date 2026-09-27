@@ -29,11 +29,16 @@ namespace nsc::quick {
 // 32 rows, one per architectural register. Refreshed after every cycle;
 // dataChanged is emitted only for rows whose value actually changed, so the
 // GridView repaints the minimum.
+// Not final, like QuickSimulator: QML's type registration derives from every
+// registered type (QQmlPrivate::QQmlElement<T> : public T).
 class RegisterModel : public QAbstractListModel {
     Q_OBJECT
+    // Known to QML (and to qmllint) as the type of Simulator.registers, but
+    // never created from QML.
+    QML_ANONYMOUS
 
 public:
-    enum Roles {
+    enum Roles : int {
         NumberRole = Qt::UserRole + 1,  // int    — 0..31
         NameRole,                       // QString — "$t0", "$sp", …
         HexRole,                        // QString — "0x0000abcd"
@@ -47,7 +52,7 @@ public:
     [[nodiscard]] QVariant               data(const QModelIndex& idx, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
-    void refresh(const mips::RegisterFile& regs);
+    void refresh(const isa::RegisterFile& regs);
     void resetAll();
 
 private:
@@ -56,9 +61,10 @@ private:
 };
 
 // ─── QuickSimulator ───────────────────────────────────────────────────────────
+// Not final: QML's type registration derives from it
+// (QQmlPrivate::QQmlElement<T> : public T), so `final` does not compile.
 class QuickSimulator : public QObject {
     Q_OBJECT
-    QML_ELEMENT
     QML_NAMED_ELEMENT(Simulator)
 
     // Transport / status
@@ -106,17 +112,17 @@ public:
     Q_INVOKABLE QString assembleAndLoad(const QString& source);
 
     // ── Examples ───────────────────────────────────────────────────────────────
-    Q_INVOKABLE QStringList exampleNames() const;
-    Q_INVOKABLE QString     exampleSource(int index) const;
+    Q_INVOKABLE [[nodiscard]] QStringList exampleNames() const;
+    Q_INVOKABLE [[nodiscard]] QString     exampleSource(int index) const;
 
     // ── Memory ─────────────────────────────────────────────────────────────────
     // `rows` hex-dump lines of 16 bytes starting at `base` (aligned down to 16).
     // Format: "00400000  8c 09 00 04 …  |ascii………………|"
-    Q_INVOKABLE QStringList memoryRows(quint32 base, int rows) const;
+    Q_INVOKABLE [[nodiscard]] QStringList memoryRows(quint32 base, int rows) const;
 
     // ── Breakpoints ────────────────────────────────────────────────────────────
-    Q_INVOKABLE void toggleBreakpoint(quint32 pc);
-    Q_INVOKABLE bool hasBreakpoint(quint32 pc) const;
+    Q_INVOKABLE void               toggleBreakpoint(quint32 pc);
+    Q_INVOKABLE [[nodiscard]] bool hasBreakpoint(quint32 pc) const;
 
     // ── Property getters ───────────────────────────────────────────────────────
     [[nodiscard]] bool    isRunning() const;

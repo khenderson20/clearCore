@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Questions & Discussions
+  - name: Questions and discussions
     url: https://github.com/khenderson20/clearCore/discussions
-    about: Ask questions, share ideas, or get help using clearCore.
+    about: Ask a question or give an idea here. Do not open an issue for a question.
   - name: Documentation
     url: https://github.com/khenderson20/clearCore#readme
-    about: Read the README and docs before opening an issue.
+    about: Read the README and the wiki before you open an issue.
   - name: Security vulnerability
     url: https://github.com/khenderson20/clearCore/security/advisories/new
-    about: Report security issues privately — please do not open a public issue.
+    about: Report a security problem in private. Do not open a public issue for it.

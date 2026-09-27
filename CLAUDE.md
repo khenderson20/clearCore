@@ -141,7 +141,10 @@ and class-level separators.
 - Qt method names follow **camelCase** (Qt's own convention): `loadProgram`, `stepCycle`, `isRunning`.
 - Signals use **camelCase** noun or verb phrases: `cycleExecuted`, `pipelineStateChanged`, `halted`.
 - All `QObject` subclasses pass `QObject* parent = nullptr` as the last constructor parameter.
-- `mutable QMutex mutex_` guards shared state accessed from `QTimer` slots.
+- `SimulatorController` is **GUI-thread confined**: `run()` mode is a `QTimer` on the GUI thread,
+  so there is no second thread and no lock (debug builds assert the confinement). Do not add a
+  mutex to make it look thread-safe: a worker-thread design needs a thread-owned replacement for
+  the `QTimer`, whose `start()`/`stop()` only work on its own thread (#244).
 - Never pass Qt types (`QString`, `QVariant`) into `mips_core` or `nsc_core` — the boundary
   is `SimulatorController`, which converts at the seam.
 - Header file for every Qt class that has `Q_OBJECT`, listed in the CMake source list so AUTOMOC

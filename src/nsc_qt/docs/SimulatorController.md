@@ -11,11 +11,11 @@ A developer reaches for this class whenever a widget needs to read simulator sta
 Constructed once, by `MainWindow`, wrapping a `mips::PipelinedCpu`.
 
 Qt modules required:
-- **Qt Core** — `QObject` (base class), `QMutex`/`QMutexLocker` (internal synchronization), `QTimer` (drives `run()` mode).
+- **Qt Core** — `QObject` (base class), `QTimer` (drives `run()` mode), `QThread` (only to assert thread confinement in debug builds).
 
 Project-internal types:
 - `mips::IProcessor` (`mips_core`) — the abstract processor interface this class owns and drives; `SimulatorController` never depends on a concrete processor type beyond the constructor parameter.
-- `mips::PipelineState`, `mips::Memory`, `mips::RegisterFile` — read-only state types returned by the accessor methods below.
+- `mips::PipelineState`, `isa::Memory`, `isa::RegisterFile` — read-only state types returned by the accessor methods below.
 - `SimulatorStatistics` — a plain struct (declared in the same header) accumulated internally and emitted via `statisticsUpdated`.
 
 Build requirement: compiled into both the `nsc_qt_ui` object library and the `clearCore-gui` executable; also linked into the `qt_ui_test` smoke-test target.
@@ -46,7 +46,7 @@ Build requirement: compiled into both the `nsc_qt_ui` object library and the `cl
 Emitted after every `stepCycle()` (whether called directly or via the run timer), carrying the processor's new cycle count. Connected slots typically update a "Cycles: N" label.
 
 #### `pipelineStateChanged(mips::PipelineState state)`
-Emitted alongside `cycleExecuted`, carrying a full snapshot of all five pipeline stages. This is the primary signal that drives `DatapathWidget`, `PipelineTraceWidget`, `RegisterWidget`, and `MemoryWidget` updates each cycle.
+Emitted alongside `cycleExecuted`, carrying a full snapshot of all five pipeline stages. This is the primary signal that drives `SchematicDatapathWidget`, `PipelineTraceWidget`, `PipelineEventsWidget`, `RegisterWidget`, and `MemoryWidget` updates each cycle.
 
 #### `breakpointHit(uint32_t pc)`
 Emitted from `doStep()` when the next PC after a step matches an address in `breakpoints_`, immediately after the run timer has been stopped. A connected slot should update UI state (e.g. re-label a Run/Pause action back to "Run") and typically shows the address to the user.
@@ -90,34 +90,34 @@ Stops the run timer. Idempotent — safe to call even if the timer isn't running
 Returns whether the run timer is currently active.
 
 #### `uint64_t cycleCount() const noexcept`
-Returns the processor's current cycle count under `mutex_`.
+Returns the processor's current cycle count.
 
 #### `uint32_t registerValue(uint8_t idx) const noexcept`
-Returns the value of register `idx` (0–31) under `mutex_`.
+Returns the value of register `idx` (0–31).
 
 #### `std::optional<uint32_t> memoryWord(uint32_t addr) const noexcept`
-Returns the 32-bit word at `addr`, or `std::nullopt` if `addr` is out of range, under `mutex_`.
+Returns the 32-bit word at `addr`, or `std::nullopt` if `addr` is out of range.
 
 #### `mips::PipelineState pipelineState() const noexcept`
-Returns a snapshot of all five pipeline stages under `mutex_`.
+Returns a snapshot of all five pipeline stages.
 
 #### `SimulatorStatistics statistics() const noexcept`
-Returns a copy of the accumulated statistics under `mutex_`.
+Returns a copy of the accumulated statistics.
 
-#### `const mips::Memory& memory() const noexcept`
-Returns a reference to the processor's memory. **Not** guarded by `mutex_` — see [Thread Safety](#8-thread-safety).
+#### `const isa::Memory& memory() const noexcept`
+Returns a reference to the processor's memory. It is valid while the controller exists; read it when needed rather than storing it (see [Thread Safety](#8-thread-safety)).
 
-#### `const mips::RegisterFile& registers() const noexcept`
-Returns a reference to the processor's register file. **Not** guarded by `mutex_` — see [Thread Safety](#8-thread-safety).
+#### `const isa::RegisterFile& registers() const noexcept`
+Returns a reference to the processor's register file. Same lifetime rule as `memory()`.
 
 #### `void setBreakpoint(uint32_t pc)` / `void clearBreakpoint(uint32_t pc)`
-Add or remove `pc` from the breakpoint set, under `mutex_`.
+Add or remove `pc` from the breakpoint set.
 
 #### `bool hasBreakpoint(uint32_t pc) const noexcept`
-Returns whether `pc` is currently a breakpoint, under `mutex_`.
+Returns whether `pc` is currently a breakpoint.
 
 #### `const std::unordered_set<uint32_t>& breakpoints() const noexcept`
-Returns a reference to the full breakpoint set. **Not** guarded by `mutex_` — see [Thread Safety](#8-thread-safety).
+Returns a reference to the full breakpoint set.
 
 #### `void setExecutionSpeed(int speed)`
 Sets the run timer's interval from a 0–100 speed value (clamped): 100 maps to a 0ms interval (as fast as the event loop allows), 0 maps to 500ms per cycle. Does not start or stop the timer.
@@ -129,9 +129,9 @@ Connected to `run_timer_`'s `timeout()` signal; simply calls `doStep()` on every
 
 ## 8. Thread Safety
 
-**Single-threaded in practice, despite the internal `QMutex`.** Every call into `SimulatorController` in this application originates from the GUI thread — `stepCycle()`/`run()`/`stop()` are invoked directly from `MainWindow` slots, and repeated stepping during `run()` mode is driven by `run_timer_`, whose `timeout()` signal is also delivered on the GUI thread since the object was constructed there and never moved via `moveToThread()`. Nothing in this codebase constructs a `QThread` or calls `moveToThread()` on a `SimulatorController`.
+**GUI-thread confined, by design.** Every call into `SimulatorController` originates from the GUI thread — `stepCycle()`/`run()`/`stop()` are invoked directly from `MainWindow` (or `QuickSimulator`) slots, and repeated stepping during `run()` mode is driven by `run_timer_`, whose `timeout()` signal is also delivered on the GUI thread since the object was constructed there and never moved via `moveToThread()`. Nothing in this codebase constructs a `QThread` or calls `moveToThread()` on a `SimulatorController`.
 
-The `mutable QMutex mutex_` guards `stepCycle()`/`reset()`/`loadProgram()` and most of the `const` accessors, but **not** `memory()`, `registers()`, or `breakpoints()`, which return direct references without locking — an inconsistency that is currently harmless only because there is no second thread to race with. If this class is ever moved to a background thread, those three accessors need to either take the lock or be changed to return snapshots by value like `pipelineState()` and `statistics()` already do.
+There is therefore no lock. (An earlier `QMutex` suggested otherwise but was uncontended by construction and applied inconsistently; see #244.) Debug builds assert the confinement in every state-changing member. Driving the CPU from a worker thread would take more than a lock: `QTimer::start()`/`stop()` only work on the timer's own thread, so the timer would need a thread-owned replacement first.
 
 ## 9. Inter-Class Interactions
 

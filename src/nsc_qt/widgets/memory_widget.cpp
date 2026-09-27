@@ -2,17 +2,61 @@
 #include "nsc_qt/ui_scale.h"
 
 #include <QHBoxLayout>
+#include <QIODevice>
 #include <QLabel>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include <QHexView/model/buffer/qmemorybuffer.h>
+#include <QHexView/model/buffer/qhexbuffer.h>
 #include <QHexView/model/qhexcursor.h>
 #include <QHexView/model/qhexdocument.h>
 #include <QHexView/qhexview.h>
 
+#include <algorithm>
+#include <cstring>
+
 namespace nsc::qt {
+
+// ─── MemorySnapshotBuffer ────────────────────────────────────────────────────
+// The address space as the hex view sees it: a fixed-size copy the widget
+// patches in place. QMemoryBuffer offers no such path — QHexDocument::setData()
+// copies everything and resets the view (moving the cursor back to 0x0), and
+// replace() records every write on an undo stack that grows without bound.
+class MemorySnapshotBuffer final : public QHexBuffer {
+public:
+    explicit MemorySnapshotBuffer(QObject* parent = nullptr) : QHexBuffer(parent) {}
+
+    [[nodiscard]] QByteArray& bytes() noexcept { return bytes_; }
+
+    uchar at(qint64 idx) override {
+        return static_cast<uchar>(bytes_.at(static_cast<qsizetype>(idx)));
+    }
+    [[nodiscard]] qint64 length() const override { return bytes_.size(); }
+    // The view is read-only (QHexView::setReadOnly), so no edit ever arrives.
+    void       insert(qint64 /*offset*/, const QByteArray& /*data*/) override {}
+    void       remove(qint64 /*offset*/, int /*length*/) override {}
+    QByteArray read(qint64 offset, int length) override {
+        return bytes_.mid(static_cast<qsizetype>(offset), length);
+    }
+    bool read(QIODevice* device) override {
+        bytes_ = device->readAll();
+        return true;
+    }
+    void   write(QIODevice* device) override { device->write(bytes_); }
+    qint64 indexOf(const QByteArray& ba, qint64 from) override {
+        return bytes_.indexOf(ba, static_cast<qsizetype>(from));
+    }
+    qint64 lastIndexOf(const QByteArray& ba, qint64 from) override {
+        return bytes_.lastIndexOf(ba, static_cast<qsizetype>(from));
+    }
+
+private:
+    QByteArray bytes_;
+};
+
+// ─── MemoryWidget ────────────────────────────────────────────────────────────
 
 MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
     auto* vl = new QVBoxLayout(this);
@@ -68,34 +112,72 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QWidget(parent) {
             &MemoryWidget::onAddressChanged);
 }
 
-void MemoryWidget::updateDisplay(const mips::Memory& mem) {
-    last_mem_ = &mem;
-    refreshView(mem);
-}
+void MemoryWidget::updateDisplay(const isa::Memory& mem) {
+    const auto raw  = mem.raw();
+    const auto size = static_cast<qsizetype>(raw.size());
+    const auto now  = reinterpret_cast<const char*>(raw.data());
 
-void MemoryWidget::markWritten(uint32_t addr) {
-    written_addrs_.insert(addr);
-}
+    const bool had_highlights = !changed_.empty();
+    changed_.clear();
 
-void MemoryWidget::refreshView(const mips::Memory& mem) {
-    const auto       raw = mem.raw();
-    const QByteArray ba(reinterpret_cast<const char*>(raw.data()),
-                        static_cast<qsizetype>(raw.size()));
-
-    if (doc_ == nullptr) {
-        doc_ = QHexDocument::fromMemory<QMemoryBuffer>(ba, this);
+    if (snapshot_ == nullptr || snapshot_->bytes().size() != size) {
+        // First refresh, or a different address space: take the whole image
+        // once. Nothing is highlighted, since there is no earlier state.
+        auto* buffer    = new MemorySnapshotBuffer;
+        buffer->bytes() = QByteArray(now, size);
+        auto* old_doc   = doc_;
+        doc_            = QHexDocument::fromBuffer(buffer, this);  // takes the buffer
+        snapshot_       = buffer;
         hex_view_->setDocument(doc_);
-        status_lbl_->setText(tr("%1 KiB RAM").arg(raw.size() / 1024));
-    } else {
-        doc_->setData(ba);
+        if (old_doc != nullptr) old_doc->deleteLater();
+        status_lbl_->setText(tr("%1 KiB RAM").arg(size / 1024));
+        return;
     }
 
-    // Repaint the "written last step" highlights.
+    // Compare a page at a time (memcmp is vectorised) and walk bytes only in a
+    // page that differs; copy each changed run and record it for highlighting.
+    constexpr qsizetype kPage   = 4096;
+    char*               shown   = snapshot_->bytes().data();
+    bool                changed = false;
+    for (qsizetype page = 0; page < size; page += kPage) {
+        const qsizetype end = std::min(page + kPage, size);
+        if (std::memcmp(now + page, shown + page, static_cast<std::size_t>(end - page)) == 0)
+            continue;
+        for (qsizetype i = page; i < end;) {
+            if (now[i] == shown[i]) {
+                ++i;
+                continue;
+            }
+            const qsizetype start = i;
+            while (i < end && now[i] != shown[i])
+                ++i;
+            std::memcpy(shown + start, now + start, static_cast<std::size_t>(i - start));
+            changed = true;
+            if (!changed_.empty() && changed_.back().first + changed_.back().second == start)
+                changed_.back().second += i - start;  // continues across a page boundary
+            else if (changed_.size() < kMaxHighlightRuns)
+                changed_.emplace_back(start, i - start);
+        }
+    }
+
+    if (had_highlights || changed) applyHighlights();
+    if (changed) hex_view_->viewport()->update();
+}
+
+QColor MemoryWidget::highlightColor() const {
+    return dark_mode_ ? QColor(0x7A, 0x6E, 0x1F) : QColor(0xFF, 0xF9, 0xC4);
+}
+
+void MemoryWidget::applyHighlights() {
     hex_view_->clearMetadata();
-    const QColor written_bg = dark_mode_ ? QColor(0x7A, 0x6E, 0x1F) : QColor(0xFF, 0xF9, 0xC4);
-    for (const uint32_t addr : written_addrs_)
-        hex_view_->setBackgroundSize(addr, 1, written_bg);
-    written_addrs_.clear();
+    const QColor bg = highlightColor();
+    for (const auto& [offset, length] : changed_)
+        hex_view_->setBackgroundSize(offset, length, bg);
+}
+
+void MemoryWidget::showEvent(QShowEvent* ev) {
+    QWidget::showEvent(ev);
+    emit shown();
 }
 
 void MemoryWidget::onAddressChanged(int value) {
@@ -112,7 +194,7 @@ void MemoryWidget::setDarkMode(bool dark) {
     opts.hexheader_format.foreground     = hdr_fg;
     opts.asciiheader_format.foreground   = hdr_fg;
     hex_view_->setOptions(opts);
-    if (last_mem_) refreshView(*last_mem_);
+    applyHighlights();  // recolour the current highlights; no memory access needed
 }
 
 }  // namespace nsc::qt

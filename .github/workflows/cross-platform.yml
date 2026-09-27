@@ -40,8 +40,10 @@ on:
   push:
     branches: [ main ]
 
+# Both jobs declare their own permissions. Only `build` needs id-token: write
+# (Azure Trusted Signing's OIDC login), so it is granted there and not here,
+# where it would reach every job that forgets to narrow it.
 permissions:
-  id-token: write
   contents: read
 
 # event_name keeps a manual/release run out of the push group, so a push to the

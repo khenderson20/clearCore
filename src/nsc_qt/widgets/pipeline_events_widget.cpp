@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QVBoxLayout>
+#include <array>
 
 namespace nsc::qt {
 
@@ -19,7 +20,7 @@ constexpr int kKindRole = Qt::UserRole;
 
 QString instr_or(const mips::StageSnapshot& s, const QString& fallback) {
     if (!s.valid || s.raw == 0) return fallback;
-    return QString::fromStdString(format_instr(s.raw));
+    return QString::fromStdString(format_instr(s.raw, s.pc));
 }
 
 }  // anonymous namespace
@@ -66,9 +67,9 @@ QColor PipelineEventsWidget::kindColor(Kind kind) const {
     case Kind::Error:
         return dark_mode_ ? QColor("#FF5252") : QColor("#C62828");
     case Kind::Info:
-    default:
-        return dark_mode_ ? QColor("#9CDCFE") : QColor("#00529B");
+        break;
     }
+    return dark_mode_ ? QColor("#9CDCFE") : QColor("#00529B");
 }
 
 void PipelineEventsWidget::logEvent(Kind kind, uint64_t cycle, const QString& text) {
@@ -89,35 +90,46 @@ void PipelineEventsWidget::logEvent(Kind kind, uint64_t cycle, const QString& te
 }
 
 void PipelineEventsWidget::updateCycle(const mips::PipelineState& state) {
-    const auto cycle = static_cast<quint64>(state.cycle);
-
-    // Rising-edge suppression: an event repeated on the very next cycle
-    // (multi-cycle stall, back-to-back forwards of the same pair) logs once.
-    auto log_edge = [&](Kind kind, const QString& text) {
-        const auto it        = recent_.constFind(text);
-        const bool continued = it != recent_.constEnd() && (*it + 1 == cycle || *it == cycle);
-        recent_[text]        = cycle;
-        if (!continued) logEvent(kind, cycle, text);
+    // Each derivable event, the stage whose instruction it names, and its
+    // message. The message is translated and formatted only when it is logged.
+    struct Event {
+        bool        fired;
+        std::size_t stage;
+        Kind        kind;
+        const char* text;      // QT_TR_NOOP; %1 is the instruction
+        const char* fallback;  // %1 when the stage holds no instruction
     };
+    const std::array<Event, 6> events{{
+        {state.fwd_ex_to_ex_a, 2, Kind::FwdExMem, QT_TR_NOOP("EX/MEM→EX forward, ALU input A: %1"),
+         "?"},
+        {state.fwd_ex_to_ex_b, 2, Kind::FwdExMem, QT_TR_NOOP("EX/MEM→EX forward, ALU input B: %1"),
+         "?"},
+        {state.fwd_mem_to_ex_a, 2, Kind::FwdMemWb, QT_TR_NOOP("MEM/WB→EX forward, ALU input A: %1"),
+         "?"},
+        {state.fwd_mem_to_ex_b, 2, Kind::FwdMemWb, QT_TR_NOOP("MEM/WB→EX forward, ALU input B: %1"),
+         "?"},
+        {state.load_stall, 2, Kind::Stall, QT_TR_NOOP("load-use stall: %1 — bubble inserted"),
+         "lw"},
+        {state.branch_flush, 3, Kind::Flush,
+         QT_TR_NOOP("branch taken: %1 — younger instructions flushed"), "branch"},
+    }};
 
-    const auto& ex  = state.stages[2];
-    const auto& mem = state.stages[3];
+    const auto cycle = static_cast<quint64>(state.cycle);
+    for (std::size_t i = 0; i < events.size(); ++i) {
+        const Event& e = events[i];
+        if (!e.fired) continue;
+        const auto& s = state.stages[e.stage];
 
-    if (state.fwd_ex_to_ex_a)
-        log_edge(Kind::FwdExMem, tr("EX/MEM→EX forward, ALU input A: %1").arg(instr_or(ex, "?")));
-    if (state.fwd_ex_to_ex_b)
-        log_edge(Kind::FwdExMem, tr("EX/MEM→EX forward, ALU input B: %1").arg(instr_or(ex, "?")));
-    if (state.fwd_mem_to_ex_a)
-        log_edge(Kind::FwdMemWb, tr("MEM/WB→EX forward, ALU input A: %1").arg(instr_or(ex, "?")));
-    if (state.fwd_mem_to_ex_b)
-        log_edge(Kind::FwdMemWb, tr("MEM/WB→EX forward, ALU input B: %1").arg(instr_or(ex, "?")));
-    if (state.load_stall)
-        log_edge(
-            Kind::Stall,
-            tr("load-use stall: %1 — bubble inserted").arg(instr_or(ex, QStringLiteral("lw"))));
-    if (state.branch_flush)
-        log_edge(Kind::Flush, tr("branch taken: %1 — younger instructions flushed")
-                                  .arg(instr_or(mem, QStringLiteral("branch"))));
+        // Rising-edge suppression: the same event for the same instruction word
+        // on the very next cycle (a multi-cycle stall, back-to-back forwards of
+        // one pair) logs once.
+        const quint64 key       = (static_cast<quint64>(i) << 32) | (s.valid ? s.raw : 0u);
+        const auto    it        = recent_.constFind(key);
+        const bool    continued = it != recent_.constEnd() && (*it + 1 == cycle || *it == cycle);
+        recent_.insert(key, cycle);
+        if (!continued)
+            logEvent(e.kind, cycle, tr(e.text).arg(instr_or(s, QString::fromLatin1(e.fallback))));
+    }
 }
 
 void PipelineEventsWidget::clear() {

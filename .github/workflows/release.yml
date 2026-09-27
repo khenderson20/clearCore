@@ -139,12 +139,11 @@ jobs:
           #    128+signal; a timeout (124) or clean exit is healthy.
           #
           #    The TUI needs no display and runs under the offscreen platform.
-          #    clearCore-gui embeds a QOpenGLWidget, which the offscreen plugin
-          #    cannot back ("QOpenGLWidget is not supported on this platform" ->
-          #    segfault) — software-GL env vars don't help, since offscreen has
-          #    no GL integration at all. Launch it under Xvfb (a virtual X server)
-          #    with Mesa's software GL instead — the same approach the AppImage
-          #    job uses to launch this exact binary successfully.
+          #    clearCore-gui is launched under Xvfb (a virtual X server) with
+          #    Mesa's software GL — the same approach the AppImage job uses to
+          #    launch this exact binary. (It used to embed a QOpenGLWidget, which
+          #    the offscreen plugin cannot back; that widget was removed in #103,
+          #    and Xvfb stays because it exercises a real window system.)
           smoke() {
             local bin="$1"; shift
             local rc=0

@@ -20,7 +20,7 @@ class QLabel;
 
 namespace nsc::qt {
 
-class PipelineEventsWidget : public QWidget {
+class PipelineEventsWidget final : public QWidget {
     Q_OBJECT
 
 public:
@@ -32,7 +32,9 @@ public:
 
     // Derives and logs the hazard events visible in `state` (forwards,
     // load-use stall, branch flush). Consecutive-cycle repeats of the same
-    // event are suppressed so a multi-cycle stall reads as one entry.
+    // event are suppressed so a multi-cycle stall reads as one entry. The log
+    // is history, so it records whether or not the panel is visible; a
+    // suppressed repeat costs one hash lookup and no string work.
     void updateCycle(const mips::PipelineState& state);
 
     // Appends one entry. `cycle` prefixes the message; pass the current
@@ -43,10 +45,10 @@ public:
     void setDarkMode(bool dark);
 
     // Number of entries currently in the log (for tests).
-    int eventCount() const;
+    [[nodiscard]] int eventCount() const;
 
 private:
-    QColor kindColor(Kind kind) const;
+    [[nodiscard]] QColor kindColor(Kind kind) const;
 
     static constexpr int kMaxEntries = 500;
 
@@ -54,8 +56,9 @@ private:
     QLabel*      count_lbl_ = nullptr;
     bool         dark_mode_ = false;
 
-    // Rising-edge suppression: text → cycle it was last logged for.
-    QHash<QString, quint64> recent_;
+    // Rising-edge suppression: (event index << 32 | instruction word) → the
+    // cycle it was last seen in.
+    QHash<quint64, quint64> recent_;
 };
 
 }  // namespace nsc::qt

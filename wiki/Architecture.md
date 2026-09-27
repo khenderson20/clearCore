@@ -113,7 +113,7 @@ A single `derive_control()` free function maps an opcode/funct pair to the full 
 
 ## ISA-agnostic core (`isa::`)
 
-These types carry nothing MIPS-specific and live in `include/isa/`, ready to be shared by a second ISA backend (RISC-V). The `mips` headers re-export them with `using`-shims (`mips::Memory`, `mips::RegisterFile`, `mips::IProcessor`, …) so existing callers compile unchanged.
+These types carry nothing MIPS-specific and live in `include/isa/`, ready to be shared by a second ISA backend (RISC-V). `Memory` and `RegisterFile` have no per-ISA alias: the CPU models, the Qt bridge, the widgets, the Quick bridge and the golden runner all name them `isa::Memory` and `isa::RegisterFile`, so a front end never needs a MIPS header for them (#237). `mips/processor.h` still re-exports `IProcessor`, `PipelineState`, `StageSnapshot` and `StepResult` with `using`-shims.
 
 | Component        | File(s)                   | Role                                                        |
 |-------------------|----------------------------|---------------------------------------------------------------|
@@ -132,8 +132,8 @@ These types carry nothing MIPS-specific and live in `include/isa/`, ready to be 
 | `Disassembler`    | `include/mips/disassembler.h`    | Machine code → assembly text; hex program loader              |
 | `SingleCycleCpu`  | `src/mips/single_cycle_cpu.cpp`  | Simulates all five stages in one `step()` call                |
 | `PipelinedCpu`    | `src/mips/pipelined_cpu.cpp`     | Concurrent pipeline with five pipeline registers               |
-| Hazard detection  | (internal to `PipelinedCpu`)     | Load-use stall detection, branch/jump flush                    |
-| Forwarding unit   | (internal to `PipelinedCpu`)     | EX/MEM → EX and MEM/WB → EX forwarding paths                   |
+| Hazard detection  | `include/mips/pipeline_units.h`  | `load_use_hazard()`: load-use stall detection (flushes are resolved in `PipelinedCpu::step()`) |
+| Forwarding unit   | `include/mips/pipeline_units.h`  | `forward_operands()`: EX/MEM → EX and MEM/WB → EX forwarding paths; `source_registers()` / `destination_register()` give each instruction's reads and write |
 | Trace log         | `include/mips/trace.h`           | Shared spdlog logger for instruction/pipeline/exception tracing; quiet by default, enable with `CLEARCORE_LOG_LEVEL` |
 | `NyxstoneBackend` | `include/mips/nyxstone_backend.h` (optional, `CLEARCORE_NYXSTONE_ENABLED`) | LLVM-based text ↔ machine-code assembler/disassembler; pimpl'd so no LLVM headers leak. Differentially validates the Decoder/Disassembler (see `nyxstone_test`). Built when LLVM 15–20 is found at configure time |
 
@@ -143,11 +143,12 @@ These types carry nothing MIPS-specific and live in `include/isa/`, ready to be 
 
 The Qt6 Widgets layer adds a `SimulatorController` object that:
 
-1. Runs the CPU in a background thread
+1. Steps the CPU on the GUI thread — once per click, or from a `QTimer` in Run mode
 2. Emits Qt signals (e.g. pipeline state, register, and memory changes) as state changes
-3. Qt's event loop automatically marshals those signals to the main (UI) thread
+3. Delivers those signals directly, because sender and receivers share the one GUI thread
 
-Widget code never touches the CPU directly and never needs a mutex. `nsc_qt` also owns the in-app MIPS assembler (`assembler.h`/`.cpp`) used by the Code Editor tab. See [Qt6 GUI](Qt6-GUI) for the full breakdown, including the parallel Qt Quick (`nsc_quick`) interface.
+Widget code never touches the CPU directly and never needs a mutex: nothing runs on a second
+thread (debug builds assert this in `SimulatorController`). `nsc_qt` also owns the in-app MIPS assembler (`assembler.h`/`.cpp`) used by the Code Editor tab. See [Qt6 GUI](Qt6-GUI) for the full breakdown, including the parallel Qt Quick (`nsc_quick`) interface.
 
 ---
 

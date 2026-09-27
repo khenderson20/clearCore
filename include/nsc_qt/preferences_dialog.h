@@ -9,7 +9,7 @@ class QCheckBox;
 
 namespace nsc::qt {
 
-class PreferencesDialog : public QDialog {
+class PreferencesDialog final : public QDialog {
     Q_OBJECT
 
 public:

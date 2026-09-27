@@ -241,6 +241,8 @@ add_library(mips_core STATIC
         src/mips/memory.cpp           # Memory subsystem
         src/mips/single_cycle_cpu.cpp # Simple 1-cycle CPU model
         src/mips/pipelined_cpu.cpp    # 5-stage pipelined CPU with hazard logic
+        src/mips/pipeline_units.cpp   # Hazard-detection and forwarding units (pure functions)
+        src/mips/data_memory.cpp      # Load/store access shared by both CPU models
         src/mips/program_loader.cpp   # Load programs into memory
         src/mips/disassembler.cpp     # Machine code back to assembly
         src/mips/cp0.cpp              # Coprocessor 0: exception model (Status/Cause/EPC)
@@ -341,7 +343,7 @@ option(BUILD_QT6_UI "Build Qt6 desktop GUI for processor simulation" ON)
 
 if (BUILD_QT6_UI)
     find_package(Qt6 6.4
-            COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets
+            COMPONENTS Core Gui Widgets
             QUIET
     )
     if (NOT Qt6_FOUND)
@@ -391,7 +393,6 @@ if (BUILD_QT6_UI)
             src/nsc_qt/dock_panels.cpp
             src/nsc_qt/preferences_dialog.cpp
             src/nsc_qt/widgets/code_editor.cpp
-            src/nsc_qt/widgets/datapath_widget.cpp
             src/nsc_qt/widgets/schematic_datapath_widget.cpp
             src/nsc_qt/widgets/register_widget.cpp
             src/nsc_qt/widgets/memory_widget.cpp
@@ -405,7 +406,6 @@ if (BUILD_QT6_UI)
             include/nsc_qt/ui_scale.h
             include/nsc_qt/examples.h
             include/nsc_qt/widgets/code_editor.h
-            include/nsc_qt/widgets/datapath_widget.h
             include/nsc_qt/widgets/schematic_datapath_widget.h
             include/nsc_qt/widgets/register_widget.h
             include/nsc_qt/widgets/memory_widget.h
@@ -434,7 +434,7 @@ if (BUILD_QT6_UI)
         # macdeployqt bundles Qt and QADS into clearCore-gui.app/Contents/
         # Frameworks; @executable_path/../Frameworks is where the installed
         # binary resolves them at runtime (without it the app aborts with
-        # "Library not loaded: @rpath/QtOpenGLWidgets.framework ... no LC_RPATH's
+        # "Library not loaded: @rpath/Qt<Module>.framework ... no LC_RPATH's
         # found").
         #
         # The trailing entry is what lets the bundling succeed in the first
@@ -442,7 +442,7 @@ if (BUILD_QT6_UI)
         # .dylib, and macdeployqt resolves that dependency through the binary's
         # LC_RPATHs. Exposing QADS's build-tree directory gives macdeployqt a
         # path to the real dylib at deploy time — otherwise it errors ("Cannot
-        # resolve rpath ...") and skips bundling QtOpenGLWidgets. That entry only
+        # resolve rpath ...") and skips bundling the Qt frameworks. That entry only
         # has to exist during `cmake --install`; it is a harmless dead path in
         # the shipped bundle. (QADS stays shared for LGPL compliance — see above
         # — so a static build is not an option here.)
@@ -461,8 +461,6 @@ if (BUILD_QT6_UI)
             Qt6::Core
             Qt6::Gui
             Qt6::Widgets
-            Qt6::OpenGL
-            Qt6::OpenGLWidgets
             ads::qtadvanceddocking-qt6
             QHexView
             clearcore_warnings
@@ -596,12 +594,14 @@ clearcore_add_test(program_loader_test tests/mips/program_loader_test.cpp mips_c
 clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
 clearcore_add_test(hazard_telemetry_test tests/mips/hazard_telemetry_test.cpp mips_core)  # Stall/forward/flush/retire indicators
 clearcore_add_test(pipeline_precise_exceptions_test tests/mips/pipeline_precise_exceptions_test.cpp mips_core)  # Wrong-path / older-wins exception precision
+clearcore_add_test(pipeline_units_test tests/mips/pipeline_units_test.cpp mips_core)  # Hazard/forwarding units and load/store helper
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
 
 # ---- gdb_stub_test: RSP hex-parser robustness (only when the stub is built) ----
 if (BUILD_GDB_STUB)
     clearcore_add_test(gdb_stub_test tests/mips/gdb_stub_test.cpp mips_core)
+    target_link_libraries(gdb_stub_test PRIVATE Threads::Threads)
 endif ()
 
 # ---- nyxstone_test: differential Decoder/Disassembler vs LLVM (if enabled) ----
@@ -625,11 +625,13 @@ if (BUILD_QT6_UI)
             src/nsc_qt/widgets/memory_widget.cpp
             src/nsc_qt/widgets/pipeline_trace_widget.cpp
             src/nsc_qt/widgets/pipeline_events_widget.cpp
+            src/nsc_qt/widgets/schematic_datapath_widget.cpp
             include/nsc_qt/simulator_controller.h            # (moc)
             include/nsc_qt/widgets/register_widget.h         # (moc)
             include/nsc_qt/widgets/memory_widget.h           # (moc)
             include/nsc_qt/widgets/pipeline_trace_widget.h   # (moc)
             include/nsc_qt/widgets/pipeline_events_widget.h  # (moc)
+            include/nsc_qt/widgets/schematic_datapath_widget.h  # (moc)
     )
     set_target_properties(qt_ui_test PROPERTIES AUTOMOC ON)
     target_include_directories(qt_ui_test PRIVATE include)

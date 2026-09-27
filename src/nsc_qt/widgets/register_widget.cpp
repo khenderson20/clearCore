@@ -1,5 +1,6 @@
 #include "nsc_qt/widgets/register_widget.h"
 #include "mips/decoder.h"
+#include "mips/pipeline_units.h"
 #include "mips/registers.h"
 #include "nsc_qt/ui_scale.h"
 
@@ -7,6 +8,7 @@
 #include <QGridLayout>
 #include <QLabel>
 #include <QPainter>
+#include <QShowEvent>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -16,9 +18,10 @@ namespace nsc::qt {
 namespace {
 
 QColor lerp_color(QColor a, QColor b, float t) {
-    return QColor(static_cast<int>(a.red() + (b.red() - a.red()) * t),
-                  static_cast<int>(a.green() + (b.green() - a.green()) * t),
-                  static_cast<int>(a.blue() + (b.blue() - a.blue()) * t));
+    const auto mix = [t](int from, int to) {
+        return static_cast<int>(static_cast<float>(from) + static_cast<float>(to - from) * t);
+    };
+    return {mix(a.red(), b.red()), mix(a.green(), b.green()), mix(a.blue(), b.blue())};
 }
 
 }  // anonymous namespace
@@ -144,8 +147,8 @@ void RegisterWidget::buildGrid() {
 }
 
 void RegisterWidget::updateCell(int idx) {
-    auto&         cs = cells_[idx];
-    const uint8_t u  = static_cast<uint8_t>(idx);
+    auto&      cs = cells_[idx];
+    const auto u  = static_cast<uint8_t>(idx);
 
     // Name text (register mnemonics like "$8 (t0)" are notation, not prose --
     // not routed through tr(), consistent with datapath_widget's mnemonics).
@@ -193,53 +196,50 @@ void RegisterWidget::startFade(int idx) {
     if (!fade_timer_->isActive()) fade_timer_->start();
 }
 
-// Single per-cycle update: detects the register written in WB (starts its
-// wall-clock fade) and the registers read in ID, stores the fresh values,
-// and refreshes every cell exactly once.
+// Single per-cycle update. The read and write rules are the pipeline's own
+// (mips::source_registers / destination_register), so a shift does not light
+// rs, and MFC0 lights rt instead of the CP0 register number in rd.
 void RegisterWidget::updateCycle(const mips::PipelineState&      state,
                                  const std::array<uint32_t, 32>& vals) {
-    // Detect a register written in WB
-    const auto& wb = state.stages[4];
-    if (wb.valid && !wb.stalled && !wb.flushed && wb.raw != 0) {
-        auto decoded = mips::Decoder::decode(wb.raw);
-        if (decoded) {
-            uint8_t     dest = 0xFF;
-            const auto& d    = *decoded;
-            if (d.format == mips::InstrFormat::R) {
-                dest = d.r().rd;
-            } else if (d.format == mips::InstrFormat::I) {
-                if (d.opcode != mips::Opcode::SW && d.opcode != mips::Opcode::BEQ &&
-                    d.opcode != mips::Opcode::BNE)
-                    dest = d.i().rt;
-            } else if (d.opcode == mips::Opcode::JAL) {
-                dest = 31;  // $ra
-            }
-            if (dest != 0xFF && dest != 0 && dest < 32) startFade(dest);
-        }
-    }
+    values_ = vals;
 
-    // Detect registers read in ID
+    // Registers read by the instruction in ID. Kept current while hidden, so
+    // the highlight is correct the moment the panel is shown.
     read_rs_       = 0xFF;
     read_rt_       = 0xFF;
     const auto& id = state.stages[1];
     if (id.valid && id.raw != 0) {
-        auto decoded = mips::Decoder::decode(id.raw);
-        if (decoded) {
-            const auto& d = *decoded;
-            if (d.format == mips::InstrFormat::R) {
-                read_rs_ = d.r().rs;
-                read_rt_ = d.r().rt;
-            } else if (d.format == mips::InstrFormat::I) {
-                read_rs_ = d.i().rs;
-                if (d.opcode == mips::Opcode::SW || d.opcode == mips::Opcode::BEQ ||
-                    d.opcode == mips::Opcode::BNE)
-                    read_rt_ = d.i().rt;
-            }
+        if (const auto d = mips::Decoder::decode(id.raw)) {
+            const mips::SourceRegisters src = mips::source_registers(*d);
+            if (src.a >= 0) read_rs_ = static_cast<uint8_t>(src.a);
+            if (src.b >= 0) read_rt_ = static_cast<uint8_t>(src.b);
         }
     }
 
-    values_ = vals;
+    // A closed panel or a background tab skips the fade and the 32 cell
+    // refreshes; showEvent() refreshes it once.
+    if (!isVisible()) {
+        dirty_ = true;
+        return;
+    }
 
+    const auto& wb = state.stages[4];
+    if (wb.valid && !wb.stalled && !wb.flushed && wb.raw != 0) {
+        if (const auto d = mips::Decoder::decode(wb.raw)) {
+            const int dest = mips::destination_register(*d);
+            if (dest > 0) startFade(dest);  // $zero never changes
+        }
+    }
+
+    dirty_ = false;
+    for (int i = 0; i < 32; ++i)
+        updateCell(i);
+}
+
+void RegisterWidget::showEvent(QShowEvent* ev) {
+    QWidget::showEvent(ev);
+    if (!dirty_) return;
+    dirty_ = false;
     for (int i = 0; i < 32; ++i)
         updateCell(i);
 }

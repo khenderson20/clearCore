@@ -29,6 +29,8 @@ static constexpr uint32_t kPtLoad      = 1;  // PT_LOAD
 // rejected by Memory's bounds check.
 static constexpr uint64_t kAddressSpaceEnd = 0x1'0000'0000ULL;
 
+namespace {
+
 #pragma pack(push, 1)
 struct Elf32Ehdr {
     uint8_t  e_ident[16];
@@ -60,6 +62,8 @@ struct Elf32Phdr {
 };
 static_assert(sizeof(Elf32Phdr) == 32);
 #pragma pack(pop)
+
+}  // anonymous namespace
 
 // ─── Helper: read a fixed-size struct from stream ────────────────────────────
 template <typename T> static bool stream_read(std::istream& in, T& out) {

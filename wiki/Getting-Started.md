@@ -161,7 +161,7 @@ The suite covers:
 - `cp0_test` — Coprocessor 0 exception model (SYSCALL/BREAK/overflow/address errors, MFC0/MTC0/ERET)
 - `elf_loader_test` — MIPS ELF32 parsing and segment mapping
 - `nyxstone_test` — differential validation of the Decoder + Disassembler against Nyxstone (LLVM's assembler): our disassembly of each corpus word is re-encoded by LLVM and asserted bit-identical. Built only when `BUILD_NYXSTONE=ON` and an in-range LLVM was found; self-skips otherwise.
-- `nsc_tests` — number system converter (`parseBase`, conversions)
+- `nsc_tests` — number system converter (`parse_base`, conversions)
 - `qt_ui_test` — Qt6 assembler/controller/widget smoke tests (built only when `BUILD_QT6_UI=ON`; runs headless via `QT_QPA_PLATFORM=offscreen`)
 - `gdb_stub_test` — GDB RSP stub protocol handling (built only when `BUILD_GDB_STUB=ON`)
 
@@ -171,7 +171,7 @@ This project uses a lightweight, dependency-free `CHECK()`-macro test harness th
 
 ### ClusterFuzzLite fuzzing (CI only)
 
-Two libFuzzer harnesses cover the parsers that accept untrusted input: `tests/fuzz/fuzz_hex_loader.cpp` targets `mips::parse_hex_program` (hex text) and `tests/fuzz/fuzz_elf_loader.cpp` targets `mips::parse_elf` (binary ELF32, seeded from `tests/fuzz/corpus/elf/`). Neither is built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs them for 120 seconds via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer) — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger. To build them manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
+Two libFuzzer harnesses cover the parsers that accept untrusted input: `tests/fuzz/fuzz_hex_loader.cpp` targets `mips::parse_hex_program` (hex text) and `tests/fuzz/fuzz_elf_loader.cpp` targets `mips::parse_elf` (binary ELF32, seeded by `tests/fuzz/make_elf_corpus.py`). Neither is built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs them for 120 seconds via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer) — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger. To build them manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
 
 ---
 

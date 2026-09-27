@@ -9,7 +9,13 @@
 //      read registers, read/write memory, set/remove breakpoints) and the stub
 //      translates them to IProcessor calls.
 //   3. The loop exits when GDB sends 'k' (kill) or 'D' (detach), or when the
-//      CPU halts (self-targeting jump) or the connection drops.
+//      connection drops. A halt or exception only ends the current 'c'/'s'
+//      with a stop reply; GDB decides what happens next.
+//
+// A Ctrl-C (a bare 0x03 byte) stops a running 'c' within kInterruptPollSteps
+// instructions and is answered with exactly one SIGINT stop reply. Incoming
+// '}' escapes are decoded after the checksum is verified. Run-length encoding
+// ('*') applies only to stub-to-GDB replies, which this stub never compresses.
 //
 // Supported RSP commands:
 //   ?           — stop reason (always SIGTRAP initially)
@@ -39,15 +45,16 @@
 
 #include "mips/processor.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
 namespace mips {
 
-class GdbStub {
+class GdbStub final {
 public:
     // Construct a stub attached to `cpu`, listening on TCP `port`.
     // The stub does NOT take ownership of the processor.
@@ -66,14 +73,36 @@ public:
     void listen();
 
 private:
+    // Largest packet payload accepted, in raw (still-escaped) characters. It is
+    // advertised to GDB as qSupported PacketSize, so a well-behaved client never
+    // exceeds it; anything longer is NAKed instead of growing the buffer.
+    static constexpr std::size_t kMaxPacketSize = 0x4000;
+    // How many instructions 'c' runs between non-blocking checks for Ctrl-C.
+    static constexpr std::size_t kInterruptPollSteps = 1024;
+
     // ── RSP packet I/O ────────────────────────────────────────────────────────
-    bool send_packet(const std::string& data);
-    bool send_raw(const std::string& s);
-    bool recv_packet(std::string& out);
-    void send_ok();
-    void send_empty();
-    void send_error(uint8_t code);
-    void send_signal(int sig);
+    enum class RecvStatus : std::uint8_t {
+        Packet,     // `out` holds a verified, unescaped payload
+        Interrupt,  // a bare 0x03 (Ctrl-C) arrived between packets
+        Closed,     // the connection dropped or failed
+    };
+    enum class InputPoll : std::uint8_t {
+        Idle,       // nothing that concerns a running 'c'
+        Interrupt,  // Ctrl-C arrived; it has been consumed
+        Closed,     // the peer closed the connection
+    };
+
+    void                     configure_client_socket();  // options + fresh rx buffer
+    void                     serve();                    // RSP event loop on client_fd_
+    bool                     send_packet(const std::string& data);
+    bool                     send_raw(const std::string& s);
+    [[nodiscard]] RecvStatus recv_packet(std::string& out);
+    [[nodiscard]] bool       read_byte(char& c);  // blocking, buffered
+    [[nodiscard]] InputPoll  poll_input();        // non-blocking
+    void                     send_ok();
+    void                     send_empty();
+    void                     send_error(uint8_t code);
+    void                     send_signal(int sig);
 
     // ── RSP command handlers ──────────────────────────────────────────────────
     std::string handle_read_regs();
@@ -100,9 +129,9 @@ private:
     bool remove_breakpoint(uint32_t addr);
 
     // ── Register access (MIPS GDB layout) ────────────────────────────────────
-    static constexpr int kNumRegs = 38;
-    uint32_t             read_gdb_reg(int n) const;
-    void                 write_gdb_reg(int n, uint32_t value);
+    static constexpr int   kNumRegs = 38;
+    [[nodiscard]] uint32_t read_gdb_reg(int n) const;
+    void                   write_gdb_reg(int n, uint32_t value);
 
     // ── Utilities ────────────────────────────────────────────────────────────
     static uint8_t     checksum(const std::string& data) noexcept;
@@ -111,6 +140,9 @@ private:
     // True when the two received checksum characters are valid hex and equal
     // checksum(data).
     [[nodiscard]] static bool checksum_matches(const std::string& data, char hi, char lo);
+    // Decode RSP binary escapes: '}' followed by c means c ^ 0x20. nullopt for a
+    // payload that ends inside an escape.
+    [[nodiscard]] static std::optional<std::string> unescape(const std::string& raw);
     // Non-throwing hex parsers: RSP payloads are attacker-controllable, so a
     // malformed field must yield nullopt rather than throw out of the packet
     // loop and abort the process.
@@ -119,15 +151,22 @@ private:
     static std::string             hex_byte(uint8_t b);
 
     // Signal number to send for a given StepResult / exception code.
-    int stop_signal() const;
+    [[nodiscard]] int stop_signal() const;
 
     IMipsProcessor& cpu_;
     uint16_t        port_;
     int             server_fd_ = -1;
     int             client_fd_ = -1;
 
+    // Receive buffer: one recv() fills it, read_byte() drains it. Bytes at
+    // [rx_begin_, rx_end_) are received but not yet consumed.
+    std::array<char, 4096> rx_buf_{};
+    std::size_t            rx_begin_ = 0;
+    std::size_t            rx_end_   = 0;
+
     std::vector<Breakpoint> breakpoints_;
     bool                    running_     = false;  // true while inside handle_continue
+    bool                    detached_    = false;  // set by 'k' / 'D'; ends serve()
     StepResult              last_result_ = StepResult::Ok;
 };
 

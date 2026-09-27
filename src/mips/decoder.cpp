@@ -2,6 +2,39 @@
 
 namespace mips {
 
+namespace {
+
+// The SPECIAL funct codes this model implements. Any other value is a reserved
+// encoding, which decode() rejects rather than passing garbage to the ALU.
+constexpr bool implemented_special(FunctCode funct) noexcept {
+    switch (funct) {
+    case FunctCode::SLL:
+    case FunctCode::SRL:
+    case FunctCode::SRA:
+    case FunctCode::SLLV:
+    case FunctCode::SRLV:
+    case FunctCode::JR:
+    case FunctCode::JALR:
+    case FunctCode::SYSCALL:
+    case FunctCode::BREAK:
+    case FunctCode::ADD:
+    case FunctCode::ADDU:
+    case FunctCode::SUB:
+    case FunctCode::SUBU:
+    case FunctCode::AND:
+    case FunctCode::OR:
+    case FunctCode::XOR:
+    case FunctCode::NOR:
+    case FunctCode::SLT:
+    case FunctCode::SLTU:
+        return true;
+    default:
+        return false;  // the 6-bit field also holds values with no enumerator
+    }
+}
+
+}  // anonymous namespace
+
 // ─── Decoder::format_of ───────────────────────────────────────────────────────
 InstrFormat Decoder::format_of(Opcode op) {
     switch (op) {
@@ -49,52 +82,16 @@ std::optional<DecodedInstr> Decoder::decode(uint32_t instr) {
     switch (fmt) {
     case InstrFormat::R: {
         const auto funct = static_cast<FunctCode>(bits(instr, 5, 0));
-
-        // COP0 (MFC0 / MTC0 / ERET): the rs field selects the sub-operation.
-        // Decode unconditionally as R-type; the CPU dispatches on rs/funct.
-        if (raw_op == Opcode::COP0) {
-            result.fields = RFields{
-                .rs    = static_cast<uint8_t>(bits(instr, 25, 21)),
-                .rt    = static_cast<uint8_t>(bits(instr, 20, 16)),
-                .rd    = static_cast<uint8_t>(bits(instr, 15, 11)),
-                .shamt = 0,
-                .funct = funct,
-            };
-            break;
-        }
-
-        // Validate SPECIAL funct — reject reserved encodings rather than
-        // passing garbage to the ALU.
-        switch (funct) {
-        case FunctCode::SLL:
-        case FunctCode::SRL:
-        case FunctCode::SRA:
-        case FunctCode::SLLV:
-        case FunctCode::SRLV:
-        case FunctCode::JR:
-        case FunctCode::JALR:
-        case FunctCode::SYSCALL:
-        case FunctCode::BREAK:
-        case FunctCode::ADD:
-        case FunctCode::ADDU:
-        case FunctCode::SUB:
-        case FunctCode::SUBU:
-        case FunctCode::AND:
-        case FunctCode::OR:
-        case FunctCode::XOR:
-        case FunctCode::NOR:
-        case FunctCode::SLT:
-        case FunctCode::SLTU:
-            break;
-        default:
-            return std::nullopt;
-        }
+        // COP0 (MFC0 / MTC0 / ERET): the rs field selects the sub-operation, so
+        // any funct decodes (the CPU dispatches on rs/funct) and shamt is 0.
+        const bool cop0 = raw_op == Opcode::COP0;
+        if (!cop0 && !implemented_special(funct)) return std::nullopt;
 
         result.fields = RFields{
             .rs    = static_cast<uint8_t>(bits(instr, 25, 21)),
             .rt    = static_cast<uint8_t>(bits(instr, 20, 16)),
             .rd    = static_cast<uint8_t>(bits(instr, 15, 11)),
-            .shamt = static_cast<uint8_t>(bits(instr, 10, 6)),
+            .shamt = cop0 ? uint8_t{0} : static_cast<uint8_t>(bits(instr, 10, 6)),
             .funct = funct,
         };
         break;
@@ -115,8 +112,8 @@ std::optional<DecodedInstr> Decoder::decode(uint32_t instr) {
         };
         break;
     }
-    default: {
-    }
+    case InstrFormat::Unknown:
+        break;  // rejected above
     }
 
     return result;

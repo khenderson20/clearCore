@@ -67,7 +67,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void PreferencesDialog::loadSettings() {
-    QSettings s("nsc-qt", "clearCore-gui");
+    const QSettings s("nsc-qt", "clearCore-gui");
     dark_radio_->setChecked(s.value("colorScheme", "light").toString() == "dark");
     light_radio_->setChecked(!dark_radio_->isChecked());
     speed_slider_->setValue(s.value("executionSpeed", 100).toInt());

@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
     if (cpu->run(kMaxSteps) == mips::StepResult::Fault)
         return fail("CPU faulted at pc=0x" + std::to_string(cpu->pc()));
 
-    for (uint8_t i = 0; i < mips::RegisterFile::kCount; ++i)
+    for (uint8_t i = 0; i < isa::RegisterFile::kCount; ++i)
         std::printf("$%s\t0x%08x\n", std::string(mips::register_abi_name(i)).c_str(),
                     cpu->regs().read(i));
     return 0;

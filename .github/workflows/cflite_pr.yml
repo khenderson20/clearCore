@@ -6,7 +6,8 @@ on:
       - 'src/**'
       - 'include/**'
       - 'tests/fuzz/**'
-permissions: read-all
+permissions:
+  contents: read
 # A new push to the PR makes the previous fuzzing run moot.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

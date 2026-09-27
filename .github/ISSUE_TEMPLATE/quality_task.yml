@@ -1,0 +1,76 @@
+# Written in ASD-STE100 Simplified Technical English: short sentences, active
+# voice, one instruction in each sentence. Keep that style when you edit this form.
+name: Quality or maintenance task
+description: Record a refactor, a performance problem, a test gap, a documentation gap or a CI task.
+title: "[Task]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for work that does not add a capability. Also use it for a problem that a user does not see.
+        Examples: a refactor, a slow code path, a test gap, a documentation gap, a CI change.
+        Write short sentences. Give the file path and the line number for each location.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type of work
+      options:
+        - Refactor or code convention
+        - Performance
+        - Tests
+        - Documentation
+        - CI or build
+        - Security improvement (not a vulnerability)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Tell the problem. Give the file path and the line number for each location. Show the code if it is short.
+      placeholder: |
+        `src/nsc_qt/main_window.cpp:640` copies the full `PipelineState` (136 bytes) for each cycle.
+    validations:
+      required: true
+
+  - type: textarea
+    id: effect
+    attributes:
+      label: Effect
+      description: Tell why the problem is important. Give measured data if you have it.
+      placeholder: The copy occurs for each cycle while the program runs at full speed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: work
+    attributes:
+      label: Work
+      description: Write one task on each line. Use a checkbox for each task.
+      placeholder: |
+        - [ ] Change the slot parameter to `const mips::PipelineState&`.
+        - [ ] Change the test lambda in `tests/qt_ui/qt_ui_test.cpp` the same way.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Write the tests or the checks that show that the work is complete.
+      placeholder: |
+        - [ ] `ctest --preset debug` passes.
+        - [ ] CodeQL shows no `cpp/large-parameter` alert for the two locations.
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Tell the tool, the command or the review that found the problem. Link the related issues.
+    validations:
+      required: false

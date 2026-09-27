@@ -3,81 +3,101 @@
 #include <vector>
 
 #include "mips/alu.h"
+#include "mips/data_memory.h"
 #include "mips/decoder.h"
 #include "mips/disassembler.h"
 #include "mips/trace.h"
 
 namespace mips {
 
-// ─── derive_control ───────────────────────────────────────────────────────────
-// Defined here so pipelined_cpu.cpp can link against it via mips_core without
-// duplicating the switch table. Declared in processor.h.
-Control derive_control(const DecodedInstr& instr) {
+namespace {
+
+// R-type: every implemented funct writes rd except the register jumps and the
+// traps. COP0 also decodes as R-format; its operations handle writeback
+// themselves.
+Control r_type_control(const DecodedInstr& instr) {
     Control c;
-    switch (instr.format) {
-    case InstrFormat::R:
-        if (instr.opcode == Opcode::COP0) return c;  // CP0 ops handle writeback themselves
-        switch (instr.r().funct) {
-        case FunctCode::JR:
-            return c;  // no writeback, no mem
-        case FunctCode::JALR:
-            c.reg_write = true;
-            return c;
-        case FunctCode::SYSCALL:
-        case FunctCode::BREAK:
-            return c;  // no writeback; exception path handles flow
-        default:
-            c.reg_write = true;
-            c.reg_dst   = true;
-            return c;
-        }
-    case InstrFormat::I:
-        switch (instr.opcode) {
-        case Opcode::ADDI:
-        case Opcode::ADDIU:
-        case Opcode::SLTI:
-        case Opcode::SLTIU:
-            c.reg_write = true;
-            c.alu_src   = true;
-            c.ext       = Control::Ext::Sign;
-            return c;
-        case Opcode::ANDI:
-        case Opcode::ORI:
-        case Opcode::XORI:
-        case Opcode::LUI:
-            c.reg_write = true;
-            c.alu_src   = true;
-            c.ext       = Control::Ext::Zero;
-            return c;
-        case Opcode::LW:
-        case Opcode::LBU:
-        case Opcode::LHU:
-            c.reg_write  = true;
-            c.mem_read   = true;
-            c.mem_to_reg = true;
-            c.alu_src    = true;
-            c.ext        = Control::Ext::Sign;
-            return c;
-        case Opcode::SW:
-            c.mem_write = true;
-            c.alu_src   = true;
-            c.ext       = Control::Ext::Sign;
-            return c;
-        case Opcode::BEQ:
-        case Opcode::BNE:
-            c.branch = true;
-            c.ext    = Control::Ext::Sign;
-            return c;
-        default:
-            return c;
-        }
-    case InstrFormat::J:
-        c.jump = true;
-        if (instr.opcode == Opcode::JAL) c.reg_write = true;
+    if (instr.opcode == Opcode::COP0) return c;
+    switch (instr.r().funct) {
+    case FunctCode::JR:
+        return c;  // no writeback, no mem
+    case FunctCode::JALR:
+        c.reg_write = true;
+        return c;
+    case FunctCode::SYSCALL:
+    case FunctCode::BREAK:
+        return c;  // no writeback; exception path handles flow
+    default:
+        c.reg_write = true;
+        c.reg_dst   = true;
+        return c;
+    }
+}
+
+Control i_type_control(Opcode op) {
+    Control c;
+    switch (op) {
+    case Opcode::ADDI:
+    case Opcode::ADDIU:
+    case Opcode::SLTI:
+    case Opcode::SLTIU:
+        c.reg_write = true;
+        c.alu_src   = true;
+        c.ext       = Control::Ext::Sign;
+        return c;
+    case Opcode::ANDI:
+    case Opcode::ORI:
+    case Opcode::XORI:
+    case Opcode::LUI:
+        c.reg_write = true;
+        c.alu_src   = true;
+        c.ext       = Control::Ext::Zero;
+        return c;
+    case Opcode::LW:
+    case Opcode::LBU:
+    case Opcode::LHU:
+        c.reg_write  = true;
+        c.mem_read   = true;
+        c.mem_to_reg = true;
+        c.alu_src    = true;
+        c.ext        = Control::Ext::Sign;
+        return c;
+    case Opcode::SW:
+        c.mem_write = true;
+        c.alu_src   = true;
+        c.ext       = Control::Ext::Sign;
+        return c;
+    case Opcode::BEQ:
+    case Opcode::BNE:
+        c.branch = true;
+        c.ext    = Control::Ext::Sign;
         return c;
     default:
         return c;
     }
+}
+
+}  // anonymous namespace
+
+// ─── derive_control ───────────────────────────────────────────────────────────
+// Defined here so pipelined_cpu.cpp can link against it via mips_core without
+// duplicating the switch table. Declared in processor.h.
+Control derive_control(const DecodedInstr& instr) {
+    switch (instr.format) {
+    case InstrFormat::R:
+        return r_type_control(instr);
+    case InstrFormat::I:
+        return i_type_control(instr.opcode);
+    case InstrFormat::J: {
+        Control c;
+        c.jump = true;
+        if (instr.opcode == Opcode::JAL) c.reg_write = true;
+        return c;
+    }
+    case InstrFormat::Unknown:
+        break;
+    }
+    return Control{};
 }
 
 // ─── SingleCycleCpu ───────────────────────────────────────────────────────────
@@ -193,22 +213,9 @@ bool SingleCycleCpu::exec_itype(const DecodedInstr& d, uint32_t pc4, uint32_t& n
         return true;
     }
 
-    if (op == Opcode::LW || op == Opcode::LBU || op == Opcode::LHU) {
-        const uint32_t          addr = res.value;
-        std::optional<uint32_t> loaded;
-        switch (op) {
-        case Opcode::LW:
-            loaded = mem_.read_word(addr);
-            break;
-        case Opcode::LBU:
-            if (auto v = mem_.read_byte(addr)) loaded = *v;
-            break;
-        case Opcode::LHU:
-            if (auto v = mem_.read_half(addr)) loaded = *v;
-            break;
-        default:
-            break;
-        }
+    if (ctrl_.mem_read) {
+        const uint32_t addr   = res.value;
+        const auto     loaded = load_data(mem_, op, addr);
         if (!loaded) {
             exc = raise(ExceptionCode::AdEL, pc4 - 4, addr);
             return true;
@@ -217,12 +224,9 @@ bool SingleCycleCpu::exec_itype(const DecodedInstr& d, uint32_t pc4, uint32_t& n
         return true;
     }
 
-    if (op == Opcode::SW) {
+    if (ctrl_.mem_write) {
         const uint32_t addr = res.value;
-        if (!mem_.write_word(addr, rt_val)) {
-            exc = raise(ExceptionCode::AdES, pc4 - 4, addr);
-            return true;
-        }
+        if (!store_data(mem_, op, addr, rt_val)) exc = raise(ExceptionCode::AdES, pc4 - 4, addr);
         return true;
     }
 

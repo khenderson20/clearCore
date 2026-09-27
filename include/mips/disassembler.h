@@ -15,7 +15,7 @@
 
 namespace mips {
 
-class Disassembler {
+class Disassembler final {
 public:
     // Reconstruct assembly text for `dec`. `pc` is the address of the
     // instruction itself; it is only needed to resolve J/JAL absolute targets

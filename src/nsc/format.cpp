@@ -5,7 +5,7 @@
 
 namespace nsc {
 
-std::string toBinary(std::uint64_t value) {
+std::string to_binary(std::uint64_t value) {
     // Special case: zero
     if (value == 0) {
         return "0";
@@ -23,16 +23,16 @@ std::string toBinary(std::uint64_t value) {
     return {out.rbegin(), out.rend()};
 }
 
-std::string toHex(std::uint64_t value) {
+std::string to_hex(std::uint64_t value) {
     return std::format("{:X}", value);
 }
 
-std::string toDecimal(std::uint64_t value) {
+std::string to_decimal(std::uint64_t value) {
     return std::to_string(value);
 }
 
-std::string groupBits(std::uint64_t value) {
-    std::string bits = toBinary(value);
+std::string group_bits(std::uint64_t value) {
+    std::string bits = to_binary(value);
 
     // Left pad so the length is a multiple of 4.
     while (bits.size() % 4 != 0) {

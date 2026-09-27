@@ -28,7 +28,7 @@ class PipelineTraceWidget;
 class PipelineEventsWidget;
 class CodeEditor;
 
-class MainWindow : public QMainWindow {
+class MainWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
@@ -48,7 +48,7 @@ private slots:
     void onLoad();
     void onShowPreferences();
     void onCycleExecuted(uint64_t count);
-    void onPipelineStateChanged(mips::PipelineState state);
+    void onPipelineStateChanged(const mips::PipelineState& state);
     void onStatisticsUpdated(nsc::qt::SimulatorStatistics stats);
     void onHalted();
     void onFaulted();
@@ -68,7 +68,7 @@ private:
     void resetLayout();
     // True if at least one dock panel is open; a restored layout with none is
     // degenerate (an empty window) and must be discarded.
-    bool hasOpenPanel() const;
+    [[nodiscard]] bool hasOpenPanel() const;
     // Syncs the Run/Pause action text AND icon so every code path that changes
     // run state (Stop menu, Reset, Halt, Fault, Breakpoint) stays consistent.
     void setRunState(bool running);
@@ -87,6 +87,14 @@ private:
     // near-identical status-bar strings -- the "peak" moment of finishing a
     // program should feel different from crashing (audit Opportunity #7).
     void flashStatusBanner(bool success, const QString& text);
+
+    // Asks before a load discards a run in progress; true when there is no run
+    // or the user agrees.
+    [[nodiscard]] bool confirmDiscardCurrentRun();
+
+    // Colours the CPI value and its Statistics card for cpi_band_ and the
+    // current colour scheme.
+    void applyCpiStyle();
 
     // Controller
     std::unique_ptr<SimulatorController> controller_;
@@ -131,6 +139,12 @@ private:
     QAction* act_save_      = nullptr;
 
     bool dark_mode_ = false;
+
+    // CPI health band shown on the Statistics card. The card is restyled only
+    // when the band changes: setStyleSheet() re-parses and re-polishes, which
+    // is too costly to repeat every cycle.
+    enum class CpiBand : uint8_t { None, Good, Warning, Bad };
+    CpiBand cpi_band_ = CpiBand::None;
 
     // Assembled words waiting to be loaded
     std::vector<uint32_t> assembled_words_;

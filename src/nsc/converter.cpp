@@ -8,7 +8,7 @@
 namespace nsc {
 
 bool Converter::update(const std::string& text, Base base) {
-    if (const auto value = parseBase(text, static_cast<int>(base))) {
+    if (const auto value = parse_base(text, static_cast<int>(base))) {
         value_ = *value;
         return true;
     }
@@ -18,18 +18,18 @@ bool Converter::update(const std::string& text, Base base) {
 std::string Converter::as(const Base base) const {
     switch (base) {
     case Base::Binary:
-        return toBinary(value_);
+        return to_binary(value_);
     case Base::Decimal:
-        return toDecimal(value_);
+        return to_decimal(value_);
     case Base::Hex:
-        return toHex(value_);
+        return to_hex(value_);
     default:
         return {};
     }
 }
 
 std::string Converter::bits() const {
-    return groupBits(value_);
+    return group_bits(value_);
 }
 
 }  // namespace nsc

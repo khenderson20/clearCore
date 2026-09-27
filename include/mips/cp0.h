@@ -43,7 +43,7 @@ constexpr uint32_t kExceptionVector = 0x8000'0180u;
 //
 // BadVAddr register (CP0[8]):
 //   Virtual address that triggered AdEL or AdES.
-class Cp0 {
+class Cp0 final {
 public:
     static constexpr uint8_t  kRegBadVAddr = 8;
     static constexpr uint8_t  kRegStatus   = 12;

@@ -69,7 +69,7 @@ Refactor-only step (no user-facing change) that carves the ISA-neutral parts of 
 
 - New `isa::` core in `include/isa/`: `Memory`, `RegisterFile`, and `IProcessor` (with `PipelineState` / `StepResult` / `StageSnapshot`) — everything common to MIPS and RV32I
 - `IProcessor` split into agnostic `isa::IProcessor` + `mips::IMipsProcessor` (the latter adds CP0, HI/LO, and the MIPS `Control` word); both CPU models now derive from `IMipsProcessor`
-- `mips::Memory` / `mips::RegisterFile` / `mips::IProcessor` retained as `using`-shims, so all existing callers and the three UIs are untouched
+- `mips::Memory` / `mips::RegisterFile` / `mips::IProcessor` retained as `using`-shims, so all existing callers and the three UIs are untouched (the `Memory` and `RegisterFile` shims were removed later, once every consumer used the `isa::` names — #237)
 - Verified: full debug build (TUI + Qt Widgets + QML) and all tests green
 
 ---

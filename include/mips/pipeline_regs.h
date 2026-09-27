@@ -16,34 +16,45 @@
 // (not values) needed by the hazard-detection unit and forwarding unit in
 // the Execute stage — keeping them here avoids re-parsing the raw instruction
 // word mid-pipeline.
+//
+// Traps found before EX — a failed fetch (AdEL) or a word that does not
+// decode (RI) — are recorded in the register and ride down to EX, where they
+// are raised. Every older instruction is then in MEM or WB, and a trap in MEM
+// in the same cycle wins, so exceptions are raised in program order. A flush
+// on the way down discards a wrong-path trap like any other wrong-path work.
 
 #include "mips/alu.h"
+#include "mips/cp0.h"
 #include "mips/decoder.h"
 #include "mips/processor.h"
+
+#include <optional>
 
 namespace mips {
 
 // ─── IF / ID ─────────────────────────────────────────────────────────────────
 struct IfId {
-    uint32_t pc      = 0;      // address of the fetched instruction
-    uint32_t pc4     = 0;      // pc + 4 (branch target base; passed forward)
-    uint32_t instr   = 0;      // raw 32-bit machine word
-    bool     valid   = false;  // false → bubble
-    bool     is_halt = false;  // J/JAL self-target detected at IF
+    uint32_t pc          = 0;      // address of the fetched instruction
+    uint32_t pc4         = 0;      // pc + 4 (branch target base; passed forward)
+    uint32_t instr       = 0;      // raw 32-bit machine word
+    bool     valid       = false;  // false → bubble
+    bool     is_halt     = false;  // J/JAL self-target detected at IF
+    bool     fetch_fault = false;  // fetching `pc` failed: AdEL, raised in EX; `instr` is 0
 };
 
 // ─── ID / EX ─────────────────────────────────────────────────────────────────
 struct IdEx {
-    uint32_t     pc  = 0;
-    uint32_t     pc4 = 0;
-    Control      ctrl{};
-    DecodedInstr decoded{};    // full decoded instruction (for Alu::control in EX)
-    uint32_t     rs_val  = 0;  // value read from register file (may be stale;
-    uint32_t     rt_val  = 0;  //   forwarding in EX overrides these if needed)
-    uint8_t      rs      = 0;  // register indices — needed by:
-    uint8_t      rt      = 0;  //   hazard unit (next cycle) and forwarding unit
-    bool         valid   = false;
-    bool         is_halt = false;
+    uint32_t                     pc  = 0;
+    uint32_t                     pc4 = 0;
+    Control                      ctrl{};
+    DecodedInstr                 decoded{};    // full decoded instruction (for Alu::control in EX)
+    uint32_t                     rs_val  = 0;  // value read from register file (may be stale;
+    uint32_t                     rt_val  = 0;  //   forwarding in EX overrides these if needed)
+    uint8_t                      rs      = 0;  // register indices — needed by:
+    uint8_t                      rt      = 0;  //   hazard unit (next cycle) and forwarding unit
+    bool                         valid   = false;
+    bool                         is_halt = false;
+    std::optional<ExceptionCode> early_trap;  // AdEL (fetch) or RI (decode), raised in EX
 };
 
 // ─── EX / MEM ────────────────────────────────────────────────────────────────

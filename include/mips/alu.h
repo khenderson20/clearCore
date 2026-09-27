@@ -40,7 +40,7 @@ struct AluResult {
 };
 
 // ─── Alu ──────────────────────────────────────────────────────────────────────
-class Alu {
+class Alu final {
 public:
     // Execute an ALU operation on two 32-bit operands.
     //
