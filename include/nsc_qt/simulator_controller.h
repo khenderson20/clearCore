@@ -1,7 +1,6 @@
 #pragma once
 
 #include "mips/processor.h"
-#include <QMutex>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -28,6 +27,15 @@ struct SimulatorStatistics {
     }
 };
 
+// Bridges an isa::IProcessor to Qt signals for both front ends.
+//
+// Thread confinement: every member must be called on the thread that owns the
+// controller — the GUI thread in both front ends. run() mode is driven by a
+// QTimer that lives on that same thread, so there is no second thread and no
+// locking. (Driving the CPU from a worker thread would need a thread-owned
+// replacement for the QTimer, whose start()/stop() only work on its own
+// thread; a mutex alone could not make that safe. See #244.) Debug builds
+// assert the confinement on every state-changing call.
 class SimulatorController : public QObject {
     Q_OBJECT
 
@@ -42,11 +50,13 @@ public:
     void               stop();
     [[nodiscard]] bool isRunning() const noexcept;
 
-    [[nodiscard]] uint64_t                  cycleCount() const noexcept;
-    [[nodiscard]] uint32_t                  registerValue(uint8_t idx) const noexcept;
-    [[nodiscard]] std::optional<uint32_t>   memoryWord(uint32_t addr) const noexcept;
-    [[nodiscard]] mips::PipelineState       pipelineState() const noexcept;
-    [[nodiscard]] SimulatorStatistics       statistics() const noexcept;
+    [[nodiscard]] uint64_t                cycleCount() const noexcept;
+    [[nodiscard]] uint32_t                registerValue(uint8_t idx) const noexcept;
+    [[nodiscard]] std::optional<uint32_t> memoryWord(uint32_t addr) const noexcept;
+    [[nodiscard]] mips::PipelineState     pipelineState() const noexcept;
+    [[nodiscard]] SimulatorStatistics     statistics() const noexcept;
+    // Live views into the processor. Valid while this controller exists; read
+    // them when needed rather than storing the reference.
     [[nodiscard]] const mips::Memory&       memory() const noexcept;
     [[nodiscard]] const mips::RegisterFile& registers() const noexcept;
 
@@ -77,9 +87,9 @@ private slots:
 
 private:
     void accumulateStats(const mips::PipelineState& ps);
-    void doStep();  // executes one step and emits signals; caller must NOT hold mutex_
+    void doStep();  // executes one step and emits the resulting signals
+    void assertOwnerThread() const;
 
-    mutable QMutex                    mutex_;
     std::unique_ptr<mips::IProcessor> processor_;
     std::unordered_set<uint32_t>      breakpoints_;
     SimulatorStatistics               stats_{};

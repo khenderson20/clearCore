@@ -143,11 +143,12 @@ These types carry nothing MIPS-specific and live in `include/isa/`, ready to be 
 
 The Qt6 Widgets layer adds a `SimulatorController` object that:
 
-1. Runs the CPU in a background thread
+1. Steps the CPU on the GUI thread — once per click, or from a `QTimer` in Run mode
 2. Emits Qt signals (e.g. pipeline state, register, and memory changes) as state changes
-3. Qt's event loop automatically marshals those signals to the main (UI) thread
+3. Delivers those signals directly, because sender and receivers share the one GUI thread
 
-Widget code never touches the CPU directly and never needs a mutex. `nsc_qt` also owns the in-app MIPS assembler (`assembler.h`/`.cpp`) used by the Code Editor tab. See [Qt6 GUI](Qt6-GUI) for the full breakdown, including the parallel Qt Quick (`nsc_quick`) interface.
+Widget code never touches the CPU directly and never needs a mutex: nothing runs on a second
+thread (debug builds assert this in `SimulatorController`). `nsc_qt` also owns the in-app MIPS assembler (`assembler.h`/`.cpp`) used by the Code Editor tab. See [Qt6 GUI](Qt6-GUI) for the full breakdown, including the parallel Qt Quick (`nsc_quick`) interface.
 
 ---
 
