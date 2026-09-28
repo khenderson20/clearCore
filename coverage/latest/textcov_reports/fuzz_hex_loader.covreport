@@ -1,46 +1,46 @@
 _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
-   13|    180|HexProgram parse_hex_program(std::istream& in) {
-   14|    180|    HexProgram  out;
-   15|    180|    std::string line;
-   16|    180|    int         n = 0;
+   13|    178|HexProgram parse_hex_program(std::istream& in) {
+   14|    178|    HexProgram  out;
+   15|    178|    std::string line;
+   16|    178|    int         n = 0;
    17|       |
-   18|  5.08k|    while (std::getline(in, line)) {
+   18|  5.07k|    while (std::getline(in, line)) {
   ------------------
-  |  Branch (18:12): [True: 4.96k, False: 119]
+  |  Branch (18:12): [True: 4.95k, False: 118]
   ------------------
-   19|  4.96k|        ++n;
+   19|  4.95k|        ++n;
    20|       |
    21|       |        // Strip trailing comment.
-   22|  4.96k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
+   22|  4.95k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
   ------------------
-  |  Branch (22:45): [True: 407, False: 4.56k]
+  |  Branch (22:45): [True: 407, False: 4.55k]
   ------------------
    23|       |
    24|       |        // Strip all whitespace.
-   25|  4.96k|        std::string clean;
-   26|  4.96k|        clean.reserve(line.size());
-   27|  4.96k|        for (const char c : line)
+   25|  4.95k|        std::string clean;
+   26|  4.95k|        clean.reserve(line.size());
+   27|  4.95k|        for (const char c : line)
   ------------------
-  |  Branch (27:27): [True: 21.2k, False: 4.96k]
+  |  Branch (27:27): [True: 21.1k, False: 4.95k]
   ------------------
-   28|  21.2k|            if (!std::isspace(static_cast<unsigned char>(c))) clean += c;
+   28|  21.1k|            if (!std::isspace(static_cast<unsigned char>(c))) clean += c;
   ------------------
-  |  Branch (28:17): [True: 7.86k, False: 13.3k]
+  |  Branch (28:17): [True: 7.84k, False: 13.3k]
   ------------------
    29|       |
-   30|  4.96k|        if (clean.empty()) continue;
+   30|  4.95k|        if (clean.empty()) continue;
   ------------------
-  |  Branch (30:13): [True: 2.12k, False: 2.84k]
+  |  Branch (30:13): [True: 2.12k, False: 2.83k]
   ------------------
    31|       |
    32|       |        // Optional "0x"/"0X" prefix — std::from_chars does not accept one.
-   33|  2.84k|        std::string_view tok{clean};
-   34|  2.84k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
+   33|  2.83k|        std::string_view tok{clean};
+   34|  2.83k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
   ------------------
-  |  Branch (34:13): [True: 1.18k, False: 1.65k]
-  |  Branch (34:31): [True: 595, False: 592]
-  |  Branch (34:49): [True: 194, False: 401]
-  |  Branch (34:66): [True: 194, False: 207]
+  |  Branch (34:13): [True: 1.18k, False: 1.64k]
+  |  Branch (34:31): [True: 594, False: 591]
+  |  Branch (34:49): [True: 194, False: 400]
+  |  Branch (34:66): [True: 194, False: 206]
   ------------------
    35|    388|            tok.remove_prefix(2);
    36|       |
@@ -51,30 +51,30 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    41|       |        // per platform. from_chars is width-explicit and rejects overflow
    42|       |        // identically everywhere. It also reports failure by return value,
    43|       |        // which is the core's error convention.
-   44|  2.84k|        uint32_t   v     = 0;
-   45|  2.84k|        const auto first = tok.data();
-   46|  2.84k|        const auto last  = first + tok.size();
+   44|  2.83k|        uint32_t   v     = 0;
+   45|  2.83k|        const auto first = tok.data();
+   46|  2.83k|        const auto last  = first + tok.size();
    47|       |
-   48|  2.84k|        if (const auto [ptr, ec] = std::from_chars(first, last, v, 16);
-   49|  2.84k|            ec != std::errc{} || ptr != last) {
+   48|  2.83k|        if (const auto [ptr, ec] = std::from_chars(first, last, v, 16);
+   49|  2.83k|            ec != std::errc{} || ptr != last) {
   ------------------
-  |  Branch (49:13): [True: 38, False: 2.80k]
-  |  Branch (49:34): [True: 23, False: 2.78k]
+  |  Branch (49:13): [True: 38, False: 2.79k]
+  |  Branch (49:34): [True: 22, False: 2.77k]
   ------------------
-   50|     61|            out.words.clear();
-   51|     61|            out.error = std::format("Bad hex on line {}", n);
-   52|     61|            return out;
-   53|     61|        }
-   54|  2.78k|        out.words.push_back(v);
-   55|  2.78k|    }
-   56|    119|    return out;  // error == nullopt ⇒ success (an empty program is valid)
-   57|    180|}
+   50|     60|            out.words.clear();
+   51|     60|            out.error = std::format("Bad hex on line {}", n);
+   52|     60|            return out;
+   53|     60|        }
+   54|  2.77k|        out.words.push_back(v);
+   55|  2.77k|    }
+   56|    118|    return out;  // error == nullopt ⇒ success (an empty program is valid)
+   57|    178|}
 
 LLVMFuzzerTestOneInput:
-    8|    180|extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    9|    180|    std::istringstream in(std::string(reinterpret_cast<const char*>(data), size));
-   10|    180|    auto               result = mips::parse_hex_program(in);
-   11|    180|    (void)result;
-   12|    180|    return 0;
-   13|    180|}
+    8|    178|extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+    9|    178|    std::istringstream in(std::string(reinterpret_cast<const char*>(data), size));
+   10|    178|    auto               result = mips::parse_hex_program(in);
+   11|    178|    (void)result;
+   12|    178|    return 0;
+   13|    178|}
 
