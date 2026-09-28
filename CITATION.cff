@@ -23,9 +23,9 @@ abstract: >-
   and a 5-stage pipeline sharing one processor interface — and
   three front ends (a terminal UI, a Qt6 Widgets GUI, and a Qt
   Quick/QML GUI) that render pipeline state, hazards, stalls,
-  forwarding paths, CP0 exceptions, and an ELF loader. A
-  built-in GDB remote stub lets real GDB attach to the running
-  emulator.
+  forwarding paths, and CP0 exceptions. Its core library also
+  provides an ELF loader and a GDB remote stub that lets real
+  GDB attach to a CPU model from a C++ host program.
 keywords:
   - computer-architecture
   - mips

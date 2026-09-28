@@ -67,6 +67,29 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `PipelinedCpu::step()` is split into per-stage functions, with the hazard and forwarding units as
   pure functions in `mips/pipeline_units.h` and one load/store helper shared by both models (#220).
 
+### Documentation
+- **The GDB stub and the ELF loader are documented as the C++ APIs they are.** The README headline,
+  `CITATION.cff`, the JOSS paper and the wiki said real GDB could attach to "the running emulator"
+  from the terminal or the GUI. No front end starts the stub or opens an ELF file, and releases do
+  not install `mips_core`. The GDB Stub wiki page now gives a host program and a CMake recipe
+  (`add_subdirectory`), both built and driven over RSP against `main`.
+- Instructions that failed when followed now work. `cmake --preset debug` builds into
+  `build/debug/`, not the `cmake-build-debug/` the README and four wiki pages ran binaries from.
+  The TUI Program Loader takes a `.hex` file path, not typed-in words, and the `.hex` format is now
+  written down. The CP0 page's handler added 4 to GPR `$14` instead of EPC, and its "bare `ERET`
+  returns to EPC+4" option re-executed the `SYSCALL` forever; the corrected handler returns past the
+  `SYSCALL` on both CPU models. `$sp` resets to 0, not near `0xFFFFFFFF`.
+- Stale descriptions corrected: the "seven core CTest suites" (there are eleven, now listed once in
+  Getting Started), the Roadmap's worker thread and the Qt6 GUI page's `QMutex` (neither exists),
+  the Pipeline Trace window (20 cycles, not the whole run), the error-handling guidance (the core
+  reports failure by return value and does not throw), both CI tables, the fuzzing triggers, and
+  `SECURITY.md`'s "no tagged releases yet".
+- The `src/nsc_qt/docs/` pages are removed. They restated the headers method by method, one wiki
+  link reached them, and the notes worth keeping (thread confinement, the memory widget's copy of
+  memory) are in the headers.
+- The empty CHANGELOG sections for 0.2.1, 0.3.1, 0.3.2, 0.3.4 and 0.3.5 are filled in from the
+  history between their tags, and 0.2.2 and 0.3.3, which had no section, are added.
+
 ### CI / Internal
 - API clean-ups for in-tree consumers: `isa::Memory` / `isa::RegisterFile` everywhere and the
   `mips::` aliases removed (#237); `nsc_core` functions renamed to snake_case (#249).
@@ -198,18 +221,74 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.5] - 2026-07-13
 
+### Fixed
+- The GDB stub's RSP hex parsing no longer throws on malformed input, and lengths a client sends
+  are bounded. (#125, #137)
+- `parseBase` (now `parse_base`) rejects signed, whitespace-padded and prefixed input. (#124, #135)
+
+### Security
+- Windows binaries are signed with Azure Trusted Signing (now Artifact Signing) once a signing
+  account is configured; the wiki documents the setup. (#138)
+- The remaining CI dependencies are pinned by SHA or digest for OpenSSF Scorecard. (#140)
+
+### Dependencies
+- GitHub Actions updates. (#139, #142)
+
 ---
 
 ## [0.3.4] - 2026-07-09
 
+No user-facing changes.
+
+### CI / Internal
+- The smoke-test step in `cross-platform.yml` is removed: its Windows process-liveness check was
+  unreliable under Git Bash and hung the job for up to 15 minutes. `ctest` still verifies the
+  install tree. Before the removal, `proc_alive` was made locale-independent and bounded after
+  `kill`. (#119)
+
+---
+
+## [0.3.3] - 2026-07-09
+
+No user-facing changes.
+
+### CI / Internal
+- `cross-platform.yml` gains job and step timeouts, and its Windows smoke test checks process
+  liveness with `tasklist` instead of starting PowerShell for each check. (#118)
 
 ---
 
 ## [0.3.2] - 2026-07-09
 
+### Fixed
+- Qt review findings (#102, #106, #107): the QML Registers pane no longer highlights the wrong
+  register every cycle; a program too large for memory now reports "Program too large for memory."
+  in the QML GUI instead of failing silently; and the assembler, the QML register model, the
+  Pipeline Trace table and the datapath stop rebuilding lookup tables for every instruction,
+  property read or cell. (#108)
+
+### Changed
+- The `nsc` headers use `#pragma once` instead of include guards. (#100)
+
+### Documentation
+- The README shows the demo video beside the GIF, and its prose is rewritten. (#98)
+
+### CI / Internal
+- The format job runs `clang-format-22` directly instead of `cpp-linter-action`. (#108)
+- Fixes for the Windows x64 leg of `cross-platform.yml` and for a smoke test that hung. (#111,
+  #113, #115, #116)
+- `.gitignore` and `codecov.yml` updates. (#110)
+
+### Dependencies
+- GitHub Actions updates. (#97)
+
 ---
 
 ## [0.3.1] - 2026-07-05
+
+### CI / Internal
+- `qt_ui_test` no longer hangs for 42 minutes on Windows runners: Windows Error Reporting dialogs
+  are suppressed before `ctest` runs, and the test has a 120-second timeout. (#93)
 
 ---
 
@@ -247,7 +326,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.2] - 2026-07-05
+
+### Fixed
+- The macOS `.dmg` shipped a GUI that aborted at launch: the app now bundles the Qt Advanced
+  Docking System and the Qt frameworks it loads. (#74)
+
+### CI / Internal
+- The release GUI smoke test uses software OpenGL on headless Linux runners instead of failing
+  without a GL context. (#74)
+
+---
+
 ## [0.2.1] - 2026-07-05
+
+### Fixed
+- The Linux tarball's binaries run: `clearCore-gui` has an RPATH to its bundled Qt Advanced Docking
+  System library, and `number_system_converter` no longer segfaults at launch in `-O3` builds (an
+  out-of-grid write in the startup splash). A release smoke test now launches every packaged
+  binary. (#71)
+
+### Documentation
+- The social-preview banner uses the multi-ISA framing.
 
 ---
 

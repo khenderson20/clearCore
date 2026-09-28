@@ -43,11 +43,12 @@ Before CP0, any bad instruction or memory access returned `StepResult::Fault` an
 
 ## Exception vector
 
-Real MIPS hardware vectors to `0x8000_0180` (Status.BEV=0). clearCore uses this same address. Because the default memory size is 64 KB, you must either:
+Real MIPS hardware vectors to `0x8000_0180` (Status.BEV=0). clearCore uses this same address, but its memory is one flat array that starts at address 0 (64 KiB by default) with no address translation, so the vector is normally outside memory. The fetch from an unmapped vector raises a nested address error; because `Status.EXL` is already set, EPC keeps the address of the original fault. To run past an exception, either:
 
-1. **Run under the GDB stub** — the stub intercepts exceptions before the CPU fetches from the vector, so no handler code is needed at `0x8000_0180`.
-2. **Increase memory size** — pass a larger `mem_bytes` value to the `IProcessor` constructor, then map handler code at the vector address.
-3. **ERET in the handler** — for testing, load a minimal handler (`ERET` at `0x8000_0180`) to return execution to EPC+4.
+1. **Run under the GDB stub** — the stub reports the exception to GDB as a signal and sets the PC back to EPC, so no handler code is needed at `0x8000_0180` (see [GDB Stub § Limitations](GDB-Stub#limitations)).
+2. **Map a handler at the vector** — construct the CPU with a `mem_bytes` value that covers `0x8000_0180` plus the handler (just over 2 GiB), then load the handler there, as in the example below.
+
+A handler must move EPC past a `SYSCALL` or `BREAK` before `ERET`. EPC holds the address of the trapping instruction itself and `ERET` jumps back to it, so a handler that is only `ERET` re-executes the `SYSCALL` forever.
 
 ## StepResult changes
 
@@ -73,20 +74,25 @@ main:
     ori  $v0, $zero, 1         # syscall 1 = "print int"
     ori  $a0, $zero, 42
     syscall                    # raises Sys exception → vectors to 0x8000_0180
+done:
+    j    done                  # halt: a jump to itself
 
 # Exception handler (must be mapped at 0x8000_0180)
 exc_handler:
-    mfc0 $k0, $13              # read Cause
-    andi $k0, $k0, 0x7C        # extract ExcCode field
-    srl  $k0, $k0, 2
-    ori  $k1, $zero, 8         # 8 = Sys (SYSCALL)
-    bne  $k0, $k1, not_syscall
+    mfc0  $k0, $13             # read Cause
+    andi  $k0, $k0, 0x7C       # extract ExcCode field
+    srl   $k0, $k0, 2
+    ori   $k1, $zero, 8        # 8 = Sys (SYSCALL)
+    bne   $k0, $k1, not_syscall
     # handle syscall: read $v0, dispatch ...
-    addiu $k0, $14, 4          # EPC + 4 = instruction after SYSCALL
-    mtc0 $k0, $14
+    mfc0  $k0, $14             # read EPC: the address of the SYSCALL
+    addiu $k0, $k0, 4          # resume at the next instruction
+    mtc0  $k0, $14
 not_syscall:
-    eret                       # clear EXL, restore PC from EPC
+    eret                       # clear EXL, jump to EPC
 ```
+
+This is GNU assembler syntax for a `mipsel` toolchain. The in-app Code Editor's assembler does not accept `syscall`, `mfc0`, `mtc0` or `eret`.
 
 ## API reference
 

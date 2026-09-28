@@ -2,6 +2,8 @@
 
 clearCore can now load real compiled MIPS binaries directly into the emulator's memory, instead of requiring hand-assembled word arrays or the custom hex format. The ELF loader parses MIPS ELF32 executables, maps each `PT_LOAD` segment into the processor's address space, and sets the initial PC to the ELF entry point.
 
+The loader is a C++ API in `mips_core`. None of the three front ends can open an ELF file yet (they load `.hex` programs), so you call it from your own program, as in [C++ API](#c-api) below. The host program on the [GDB Stub](GDB-Stub#quick-start) page is a complete example: it loads an ELF file and serves it to GDB.
+
 ## Supported format
 
 | Property | Supported value |

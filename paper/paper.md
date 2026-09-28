@@ -31,10 +31,10 @@ and forwarding paths highlighted as they occur. Two execution engines, a
 single-cycle datapath and a five-stage pipeline, implement a common
 `IProcessor` interface and can be swapped at runtime without rebuilding, letting
 learners contrast the two models on the same program. Beyond hand-typed
-programs, `clearCore` loads little-endian MIPS ELF32 binaries, implements
-Coprocessor 0 exception handling per the MIPS32r2 specification, and exposes a
-GDB remote-serial-protocol stub so that a standard `gdb` client can attach to
-the running emulator for breakpoints, single-stepping, and register inspection.
+programs, the `clearCore` core library loads little-endian MIPS ELF32 binaries,
+implements Coprocessor 0 exception handling per the MIPS32r2 specification, and
+provides a GDB remote-serial-protocol stub through which a standard `gdb` client
+can drive a CPU model for breakpoints, single-stepping, and register inspection.
 
 The simulator is written in C++20 and ships three interchangeable front ends
 that all drive the same core libraries: a keyboard-driven terminal user
@@ -71,8 +71,10 @@ installing a desktop GUI toolkit is impractical.
 behavior that is usually abstracted away in teaching simulators: real CP0
 exceptions that vector rather than halting the machine, an ELF loader that
 accepts binaries produced by an ordinary `mipsel` cross-toolchain, and a GDB
-stub that lets students debug emulated programs with the same tool they use for
-native code. These features let a single tool span an introductory
+stub that lets the same CPU models be debugged with the tool students use for
+native code. The ELF loader and the GDB stub are library APIs, driven from a
+small C++ host program rather than from the front ends. These features let a
+single tool span an introductory
 "what is a pipeline" lesson and a more advanced "how does exception handling and
 debugging actually work" lesson.
 

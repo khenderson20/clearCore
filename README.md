@@ -5,8 +5,8 @@
 <h1 align="center">clearCore</h1>
 
 <p align="center">
-  Write MIPS assembly, watch it flow through a 5-stage pipeline cycle by cycle,<br>
-  and attach real GDB to the running emulator — in your terminal or a Qt6 desktop GUI.<br>
+  Write MIPS assembly and watch it flow through a 5-stage pipeline cycle by cycle,<br>
+  stalls, forwarding and flushes included — in your terminal or a Qt6 desktop GUI.<br>
   <b>MIPS today, RISC-V next</b> — on one shared, ISA-agnostic core.
 </p>
 
@@ -46,7 +46,7 @@
 
 clearCore is a C++20 CPU simulator built for one thing: actually *seeing* how a processor works. You write MIPS assembly, step through it, and watch every instruction travel through the five pipeline stages in real time. Stalls, forwarding paths, and pipeline flushes are all visible as they happen, not hidden away in a debugger output.
 
-When you're ready to go beyond hand-typed programs, you can load a real `mipsel` ELF binary and debug it with actual GDB through the built-in remote stub.
+Beyond hand-typed programs, the core library can also load a real `mipsel` ELF binary and let real GDB debug it through a built-in remote stub. Both are C++ APIs for now: none of the three front ends exposes them yet, so you drive them from a small host program (see [Beyond the basics](#beyond-the-basics)).
 
 Under the hood there are two execution engines, a single-cycle datapath and a 5-stage pipeline, and you can switch between them at runtime without rebuilding. Three front ends all drive the same core: a keyboard-driven terminal UI, a Qt6 Widgets GUI, and a Qt Quick/QML GUI. The pipeline behavior is identical across all three, so you can pick whichever interface suits you. The design closely follows Harris & Harris (*Digital Design and Computer Architecture*) and Patterson & Hennessy (*Computer Organization and Design*).
 
@@ -78,9 +78,9 @@ You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.20+** (3.25+ 
 cmake --preset debug
 cmake --build --preset debug
 
-./cmake-build-debug/clearCore-gui              # Qt6 Widgets desktop GUI
-./cmake-build-debug/number_system_converter   # terminal UI (needs an ANSI terminal)
-./cmake-build-debug/clearCore-quick            # Qt Quick / QML desktop GUI
+./build/debug/clearCore-gui              # Qt6 Widgets desktop GUI
+./build/debug/number_system_converter    # terminal UI (needs an ANSI terminal)
+./build/debug/clearCore-quick            # Qt Quick / QML desktop GUI
 ```
 
 | Preset      | What it builds                                                      |
@@ -111,7 +111,7 @@ ctest --preset debug    # all suites
 ctest --preset asan     # same suites under ASan + UBSan
 ```
 
-Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
+The core CTest suites cover the decoder, the disassembler, the hex and ELF program loaders, CP0, both CPU backends (including the pipeline's hazard and forwarding units, its hazard telemetry, and precise exceptions), and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
 
 ## Interfaces
 
@@ -167,7 +167,7 @@ All three show the same pipeline state, driven by the same `mips_core` library. 
 
 <img src="assets/screenshots/06_tab5_corepulse.png" alt="Core Pulse tab showing signal monitor waveform and pipeline stage details">
 
-Other tabs include **CPU Config** (swap single-cycle and pipelined at runtime), **Program Loader** (flat `.hex` programs), and **Utility** (diagnostics). See the [Terminal UI wiki page](https://github.com/khenderson20/clearCore/wiki/Terminal-UI) for a full walkthrough.
+Other tabs include **CPU Config** (swap single-cycle and pipelined at runtime), **Program Loader** (flat `.hex` programs), and **Utility Tools** (a placeholder for future tools). See the [Terminal UI wiki page](https://github.com/khenderson20/clearCore/wiki/Terminal-UI) for a full walkthrough.
 
 </details>
 
@@ -176,10 +176,10 @@ Other tabs include **CPU Config** (swap single-cycle and pipelined at runtime), 
 **CP0 and hardware exceptions.** `mips_core` implements Coprocessor 0 to the MIPS32r2 spec, including `Status`, `Cause`, `EPC`, and `BadVAddr`. Bad opcodes, unaligned accesses, `SYSCALL`, and `BREAK` all raise real exceptions that vector to `0x8000_0180`, the same behavior as physical MIPS hardware.
 See the [CP0 & Exceptions wiki](https://github.com/khenderson20/clearCore/wiki/CP0-Exceptions).
 
-**ELF loader.** `mips::load_elf_file_into_processor()` maps a static little-endian MIPS ELF32 binary into the processor's address space exactly the way a kernel exec would. Programs built with `mipsel-linux-gnu-as` or `mipsel-linux-musl-gcc -static` run unmodified.
+**ELF loader (C++ API).** `mips::load_elf_file_into_processor()` maps the `PT_LOAD` segments of a static little-endian MIPS ELF32 binary into a CPU model's memory and sets the PC to the entry point. Programs built with `mipsel-linux-gnu-as` or `mipsel-linux-musl-gcc -static` load, but they run only if they use the [supported instructions](https://github.com/khenderson20/clearCore/wiki/MIPS-CPU-Emulator#supported-isa-subset) and make no system calls: clearCore emulates no operating system. No front end opens ELF files yet, so you call the loader from your own C++ program.
 See the [ELF Loader wiki](https://github.com/khenderson20/clearCore/wiki/ELF-Loader) for toolchain setup instructions.
 
-**GDB remote stub.** Attach real GDB to the running emulator and get breakpoints, single-step, register and memory inspection, and exception-to-signal mapping (`Bp` to SIGTRAP, `RI` to SIGILL, and more):
+**GDB remote stub (C++ API).** `mips::GdbStub` serves a CPU model over GDB's Remote Serial Protocol on `localhost:1234`, with breakpoints, single-step, register and memory inspection, and exception-to-signal mapping (`Bp` to SIGTRAP, `RI` to SIGILL, and more). No front end starts the stub yet; the [GDB Stub wiki](https://github.com/khenderson20/clearCore/wiki/GDB-Stub#quick-start) shows the short host program that does. With that program running:
 
 ```bash
 mipsel-linux-gnu-gdb hello
@@ -188,7 +188,7 @@ mipsel-linux-gnu-gdb hello
 (gdb) continue
 ```
 
-See the [GDB Stub wiki](https://github.com/khenderson20/clearCore/wiki/GDB-Stub) for the full command reference. This feature is POSIX-only and can be disabled with `-DBUILD_GDB_STUB=OFF`.
+See the [GDB Stub wiki](https://github.com/khenderson20/clearCore/wiki/GDB-Stub) for the full command reference. The stub is POSIX-only and can be disabled with `-DBUILD_GDB_STUB=OFF`.
 
 ## Architecture
 

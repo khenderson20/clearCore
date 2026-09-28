@@ -110,7 +110,7 @@ After each `step()` call, `PipelinedCpu::pipeline_state()` returns a `PipelineSt
 
 ## Execution trace
 
-The TUI maintains an 8-entry ring buffer of the last committed instructions, built from the WB-stage entry of `PipelineState` after each `step()`, and renders it as a scrolling execution history panel. The CPU itself does not store this history — it only exposes the current cycle's `PipelineState`. The Qt6 GUI's Pipeline Trace tab is a related but separate view: it accumulates the full instruction × cycle grid for the run rather than a fixed 8-entry window (see [Qt6 GUI § Pipeline Trace](Qt6-GUI#pipeline-trace)).
+The TUI maintains an 8-entry ring buffer of the last committed instructions, built from the WB-stage entry of `PipelineState` after each `step()`, and renders it as a scrolling execution history panel. The CPU itself does not store this history — it only exposes the current cycle's `PipelineState`. The Qt6 GUI's Pipeline Trace tab is a related but separate view: an instruction × cycle grid over a sliding window of the last 20 cycles rather than an 8-entry list (see [Qt6 GUI § Pipeline Trace](Qt6-GUI#pipeline-trace)).
 
 ---
 
@@ -124,12 +124,12 @@ Each `step()` increments internal counters: total cycles elapsed, stall bubbles 
 
 Programs are flat arrays of 32-bit instruction words. Load them via:
 
-- **TUI Program Loader tab** — paste hex words one per line
+- **TUI Program Loader tab**, or **File ▸ Open Program…** in the Qt6 GUI — read a `.hex` file with one 32-bit word per line (format in [Terminal UI § Program Loader](Terminal-UI#tab-3--program-loader))
 - **Qt6 Code Editor** — write MIPS assembly with labels and branches; the in-app assembler (`nsc_qt::assemble()`) emits the word array. It supports the full instruction set above plus label resolution, but not pseudo-instructions or assembler directives (`.data`/`.text`/`.word`) yet — that's Stage 3, see [Roadmap](Roadmap).
 - **`NyxstoneBackend`** (when `BUILD_NYXSTONE=ON` and LLVM 15–20 is available) — an LLVM-backed assemble/disassemble bridge for little-endian MIPS32. It is primarily a **ground-truth oracle**: the `nyxstone_test` suite re-encodes the Disassembler's output through LLVM and asserts bit-equality, differentially validating the hand-written decoder/disassembler. `NyxstoneBackend::assemble()` also returns a word array usable for loading.
-- **`IProcessor::load(std::vector<uint32_t>)`** — call directly from C++ for testing
+- **`IProcessor::load_program(words, addr)`** — call directly from C++ for testing
 
-Memory is byte-addressable. The program is placed starting at address `0x00000000`. The stack conventionally grows down from `0xFFFFFFFF`.
+Memory is byte-addressable. The program is placed starting at address `0x00000000`. Every register, `$sp` included, resets to zero, so a program that uses a stack must set `$sp` itself; for the default 64 KiB of memory, `lui $sp, 1` puts it at the top (`0x00010000`), and the stack grows down from there.
 
 ---
 
