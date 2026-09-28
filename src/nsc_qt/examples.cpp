@@ -9,6 +9,8 @@ const std::vector<ExampleProgram>& exampleProgramCatalog() {
 addi $t0, $zero, 5
 addi $t1, $zero, 10
 add  $t2, $t0, $t1
+halt:
+j    halt              # a jump to itself ends the program
 )")},
         {QStringLiteral("Data hazard (forwarding)"),
          QString(R"(# Data hazard demo -- each instruction needs the result
@@ -18,6 +20,8 @@ addi $t0, $zero, 1
 add  $t1, $t0, $t0
 add  $t2, $t1, $t0
 add  $t3, $t2, $t1
+halt:
+j    halt              # a jump to itself ends the program
 )")},
         {QStringLiteral("Load-use stall"),
          QString(R"(# Load-use hazard demo -- a load's result isn't ready in
@@ -28,6 +32,8 @@ addi $t0, $zero, 7
 sw   $t0, 0($zero)
 lw   $t1, 0($zero)
 add  $t2, $t1, $t1
+halt:
+j    halt              # a jump to itself ends the program
 )")},
         {QStringLiteral("Branch flush (control hazard)"),
          QString(R"(# Control hazard demo -- the branch is taken, so the
@@ -39,6 +45,8 @@ beq  $t0, $t1, skip
 addi $t2, $zero, 99
 skip:
 addi $t3, $zero, 42
+halt:
+j    halt              # a jump to itself ends the program
 )")},
     };
     return catalog;

@@ -619,6 +619,7 @@ if (BUILD_QT6_UI)
     add_executable(qt_ui_test
             tests/qt_ui/qt_ui_test.cpp
             src/nsc_qt/assembler.cpp
+            src/nsc_qt/examples.cpp                          # every example must halt
             src/nsc_qt/simulator_controller.cpp
             src/nsc_qt/dock_panels.cpp                       # dock-content invariant under test
             src/nsc_qt/widgets/register_widget.cpp

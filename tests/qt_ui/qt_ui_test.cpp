@@ -1,5 +1,6 @@
 #include "nsc_qt/assembler.h"
 #include "nsc_qt/dock_panels.h"
+#include "nsc_qt/examples.h"
 #include "nsc_qt/simulator_controller.h"
 #include "nsc_qt/widgets/memory_widget.h"
 #include "nsc_qt/widgets/pipeline_events_widget.h"
@@ -335,6 +336,28 @@ static void test_controller_load_starts_empty() {
     CHECK(ctrl.memoryWord(0) == 0u);
     ctrl.reset();
     CHECK(ctrl.memoryWord(0) == 0u);
+}
+
+// ── Built-in examples ────────────────────────────────────────────────────────
+
+// Every example must end in a halt. Without one, Run executed each zero word
+// after the program as a nop, stopped on an address error at the end of
+// memory, and the statistics counted thousands of nop cycles (#293).
+static void test_examples_halt() {
+    using namespace nsc::qt;
+
+    for (const ExampleProgram& ex : exampleProgramCatalog()) {
+        const AssemblerResult prog = assemble(ex.source.toStdString());
+        CHECK(prog.ok());
+        for (const bool pipelined : {false, true}) {
+            const auto cpu = make_cpu(pipelined);
+            CHECK(cpu->load_program(prog.words));
+            const mips::StepResult r = cpu->run(100);
+            if (r != mips::StepResult::Halt)
+                std::fprintf(stderr, "      example \"%s\" does not halt\n", qPrintable(ex.name));
+            CHECK(r == mips::StepResult::Halt);
+        }
+    }
 }
 
 // ── RegisterWidget state tracking ────────────────────────────────────────────
@@ -724,6 +747,7 @@ int main(int argc, char* argv[]) {
     test_controller_reset();
     test_controller_reset_restores_memory();
     test_controller_load_starts_empty();
+    test_examples_halt();
     test_controller_single_cycle_stats();
     test_controller_exception_signal();
     test_register_widget_clear();

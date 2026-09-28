@@ -100,6 +100,8 @@ addi $t0, $zero, 1
 add  $t1, $t0, $t0
 add  $t2, $t1, $t0
 add  $t3, $t2, $t1
+halt:
+j    halt              # a jump to itself ends the program
 ```
 
 Assemble it, switch to the **Datapath** tab, and step through it. You will see the data hazards resolved live as the EX/MEM forwarding paths light up, bypassing results before they ever reach the register file.
