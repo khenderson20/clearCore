@@ -256,7 +256,7 @@ they never queue behind or cancel one another.
 |-------------------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | `ci.yml`                | push/PR → `main`, `workflow_dispatch` | **Primary CI**: format check (cpp-linter), Codecov coverage upload, core-tests (debug + asan matrix), full Qt build |
 | `codeql.yml`            | push/PR → `main`, weekly              | CodeQL C++ + Actions scan; no ccache (would hide code from extractor)                                               |
-| `cross-platform.yml`    | release publish, `workflow_dispatch`  | Windows NSIS installer + macOS universal DMG; bundles Qt via windeployqt/macdeployqt                                |
+| `cross-platform.yml`    | push/PR → `main` (`core-only`); release publish, `workflow_dispatch` (`build`) | `core-only`: core build + tests on Windows x64 and macOS arm64; `build`: Windows NSIS installer + macOS universal DMG, Qt bundled via windeployqt/macdeployqt |
 | `release.yml`           | release publish, `workflow_dispatch`  | Linux `.tar.gz` package via CPack; smoke-tests the packaged binaries; generates an SPDX SBOM                        |
 | `appimage.yml`          | release publish, `workflow_dispatch`  | Self-contained Linux AppImage via linuxdeploy; smoke-tests GUI + TUI                                                |
 | `release-drafter.yml`   | push → `main`                         | Drafts the next GitHub release from merged PR titles                                                                |
@@ -267,7 +267,7 @@ they never queue behind or cancel one another.
 | `cflite_batch.yml`      | nightly schedule, `workflow_dispatch` | ClusterFuzzLite 1 h batch fuzzing; corpus pushed to the `cifuzz-corpus` branch (shares a lock with prune)           |
 | `cflite_prune.yml`      | nightly schedule, `workflow_dispatch` | Minimizes the `cifuzz-corpus` corpus built up by `cflite_batch.yml`                                                 |
 | `cflite_cov.yml`        | nightly schedule, `workflow_dispatch` | Fuzzing coverage report from `cifuzz-corpus`, pushed to `cifuzz-coverage` and uploaded as an artifact               |
-| `zizmor.yml`            | push/PR → `main`                      | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
+| `zizmor.yml`            | push → `main`; PR → `main` touching `.github/workflows/` | Static analysis of the workflows themselves (script injection, credential leakage, permissions)                    |
 | `gitleaks.yml`          | push/PR → `main`, `workflow_dispatch` | CI secret-scanning backstop for the local gitleaks pre-commit hook; SARIF to code scanning                          |
 | `wiki-sync.yml`         | push → `main` touching `wiki/`        | Mirrors `wiki/` directory into the GitHub wiki repo                                                                 |
 

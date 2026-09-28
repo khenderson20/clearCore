@@ -20,7 +20,7 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 - **CP0 exception model** — SYSCALL, BREAK, overflow, address errors, and reserved-instruction faults raise MIPS32r2 exceptions; Status, Cause, EPC, and BadVAddr are fully modelled; ERET/MFC0/MTC0 are supported
 - **ELF loader** — a C++ API that loads `mipsel` (little-endian) ELF32 executables compiled with `mipsel-linux-gnu-gcc` or `mipsel-linux-musl-gcc` into the emulated address space; the front ends load `.hex` programs and cannot open ELF files yet
 - **GDB RSP stub** — a C++ API that serves a CPU model to `mipsel-linux-gnu-gdb` on port 1234 for breakpoints, single-step, register/memory inspection, and exception-driven stop signals; no front end starts it yet, so you run it from a small host program (see [GDB Stub](GDB-Stub#quick-start))
-- **Continuous fuzzing** — two libFuzzer harnesses (`fuzz_hex_loader`, `fuzz_elf_loader`) run via ClusterFuzzLite on PRs touching relevant paths, exercising `mips::parse_hex_program` and the ELF32 parser `mips::parse_elf` against arbitrary input (see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger)
+- **Continuous fuzzing** — two libFuzzer harnesses (`fuzz_hex_loader`, `fuzz_elf_loader`) run via ClusterFuzzLite every night and on PRs whose changes reach them, exercising `mips::parse_hex_program` and the ELF32 parser `mips::parse_elf` against arbitrary input (see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger)
 
 ---
 
@@ -47,7 +47,7 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 ```
 C++20 · CMake 3.20+ · MIT license · v0.3.6
 FTXUI v7.0.0 · GSL · spdlog (all auto-fetched) · Qt6 (Widgets + Quick, both optional) · Nyxstone/LLVM 15–20 (optional) · KSyntaxHighlighting (optional)
-Seven core CTest suites (plus gdb_stub_test and nyxstone_test when enabled) + a Qt smoke-test suite + MARS differential tests + ClusterFuzzLite libFuzzer harness
+Core CTest suites (plus gdb_stub_test and nyxstone_test when enabled) + a Qt smoke-test suite + MARS differential tests + ClusterFuzzLite libFuzzer harnesses
 ```
 
 Build presets: `debug`, `release`, `asan`, `core-only` (TUI-only, no Qt/LLVM). See [Getting Started](Getting-Started).

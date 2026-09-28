@@ -9,7 +9,7 @@ clearCore is an educational MIPS CPU simulator maintained by a single developer.
 | `main` (latest commit) | :white_check_mark: |
 | Older commits / tags | :x: |
 
-Only the current `main` branch receives security attention. There are no tagged releases yet.
+Only the current `main` branch receives security attention. Fixes ship in the next release; earlier releases are not patched.
 
 ## Reporting a Vulnerability
 

@@ -78,9 +78,9 @@ You need a **C++20 compiler** (GCC 13+ or Clang 16+) and **CMake 3.20+** (3.25+ 
 cmake --preset debug
 cmake --build --preset debug
 
-./cmake-build-debug/clearCore-gui              # Qt6 Widgets desktop GUI
-./cmake-build-debug/number_system_converter   # terminal UI (needs an ANSI terminal)
-./cmake-build-debug/clearCore-quick            # Qt Quick / QML desktop GUI
+./build/debug/clearCore-gui              # Qt6 Widgets desktop GUI
+./build/debug/number_system_converter    # terminal UI (needs an ANSI terminal)
+./build/debug/clearCore-quick            # Qt Quick / QML desktop GUI
 ```
 
 | Preset      | What it builds                                                      |
@@ -111,7 +111,7 @@ ctest --preset debug    # all suites
 ctest --preset asan     # same suites under ASan + UBSan
 ```
 
-Seven core CTest suites cover the decoder, disassembler, ELF loader, CP0, both CPU backends, and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
+The core CTest suites cover the decoder, the disassembler, the hex and ELF program loaders, CP0, both CPU backends (including the pipeline's hazard and forwarding units, its hazard telemetry, and precise exceptions), and the converter core, plus a MARS golden-test suite and a Qt smoke-test suite. When LLVM 15-20 is available, a differential suite validates the disassembler against LLVM's assembler. Every push/PR to `main` builds and tests Debug and ASan/UBSan; static analysis, dependency scanning, and fuzzing run under their own trigger conditions. See [Contributing § CI](https://github.com/khenderson20/clearCore/wiki/Contributing#ci-workflows) for exactly which workflow runs when.
 
 ## Interfaces
 
@@ -167,7 +167,7 @@ All three show the same pipeline state, driven by the same `mips_core` library. 
 
 <img src="assets/screenshots/06_tab5_corepulse.png" alt="Core Pulse tab showing signal monitor waveform and pipeline stage details">
 
-Other tabs include **CPU Config** (swap single-cycle and pipelined at runtime), **Program Loader** (flat `.hex` programs), and **Utility** (diagnostics). See the [Terminal UI wiki page](https://github.com/khenderson20/clearCore/wiki/Terminal-UI) for a full walkthrough.
+Other tabs include **CPU Config** (swap single-cycle and pipelined at runtime), **Program Loader** (flat `.hex` programs), and **Utility Tools** (a placeholder for future tools). See the [Terminal UI wiki page](https://github.com/khenderson20/clearCore/wiki/Terminal-UI) for a full walkthrough.
 
 </details>
 

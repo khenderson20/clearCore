@@ -52,7 +52,7 @@ The project follows a staged development plan. Each stage builds on the previous
 *This stage isn't in the version of this page you may have seen before — it shipped as a full desktop GUI, not a plan.*
 
 - `clearCore-gui`: Qt6 Widgets application with six tabs — Datapath, Registers, Memory, Pipeline Trace, Code Editor, Statistics (see [Qt6 GUI](Qt6-GUI))
-- `SimulatorController`: runs the CPU on a background thread, re-emits state as Qt signals
+- `SimulatorController`: steps the CPU from a `QTimer` on the GUI thread and re-emits state as Qt signals
 - **In-app MIPS assembler** (`nsc_qt::assemble()`, `include/nsc_qt/assembler.h` / `src/nsc_qt/assembler.cpp`) — labels, forward/backward branch resolution, line-numbered error reporting, feeding the Code Editor tab directly. This covers part of Stage 3's original scope (see below).
 - Clickable Datapath diagram with **address breakpoints** — right-click or Space/B to set/clear, execution pauses on hit
 - Pipeline Trace tab (instruction × cycle grid)
@@ -162,9 +162,9 @@ The Qt6 GUI's Pipeline Trace and Statistics tabs already deliver most of this fo
 > Tracked as [Milestone: Quality & Hardening](https://github.com/khenderson20/clearCore/milestone/5), which also carries correctness and
 > toolchain-hygiene work not listed on this page.
 
-- [x] ClusterFuzzLite fuzzing harnesses (`tests/fuzz/`) — libFuzzer targets `mips::parse_hex_program` and `mips::parse_elf`; both run 120 s via `cflite_pr.yml` on PRs touching relevant paths (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
+- [x] ClusterFuzzLite fuzzing harnesses (`tests/fuzz/`) — libFuzzer targets `mips::parse_hex_program` and `mips::parse_elf`; both fuzzed for an hour nightly by `cflite_batch.yml`, and for 120 s by `cflite_pr.yml` on PRs whose changes reach them (addresses OpenSSF Scorecard fuzzing signal; see [Contributing § CI workflows](Contributing#ci-workflows))
 - [x] ELF32 loader hardening — offsets and sizes bounded by the real file length, `e_phentsize`/`p_memsz`/address-space-wrap validation, pure `.bss` segments mapped, BSS writes bounds-checked (#127)
-- [ ] UI smoke test guarding `Container::Tab` child count against `tab_labels.size()` (prevents reintroduction of the tab/focus aliasing bug)
+- [x] Compile-time guard for the `Container::Tab` child count: a `static_assert` fails the build if it differs from the tab label count, so the tab/focus aliasing bug cannot return (#195)
 - [ ] Regression test for per-instruction-type telemetry breakout
 
 ---

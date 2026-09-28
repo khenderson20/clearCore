@@ -7,7 +7,7 @@ The terminal interface (`number_system_converter`) is built with [FTXUI v7.0.0](
 ## Launch
 
 ```bash
-./cmake-build-debug/number_system_converter
+./build/debug/number_system_converter
 ```
 
 Requires a terminal with ANSI escape code support (256 colors recommended). Does not work in bare `cmd.exe` on Windows without a compatibility layer.
@@ -80,17 +80,23 @@ Switching resets the CPU state and clears telemetry counters. The loaded program
 
 ### Tab 3 — Program Loader
 
-Enter MIPS instruction words as 32-bit hex values, one per line:
+Type the path of a `.hex` program file into the input field and press **Load**. The field starts as `program.hex`; a relative path is resolved against the directory you launched from. The CPU is reset and its memory cleared, the words are loaded from address `0`, and the status line reports how many words were read. The memory panel in Tab 1 updates immediately.
+
+A `.hex` file holds one 32-bit instruction word per line, in hexadecimal:
 
 ```
-00401000
-00602020
-8C620000
-AC620004
-08000006
+# sum.hex: $t2 = 5 + 10, then halt. Comments run from '#' to the end of the line.
+20080005    # addi $t0, $zero, 5
+0x2009000A  # addi $t1, $zero, 10
+01095020    # add  $t2, $t0, $t1
+08000003    # j    3  (a jump to itself: the halt idiom)
 ```
 
-Click **Load** to transfer the program to the CPU. The memory panel in Tab 1 updates immediately. The CPU is reset to PC = 0 before the new program runs.
+- The `0x` prefix is optional, and blank or comment-only lines are skipped.
+- Whitespace inside a line is ignored, so write exactly one word on each line.
+- A malformed line rejects the whole file, and the status line gives its line number.
+
+The Qt6 GUI reads the same format through **File ▸ Open Program…**.
 
 ---
 
@@ -112,4 +118,4 @@ A placeholder tab reserved for future developer tooling (profiling data viewers,
 
 - **Emoji in layout-critical positions** cause border misalignment in some terminals. FTXUI's `IsFullWidth()` table does not classify most emoji as double-width, so they consume one column visually but the layout engine allocates two. The UI avoids emoji in tab bars and headers for this reason.
 
-- **Tab focus routing** — FTXUI's `Container::Tab` wraps focus index modulo the child count. An earlier bug caused tabs 4–5 to alias onto tabs 0–1's interactive components. This was fixed by ensuring the container child count exactly matches `tab_labels.size()` (six entries) at construction. A regression guard is planned — see [Roadmap](Roadmap).
+- **Tab focus routing** — FTXUI's `Container::Tab` wraps focus index modulo the child count. An earlier bug caused tabs 4–5 to alias onto tabs 0–1's interactive components. This was fixed by making the container child count match the label count (six entries) at construction, and a `static_assert` now fails the build if the two lists ever differ in size (#195).

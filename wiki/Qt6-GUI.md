@@ -9,8 +9,8 @@ A second, parallel desktop interface — `clearCore-quick`, built on Qt Quick/QM
 ## Launch
 
 ```bash
-cmake --build cmake-build-debug --target clearCore-gui
-./cmake-build-debug/clearCore-gui
+cmake --build --preset debug --target clearCore-gui
+./build/debug/clearCore-gui
 ```
 
 Qt6 must be installed on the system (see [Getting Started](Getting-Started)). If Qt6 isn't found at configure time, this target is silently skipped and the rest of the build still succeeds.
@@ -35,7 +35,7 @@ A scrollable hex dump (QHexView-backed) of the address space, 16 bytes/row with 
 
 ### Pipeline Trace
 
-An instruction × cycle grid (the classic Patterson & Hennessy layout, also seen in WebRISC-V): rows are instructions in program order, columns are clock cycles, and each cell shows which pipeline stage that instruction occupied during that cycle. Stall bubbles and flush events are color-coded. This view accumulates during a run and resets when the CPU resets.
+An instruction × cycle grid (the classic Patterson & Hennessy layout, also seen in WebRISC-V): rows are instructions in program order, columns are clock cycles, and each cell shows which pipeline stage that instruction occupied during that cycle. Stall bubbles and flush events are color-coded. The grid shows a sliding window of the last 20 cycles. It starts over when the CPU resets, and when a full-speed run reports cycles more than 20 apart (the controller emits only every 5000th cycle there).
 
 ### Code Editor
 
@@ -102,7 +102,7 @@ flowchart TD
 
 `SimulatorController` (`include/nsc_qt/simulator_controller.h`) has no separate `registersChanged`/`memoryChanged`/`traceRowAdded` signals — the Registers, Memory, and Pipeline Trace tabs all derive their view from the single `pipelineStateChanged(mips::PipelineState)` payload rather than getting dedicated signals of their own.
 
-Because every connection is within one thread, these are direct calls — nothing is queued or marshalled across a thread boundary. `SimulatorController` does hold a `QMutex`, but in this application it is uncontended; see [`src/nsc_qt/docs/SimulatorController.md`](https://github.com/khenderson20/clearCore/blob/main/src/nsc_qt/docs/SimulatorController.md) for the detailed account.
+Because every connection is within one thread, these are direct calls — nothing is queued or marshalled across a thread boundary. `SimulatorController` holds no mutex: it is confined to the GUI thread, and debug builds assert that on every state-changing call (see the class comment in `include/nsc_qt/simulator_controller.h` and #244).
 
 ### Concurrency rules
 
@@ -124,7 +124,7 @@ Because every connection is within one thread, these are direct calls — nothin
 CMakeLists.txt compiles the TUI and both GUI targets by default (`BUILD_QT6_UI` and `BUILD_QT6_QUICK_UI` both default `ON`). Building only the Widgets GUI:
 
 ```bash
-cmake --build cmake-build-debug --target clearCore-gui
+cmake --build --preset debug --target clearCore-gui
 ```
 
 New `.cpp` or `.h` files added to `nsc_qt/` must be registered in `CMakeLists.txt` — Qt's MOC (meta-object compiler) will not pick them up automatically and you will get a linker error, not a compile error.
@@ -150,8 +150,8 @@ If the package is absent, CMake prints `KSyntaxHighlighting not found: Code Edit
 `src/nsc_quick` and `qml/ClearCore` contain a second, Qt Quick/QML-based interface (`clearCore-quick`) that targets the same `mips_core` backend, built by default alongside the Widgets GUI. Its QML components (`Main.qml`, `DatapathStrip.qml`, `RegistersPane.qml`, `MemoryPane.qml`, `TracePane.qml`, `StatsPane.qml`, `EditorPane.qml`, plus shared `Theme.qml`, `CCButton.qml`, `TransportBar.qml`, `StatusPill.qml`, `HazardBadge.qml`, `StageCard.qml`) mirror the Widgets GUI's tab structure. It reuses the same `assembler.h`/`.cpp` and `examples.h`/`.cpp` from `nsc_qt` rather than duplicating them.
 
 ```bash
-cmake --build cmake-build-debug --target clearCore-quick
-./cmake-build-debug/clearCore-quick
+cmake --build --preset debug --target clearCore-quick
+./build/debug/clearCore-quick
 ```
 
 Treat it as available but less battle-tested than the Widgets GUI. To skip it without skipping the Widgets GUI, add `-DBUILD_QT6_QUICK_UI=OFF` at configure time.

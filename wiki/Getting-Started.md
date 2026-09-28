@@ -68,17 +68,19 @@ cmake -S . -B cmake-build-debug
 cmake --build cmake-build-debug
 ```
 
+The presets put each build in `build/<preset>/`, so the commands on this page use `build/debug/`. After a manual configure like this one, use `cmake-build-debug/` instead.
+
 ### Build a single target
 
 ```bash
 # Terminal UI only
-cmake --build cmake-build-debug --target number_system_converter
+cmake --build --preset debug --target number_system_converter
 
 # Qt6 Widgets GUI only
-cmake --build cmake-build-debug --target clearCore-gui
+cmake --build --preset debug --target clearCore-gui
 
 # Qt Quick / QML GUI only
-cmake --build cmake-build-debug --target clearCore-quick
+cmake --build --preset debug --target clearCore-quick
 ```
 
 ### Build options
@@ -101,13 +103,13 @@ If Qt6 or LLVM aren't found during configuration, the corresponding target is si
 
 ```bash
 # Terminal UI
-./cmake-build-debug/number_system_converter
+./build/debug/number_system_converter
 
 # Qt6 Widgets desktop GUI
-./cmake-build-debug/clearCore-gui
+./build/debug/clearCore-gui
 
 # Qt Quick / QML desktop GUI
-./cmake-build-debug/clearCore-quick
+./build/debug/clearCore-quick
 ```
 
 > **Terminal note:** FTXUI requires an ANSI-capable terminal. If running from an IDE, enable *Emulate terminal in output console* or launch from the shell.
@@ -122,10 +124,10 @@ Opt in at runtime with the `CLEARCORE_LOG_LEVEL` environment variable — accept
 
 ```bash
 # Full per-instruction + pipeline-event trace
-CLEARCORE_LOG_LEVEL=trace ./cmake-build-debug/number_system_converter
+CLEARCORE_LOG_LEVEL=trace ./build/debug/number_system_converter
 
 # Just exceptions and memory faults
-CLEARCORE_LOG_LEVEL=debug ./cmake-build-debug/number_system_converter
+CLEARCORE_LOG_LEVEL=debug ./build/debug/number_system_converter
 ```
 
 Example trace output (pipelined model):
@@ -148,17 +150,23 @@ ctest --preset asan               # same suites under ASan/UBSan
 Or manually:
 
 ```bash
-cmake --build cmake-build-debug --target decoder_test cpu_test processor_test disasm_test cp0_test elf_loader_test nsc_tests qt_ui_test
-ctest --test-dir cmake-build-debug --output-on-failure
+cmake --build build/debug
+ctest --test-dir build/debug --output-on-failure
 ```
+
+`ctest --test-dir build/debug -N` lists every registered test without running it.
 
 The suite covers:
 
 - `decoder_test` — R/I/J format decoding, opcode + funct → mnemonic
 - `cpu_test` — CPU execution against known programs (both models)
 - `processor_test` — polymorphic harness running both `SingleCycleCpu` and `PipelinedCpu` through identical programs via the `IProcessor` contract
-- `disasm_test` — disassembler and hex program loader
+- `disasm_test` — disassembler (machine word → assembly text)
+- `program_loader_test` — hex program loader (`parse_hex_program`, `load_hex_file`)
 - `cp0_test` — Coprocessor 0 exception model (SYSCALL/BREAK/overflow/address errors, MFC0/MTC0/ERET)
+- `hazard_telemetry_test` — the per-cycle stall/forward/flush/retire indicators in `PipelineState` that the UIs turn into CPI and hazard counts
+- `pipeline_precise_exceptions_test` — squashed (wrong-path) and younger instructions in the pipeline never trap or redirect; `SingleCycleCpu` is the oracle
+- `pipeline_units_test` — hazard-detection and forwarding units tested directly on pipeline-register values
 - `elf_loader_test` — MIPS ELF32 parsing and segment mapping
 - `nyxstone_test` — differential validation of the Decoder + Disassembler against Nyxstone (LLVM's assembler): our disassembly of each corpus word is re-encoded by LLVM and asserted bit-identical. Built only when `BUILD_NYXSTONE=ON` and an in-range LLVM was found; self-skips otherwise.
 - `nsc_tests` — number system converter (`parse_base`, conversions)
@@ -171,7 +179,7 @@ This project uses a lightweight, dependency-free `CHECK()`-macro test harness th
 
 ### ClusterFuzzLite fuzzing (CI only)
 
-Two libFuzzer harnesses cover the parsers that accept untrusted input: `tests/fuzz/fuzz_hex_loader.cpp` targets `mips::parse_hex_program` (hex text) and `tests/fuzz/fuzz_elf_loader.cpp` targets `mips::parse_elf` (binary ELF32, seeded by `tests/fuzz/make_elf_corpus.py`). Neither is built by normal `cmake --preset debug` or `ctest` invocations. The `.github/workflows/cflite_pr.yml` workflow builds and runs them for 120 seconds via ClusterFuzzLite's base-builder image (Clang 22 + libFuzzer) — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger. To build them manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
+Two libFuzzer harnesses cover the parsers that accept untrusted input: `tests/fuzz/fuzz_hex_loader.cpp` targets `mips::parse_hex_program` (hex text) and `tests/fuzz/fuzz_elf_loader.cpp` targets `mips::parse_elf` (binary ELF32, seeded by `tests/fuzz/make_elf_corpus.py`). Neither is built by normal `cmake --preset debug` or `ctest` invocations. ClusterFuzzLite builds them in its base-builder image (Clang 22 + libFuzzer): `.github/workflows/cflite_batch.yml` fuzzes both for an hour every night, and `.github/workflows/cflite_pr.yml` spends 120 seconds on a pull request fuzzing the harnesses its change reaches — see [Contributing § CI workflows](Contributing#ci-workflows) for the exact triggers. To build them manually, pass `-DFUZZING_ENGINE=/path/to/libFuzzer.a` at configure time.
 
 ---
 
@@ -193,7 +201,7 @@ After launching `number_system_converter`, six tabs are available (navigate with
 1. **Converter** — type a number in any base; the others update live.
 2. **CPU Dashboard** — load a program from Program Loader, then step through or auto-run.
 3. **CPU Config** — switch between single-cycle and pipelined mode at runtime.
-4. **Program Loader** — enter 32-bit instruction words in hex to load a program.
+4. **Program Loader** — type the path of a `.hex` program file (one 32-bit instruction word per line) and press **Load**; see [Terminal UI § Program Loader](Terminal-UI#tab-3--program-loader) for the format.
 5. **Core Pulse** — an oscilloscope-style animation plus per-stage IF/ID/EX/MEM/WB detail.
 6. **Utility** — placeholder tab reserved for future developer tools.
 
