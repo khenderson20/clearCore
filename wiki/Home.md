@@ -18,8 +18,8 @@ The project ships two primary interfaces over identical core logic: a lightweigh
 - **MIPS syntax highlighting** — optional KSyntaxHighlighting integration gives the Code Editor Kate-quality MIPS highlighting with automatic light/dark theme tracking (no-op when the package is absent)
 - **Differential testing** — the `tests/golden/` suite cross-checks both CPU models against MARS, the classroom-standard MIPS simulator
 - **CP0 exception model** — SYSCALL, BREAK, overflow, address errors, and reserved-instruction faults raise MIPS32r2 exceptions; Status, Cause, EPC, and BadVAddr are fully modelled; ERET/MFC0/MTC0 are supported
-- **ELF loader** — load `mipsel` (little-endian) ELF32 executables compiled with `mipsel-linux-gnu-gcc` or `mipsel-linux-musl-gcc` directly into the emulated address space
-- **GDB RSP stub** — attach `mipsel-linux-gnu-gdb` to port 1234 for breakpoints, single-step, register/memory inspection, and exception-driven stop signals
+- **ELF loader** — a C++ API that loads `mipsel` (little-endian) ELF32 executables compiled with `mipsel-linux-gnu-gcc` or `mipsel-linux-musl-gcc` into the emulated address space; the front ends load `.hex` programs and cannot open ELF files yet
+- **GDB RSP stub** — a C++ API that serves a CPU model to `mipsel-linux-gnu-gdb` on port 1234 for breakpoints, single-step, register/memory inspection, and exception-driven stop signals; no front end starts it yet, so you run it from a small host program (see [GDB Stub](GDB-Stub#quick-start))
 - **Continuous fuzzing** — two libFuzzer harnesses (`fuzz_hex_loader`, `fuzz_elf_loader`) run via ClusterFuzzLite on PRs touching relevant paths, exercising `mips::parse_hex_program` and the ELF32 parser `mips::parse_elf` against arbitrary input (see [Contributing § CI workflows](Contributing#ci-workflows) for the exact trigger)
 
 ---

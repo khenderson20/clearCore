@@ -4,22 +4,58 @@ clearCore includes a built-in **GDB Remote Serial Protocol (RSP) server** that l
 
 This is modelled on the same mechanism that QEMU exposes with `-s -S`.
 
+The stub is a C++ API in `mips_core`. None of the three front ends starts it yet, and the release downloads do not include the library, so you run it from a small host program that you build from a clearCore checkout.
+
 ## Quick start
 
+`gdb_host.cpp` loads an ELF file into a CPU model and serves it to GDB:
+
 ```cpp
-#include "mips/gdb_stub.h"
 #include "mips/elf_loader.h"
+#include "mips/gdb_stub.h"
 #include "mips/single_cycle_cpu.h"
 
-int main() {
-    mips::SingleCycleCpu cpu(4u << 20);
-    std::string err;
-    mips::load_elf_file_into_processor(cpu, "my_program", err);
+#include <iostream>
+#include <string>
 
-    // Start the GDB server on port 1234 (default) and wait for GDB to connect.
-    mips::GdbStub stub(cpu);
-    stub.listen();   // blocks until GDB sends 'k' (kill) or 'D' (detach)
+int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cerr << "usage: gdb_host <program.elf>\n";
+        return 2;
+    }
+    mips::SingleCycleCpu cpu(4u << 20);  // 4 MiB of memory
+    std::string          err;
+    if (!mips::load_elf_file_into_processor(cpu, argv[1], err)) {
+        std::cerr << "ELF load failed: " << err << '\n';
+        return 1;
+    }
+    mips::GdbStub stub(cpu);  // listens on 127.0.0.1:1234
+    stub.listen();            // returns when GDB detaches or kills the session
 }
+```
+
+Build it with a `CMakeLists.txt` in the same directory, which pulls in your clearCore checkout as a subdirectory (here, `../clearCore`):
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(gdb_host LANGUAGES CXX)
+
+# Only the core library is needed: skip the GUIs, the LLVM bridge and the MARS tests.
+set(BUILD_QT6_UI       OFF CACHE BOOL "" FORCE)
+set(BUILD_QT6_QUICK_UI OFF CACHE BOOL "" FORCE)
+set(BUILD_NYXSTONE     OFF CACHE BOOL "" FORCE)
+set(GOLDEN_TESTS       OFF CACHE BOOL "" FORCE)
+add_subdirectory(../clearCore clearcore)
+
+add_executable(gdb_host gdb_host.cpp)
+target_link_libraries(gdb_host PRIVATE mips_core)
+target_compile_features(gdb_host PRIVATE cxx_std_20)
+```
+
+```bash
+cmake -S . -B build -G Ninja
+cmake --build build --target gdb_host
+./build/gdb_host my_program
 ```
 
 Then in a second terminal:
@@ -126,7 +162,7 @@ Code that conditionally uses the stub:
 | Method | Breakpoint precision | Setup cost | Tooling |
 |---|---|---|---|
 | clearCore TUI step mode | Cycle-accurate | Zero | Built-in |
-| GDB stub (`this feature`) | Instruction-accurate | Low (one `target remote` command) | Full GDB: backtraces, watchpoints, scripting |
+| GDB stub (`this feature`) | Instruction-accurate | Medium (build a small host program, then one `target remote` command) | Full GDB: backtraces, watchpoints, scripting |
 | QEMU user-mode emulation | Instruction-accurate | High (need full MIPS sysroot) | Full GDB |
 | MARS simulator | Instruction-accurate | Medium (Java) | MARS-only debugger |
 
@@ -134,7 +170,7 @@ The GDB stub's key advantage over MARS is that it works with the same clearCore 
 
 ## Limitations
 
-- **Single-threaded**: the CPU runs on the same OS thread as the RSP loop. `continue` runs the CPU in a tight loop in `handle_continue()`; the UI is paused while the CPU is running. For interactive use, pair with `step` (`si`/`ni`) or set a breakpoint near the target instruction.
+- **Single-threaded**: the CPU runs on the same OS thread as the RSP loop, and no pipeline visualizer is attached while GDB drives it. `continue` runs the CPU in a loop in `handle_continue()` that checks the socket every `kInterruptPollSteps` (1024) instructions, so Ctrl-C in GDB stops it with one SIGINT stop reply.
 - **No hardware breakpoints**: only software breakpoints (`Z0`/`z0`) are supported. `Z1`–`Z4` return empty responses (GDB falls back gracefully).
 - **No `vCont`**: GDB may warn about this. It falls back to `c`/`s` automatically.
-- **Exception vector must be mapped**: if the CPU takes an exception and there is no handler at `0x8000_0180`, the GDB stub catches the exception (sets PC back to EPC) before the next fetch, so GDB sees the faulting instruction rather than an OOB crash.
+- **Exceptions stop at the faulting instruction**: the stub reports each exception as a signal and sets the PC back to EPC, so GDB sees the instruction that trapped and no handler at `0x8000_0180` is needed. `continue` then re-executes that instruction; to get past a `SYSCALL` or `BREAK`, move the PC on in GDB (`set $pc = $pc + 4`).
