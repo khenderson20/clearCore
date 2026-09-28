@@ -21,17 +21,23 @@ void SimulatorController::assertOwnerThread() const {
 bool SimulatorController::loadProgram(const std::vector<uint32_t>& words, uint32_t addr) {
     assertOwnerThread();
     run_timer_->stop();
-    if (!processor_->load_program(words, addr)) return false;
-    stats_ = {};
-    emit programLoaded(static_cast<int>(words.size()));
+    processor_->reset(true);
+    loaded_.reset();
+    stats_        = {};
+    const bool ok = processor_->load_program(words, addr);
+    if (ok) {
+        loaded_ = LoadedProgram{words, addr};
+        emit programLoaded(static_cast<int>(words.size()));
+    }
     emit pipelineStateChanged(processor_->pipeline_state());
-    return true;
+    return ok;
 }
 
 void SimulatorController::reset() {
     assertOwnerThread();
     run_timer_->stop();
-    processor_->reset();
+    processor_->reset(true);
+    if (loaded_ && !processor_->load_program(loaded_->words, loaded_->addr)) loaded_.reset();
     stats_ = {};
     emit pipelineStateChanged(processor_->pipeline_state());
     emit statisticsUpdated(stats_);

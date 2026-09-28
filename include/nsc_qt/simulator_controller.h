@@ -43,7 +43,13 @@ public:
     explicit SimulatorController(std::unique_ptr<mips::IProcessor> processor,
                                  QObject*                          parent = nullptr);
 
-    bool               loadProgram(const std::vector<uint32_t>& words, uint32_t addr = 0);
+    // Empties the machine, memory included, and loads `words` at `addr`, so
+    // nothing an earlier program or run left in memory reaches this one. On
+    // false (the program does not fit) the machine stays empty.
+    bool loadProgram(const std::vector<uint32_t>& words, uint32_t addr = 0);
+    // Returns to the state right after the last successful loadProgram():
+    // registers, CP0 and all of memory. Keeping memory would let a run's stores,
+    // to its data or over its own code, change the next run (#292).
     void               reset();
     void               stepCycle();
     void               run();
@@ -90,9 +96,16 @@ private:
     void doStep();  // executes one step and emits the resulting signals
     void assertOwnerThread() const;
 
+    // What reset() puts back into the emptied memory.
+    struct LoadedProgram {
+        std::vector<uint32_t> words;
+        uint32_t              addr = 0;
+    };
+
     std::unique_ptr<mips::IProcessor> processor_;
     std::unordered_set<uint32_t>      breakpoints_;
     SimulatorStatistics               stats_{};
+    std::optional<LoadedProgram>      loaded_;  // empty until a loadProgram() succeeds
     QTimer*                           run_timer_ = nullptr;
 };
 

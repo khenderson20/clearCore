@@ -184,18 +184,15 @@ void QuickSimulator::runPause() {
 
 void QuickSimulator::reset() {
     ctl_->stop();
-    ctl_->reset();
     stats_ = {};
     trace_.clear();
     trace_rows_cache_.clear();
     stages_.clear();
     hazards_.clear();
     reg_model_.resetAll();
-
-    if (!last_program_.empty()) {
-        program_loaded_ = ctl_->loadProgram(last_program_);
-        if (!program_loaded_) emit assemblyError(QStringLiteral("Program too large for memory."));
-    }
+    // Restores the loaded program, memory included, and republishes the
+    // pipeline state, which refills the caches cleared above.
+    ctl_->reset();
 
     emit statsChanged();
     emit traceChanged();

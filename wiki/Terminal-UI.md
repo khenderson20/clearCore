@@ -60,7 +60,7 @@ The main CPU visualization. From top to bottom:
 | **Step** button     | Advance one cycle                                |
 | **Run/Pause** toggle| Start or stop auto-run                            |
 | **Run→Halt** button | Auto-run until `StepResult::Halt`                 |
-| **Reset** button    | Reset CPU state and telemetry (program preserved) |
+| **Reset** button    | Reset CPU state and telemetry; memory returns to its state after Load |
 | Speed slider        | 10 ms/cycle (fastest) to 1000 ms/cycle (slowest)  |
 
 The one dedicated keyboard shortcut on this tab is **F10**, which single-steps the CPU regardless of which widget has focus. **PageUp** / **PageDown** / **Home** scroll the memory panel (Home jumps to the row containing the current PC). The pipeline flow canvas animates only while auto-run is active.
