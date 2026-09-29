@@ -96,15 +96,19 @@ static Color stage_accent(int idx, const mips::StageSnapshot& s) {
 // ─── Hex file loader ──────────────────────────────────────────────────────────
 // Thin UI adapter over mips::load_hex_file (parsing logic lives in mips_core,
 // where it is unit-tested). This layer only wires the parsed words into the
-// processor and formats a status line for the TUI.
-static bool load_hex_file(const std::string& path, mips::IProcessor& cpu, std::string& msg) {
+// processor and formats a status line for the TUI. `loaded` receives the words
+// (empty on failure) so that Reset and a CPU-model switch can load them again.
+static bool load_hex_file(const std::string& path, mips::IProcessor& cpu,
+                          std::vector<uint32_t>& loaded, std::string& msg) {
+    loaded.clear();
     const mips::HexProgram prog = mips::load_hex_file(path);
     if (!prog.ok()) {
         msg = prog.error.value_or("unknown error");
         return false;
     }
     if (cpu.load_program(prog.words, 0)) {
-        msg = std::format("Loaded {} words.", prog.words.size());
+        loaded = prog.words;
+        msg    = std::format("Loaded {} words.", prog.words.size());
         return true;
     }
     msg = "Program too large for memory.";
@@ -961,8 +965,18 @@ int run_app() {
     uint32_t mem_base = 0;
 
     // Loader
-    bool        loader_ok     = false;
-    std::string loader_status = "Ready.";
+    bool                  loader_ok     = false;
+    std::string           loader_status = "Ready.";
+    std::vector<uint32_t> loaded_program;  // what Reset and a model switch load again
+
+    // Empties the CPU, memory included, and loads the program again: the state
+    // right after Load. Keeping memory would let a run's stores, to its data or
+    // over its own code, change the next run (#292).
+    auto restore_program = [&] {
+        cpu->reset(true);
+        if (!loaded_program.empty() && !cpu->load_program(loaded_program, 0))
+            loaded_program.clear();
+    };
 
     // Converter
     bool        syncing = false;
@@ -1106,7 +1120,7 @@ int run_app() {
 
     const Component btn_reset = Button(" Reset ", [&] {
         auto_run.store(false);
-        cpu->reset(false);
+        restore_program();
         reset_tel();
         mem_base      = 0;
         loader_status = "CPU reset.";
@@ -1142,6 +1156,7 @@ int run_app() {
             cpu_mode      = CpuMode::Pipelined;
             loader_status = "Switched to Pipelined (5-stage).";
         }
+        restore_program();  // the new model starts with the loaded program
     });
     const Component cfg_container = Container::Vertical({cpu_selector, btn_apply});
 
@@ -1153,7 +1168,7 @@ int run_app() {
         cpu->reset(true);
         reset_tel();
         mem_base  = 0;
-        loader_ok = load_hex_file(filepath, *cpu, loader_status);
+        loader_ok = load_hex_file(filepath, *cpu, loaded_program, loader_status);
     });
     const Component loader_container = Container::Vertical({filepath_input, btn_load});
 

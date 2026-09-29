@@ -1,5 +1,6 @@
 #include "nsc_qt/assembler.h"
 #include "nsc_qt/dock_panels.h"
+#include "nsc_qt/examples.h"
 #include "nsc_qt/simulator_controller.h"
 #include "nsc_qt/widgets/memory_widget.h"
 #include "nsc_qt/widgets/pipeline_events_widget.h"
@@ -28,9 +29,11 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 // ── Minimal test harness ──────────────────────────────────────────────────────
 
@@ -253,6 +256,108 @@ static void test_controller_reset() {
     ctrl.reset();
     CHECK(ctrl.cycleCount() == 0);
     CHECK(ctrl.statistics().cycles_executed == 0);
+}
+
+static std::unique_ptr<mips::IProcessor> make_cpu(bool pipelined) {
+    if (pipelined) return std::make_unique<mips::PipelinedCpu>();
+    return std::make_unique<mips::SingleCycleCpu>();
+}
+
+// Steps until the program halts; false if it has not halted in `max_steps`.
+static bool step_until_halt(nsc::qt::SimulatorController& ctrl, int max_steps = 100) {
+    bool       halted = false;
+    const auto conn   = QObject::connect(&ctrl, &nsc::qt::SimulatorController::halted,
+                                         [&halted] { halted = true; });
+    for (int i = 0; i < max_steps && !halted; ++i)
+        ctrl.stepCycle();
+    QObject::disconnect(conn);
+    return halted;
+}
+
+// reset() returns to the state right after loadProgram(), memory included, so
+// a run's stores cannot change the next run. They used to survive: a counter
+// in memory gave 2 on the second run, and a store over the program's first
+// word made the rerun trap with RI (#292).
+static void test_controller_reset_restores_memory() {
+    using namespace nsc::qt;
+
+    // lw $t0,0x100($zero) ; addi $t0,$t0,1 ; sw $t0,0x100($zero) ; halt: j halt
+    const std::vector<uint32_t> counter = {0x8C080100u, 0x21080001u, 0xAC080100u, 0x08000003u};
+    // addi $t0,$zero,7 ; sw $t0,0($zero) ; lw $t1,0($zero) ; add $t2,$t1,$t1 ; halt: j halt
+    const std::vector<uint32_t> self_store = {0x20080007u, 0xAC080000u, 0x8C090000u, 0x01295020u,
+                                              0x08000004u};
+
+    for (const bool pipelined : {false, true}) {
+        SimulatorController ctrl(make_cpu(pipelined));
+        bool                trapped = false;
+        QObject::connect(&ctrl, &SimulatorController::exceptionRaised,
+                         [&trapped] { trapped = true; });
+
+        CHECK(ctrl.loadProgram(counter));
+        CHECK(step_until_halt(ctrl));
+        CHECK(ctrl.registerValue(8) == 1u);  // $t0
+        ctrl.reset();
+        CHECK(ctrl.cycleCount() == 0);
+        CHECK(ctrl.memoryWord(0x100) == 0u);      // the store is gone
+        CHECK(ctrl.memoryWord(0) == counter[0]);  // the program is back
+        CHECK(step_until_halt(ctrl));
+        CHECK(ctrl.registerValue(8) == 1u);
+
+        CHECK(ctrl.loadProgram(self_store));
+        CHECK(step_until_halt(ctrl));
+        CHECK(ctrl.memoryWord(0) == 7u);  // the store replaced the first instruction
+        ctrl.reset();
+        CHECK(ctrl.memoryWord(0) == self_store[0]);
+        CHECK(step_until_halt(ctrl));
+        CHECK(ctrl.registerValue(10) == 14u);  // $t2 = 7 + 7
+        CHECK(!trapped);
+    }
+}
+
+// A load starts from an empty machine: the tail of a longer earlier program and
+// the stores of an earlier run are gone. A program that does not fit leaves the
+// machine empty, and reset() then does not bring the earlier program back.
+static void test_controller_load_starts_empty() {
+    using namespace nsc::qt;
+
+    SimulatorController ctrl(std::make_unique<mips::PipelinedCpu>());  // 64 KiB
+    // lw $t0,0x100($zero) ; addi $t0,$t0,1 ; sw $t0,0x100($zero) ; halt: j halt
+    CHECK(ctrl.loadProgram({0x8C080100u, 0x21080001u, 0xAC080100u, 0x08000003u}));
+    CHECK(step_until_halt(ctrl));
+    CHECK(ctrl.memoryWord(0x100) == 1u);
+
+    CHECK(ctrl.loadProgram({0x08000000u}));  // halt: j halt
+    CHECK(ctrl.cycleCount() == 0);
+    CHECK(ctrl.memoryWord(4) == 0u);
+    CHECK(ctrl.memoryWord(0x100) == 0u);
+
+    const std::vector<uint32_t> too_big(((64u << 10) / 4) + 1, 0x08000000u);
+    CHECK(!ctrl.loadProgram(too_big));
+    CHECK(ctrl.memoryWord(0) == 0u);
+    ctrl.reset();
+    CHECK(ctrl.memoryWord(0) == 0u);
+}
+
+// ── Built-in examples ────────────────────────────────────────────────────────
+
+// Every example must end in a halt. Without one, Run executed each zero word
+// after the program as a nop, stopped on an address error at the end of
+// memory, and the statistics counted thousands of nop cycles (#293).
+static void test_examples_halt() {
+    using namespace nsc::qt;
+
+    for (const ExampleProgram& ex : exampleProgramCatalog()) {
+        const AssemblerResult prog = assemble(ex.source.toStdString());
+        CHECK(prog.ok());
+        for (const bool pipelined : {false, true}) {
+            const auto cpu = make_cpu(pipelined);
+            CHECK(cpu->load_program(prog.words));
+            const mips::StepResult r = cpu->run(100);
+            if (r != mips::StepResult::Halt)
+                std::fprintf(stderr, "      example \"%s\" does not halt\n", qPrintable(ex.name));
+            CHECK(r == mips::StepResult::Halt);
+        }
+    }
 }
 
 // ── RegisterWidget state tracking ────────────────────────────────────────────
@@ -640,6 +745,9 @@ int main(int argc, char* argv[]) {
     test_controller_step_signal();
     test_controller_breakpoint();
     test_controller_reset();
+    test_controller_reset_restores_memory();
+    test_controller_load_starts_empty();
+    test_examples_halt();
     test_controller_single_cycle_stats();
     test_controller_exception_signal();
     test_register_widget_clear();

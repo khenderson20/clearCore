@@ -56,6 +56,15 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   TUI and the Quick GUI (it showed operands for `syscall` and none for `mfc0`/`mtc0`).
 - **TUI Run→Halt** reports how the run ended (halt, trap, fault, or step budget exhausted); it used
   to discard the result.
+- **Reset restores the loaded program** (#292). In both Qt GUIs and the TUI, Reset empties memory
+  and loads the program again, so every run starts from the state right after Load. Reset used to
+  keep the previous run's memory: a program that updates a word in memory gave a different result
+  on each run, and the "Load-use stall" example, which stores over its own first instruction,
+  trapped with RI after Reset. Loading a program also starts from an empty machine, and the TUI's
+  CPU-model switch keeps the loaded program, as the Terminal UI wiki page says.
+- **The built-in examples halt** (#293). Each Code Editor example ends in a `j` to itself. Run used
+  to execute the zero words after the program as `nop`s until an address error at the end of memory
+  (16,388 cycles in the Widgets GUI, 262,148 in the Quick GUI), and the statistics counted them.
 
 ### Changed
 - **Hidden panels cost almost nothing per cycle** (#242, #243). A closed dock or a background tab
