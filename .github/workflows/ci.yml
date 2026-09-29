@@ -22,31 +22,37 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'tests/**'
-      - 'qml/**'
-      - '**/CMakeLists.txt'
-      - 'cmake/**'
-      - 'CMakePresets.json'
-      - '.github/workflows/**'
+    # ready_for_review is not in the default set. Without it, full-build (skipped
+    # on drafts) never ran on a PR opened as a draft until its next push, and a
+    # skipped job still satisfies a required check.
+    types: [opened, synchronize, reopened, ready_for_review]
+  # release-pr.yml pushes chore/release-promotion with GITHUB_TOKEN, which starts no
+  # push or pull_request runs, so it dispatches this workflow there for the required checks.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          egress-policy: audit
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # cpp-linter-action (v2.20.0 and earlier) hard-codes uv 0.9.5 and always
       # re-downloads it from GitHub releases, which produces intermittent 504
@@ -84,17 +90,21 @@ jobs:
       github.event_name == 'push' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write       # codecov OIDC upload (tokenless for public repos)
       pull-requests: write  # allow codecov-action to post PR diff comments
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          egress-policy: audit
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
@@ -119,39 +129,53 @@ jobs:
           --cobertura coverage.xml --print-summary
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: step-security/codecov-action@db5c3605ff3c9dc7f0b2791e6bea84a561bacab8 # v7.0.0
         with:
           files: coverage.xml
+          # `files` ADDS to whatever the action discovers by searching the
+          # workspace; it does not restrict the upload. Without this the action
+          # also picked up the raw gcov data left by the --coverage build, so
+          # the report carried tests/ files and ~500 more lines than the gcovr
+          # run that precedes it (gcovr said 36.1% of 2868 lines, Codecov
+          # recorded 44.03% of 3384). Upload exactly what we generated.
+          disable_search: true
           use_oidc: true
           fail_ci_if_error: false
 
   core-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         preset: [core-only, asan]
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          egress-policy: audit
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        uses: step-security/ccache-action@5ec6a5031618b071d906c8eaa9fef59e315b0b8f # v1.2.23
         with:
           key: ${{ matrix.preset }}
 
+      # CLEARCORE_WERROR is CI-only: it defaults to OFF in CMakeLists.txt so a
+      # local build never breaks because a newer compiler added a diagnostic.
       - name: Configure (sanitizer job disables the GUIs too)
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBUILD_QT6_UI=OFF -DBUILD_QT6_QUICK_UI=OFF -DBUILD_NYXSTONE=OFF
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -162,13 +186,17 @@ jobs:
   full-build:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          egress-policy: audit
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: >
@@ -182,7 +210,7 @@ jobs:
         run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
 
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        uses: step-security/ccache-action@5ec6a5031618b071d906c8eaa9fef59e315b0b8f # v1.2.23
         with:
           key: full-build
 
@@ -190,6 +218,7 @@ jobs:
         run: >
           cmake --preset release
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCLEARCORE_WERROR=ON
 
       - name: Build
         run: cmake --build --preset release

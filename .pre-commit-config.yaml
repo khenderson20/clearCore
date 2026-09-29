@@ -9,7 +9,7 @@
 # builds or your IDE instead; .clang-tidy is picked up automatically.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -18,19 +18,19 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/cpp-linter/cpp-linter-hooks
-    rev: v1.5.0
+    rev: v1.6.0
     hooks:
       - id: clang-format
         args: [ --version=22 ]  # keep in sync with the version pinned in ci.yml
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.16.3
+    rev: v8.30.1  # keep in sync with GITLEAKS_VERSION in gitleaks.yml
     hooks:
       - id: gitleaks
   - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
+    rev: v1.4.0
     hooks:
       - id: cpplint
   - repo: https://github.com/pylint-dev/pylint
-    rev: v4.0.6
+    rev: v4.0.8
     hooks:
       - id: pylint

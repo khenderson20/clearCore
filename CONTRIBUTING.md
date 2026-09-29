@@ -17,6 +17,15 @@ The full contributor guide lives in the wiki:
 4. Add tests covering your change under `tests/`, mirroring the `src/` layout.
 5. Verify locally:
    ```bash
+   cmake --preset core-only
+   cmake --build --preset core-only
+   ctest --preset core-only
+   ```
+   `core-only` builds in about 90 seconds with nothing but a compiler and CMake.
+   If your change touches a Qt GUI, use `debug` instead (needs Qt6 and, for
+   Nyxstone, LLVM 15–20 — see the dependency list in `CMakeLists.txt`'s header
+   comment):
+   ```bash
    cmake --preset debug
    cmake --build --preset debug
    ctest --preset debug        # or: ctest --preset asan

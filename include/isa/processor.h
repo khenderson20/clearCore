@@ -64,6 +64,13 @@ struct PipelineState {
     bool load_stall   = false;
     bool branch_flush = false;
 
+    // True when an instruction completed this cycle. Pipelined backends set it
+    // when a real instruction (not a bubble) left WB; single-cycle backends set
+    // it on every step that did not trap. Instructions squashed by an exception
+    // never retire. cycles / retired is the CPI the statistics panels show, so
+    // this is the one place that definition lives.
+    bool retired = false;
+
     std::size_t cycle = 0;
 };
 

@@ -779,8 +779,7 @@ void SchematicDatapathWidget::applyState() {
     val_pc_->setBrush(t.label);
     val_pc_->setPos(73 - val_pc_->boundingRect().width() / 2, 312);
 
-    const auto& s_id = state_.stages[1];
-    QString     imm_text;
+    QString imm_text;
     if (decoded[1] && decoded[1]->format == mips::InstrFormat::I) {
         const auto imm = static_cast<int16_t>(decoded[1]->i().imm);
         imm_text       = QStringLiteral("imm=%1").arg(imm);
@@ -789,8 +788,7 @@ void SchematicDatapathWidget::applyState() {
     val_imm_->setBrush(t.label);
     val_imm_->setPos(490 - val_imm_->boundingRect().width() / 2, 384);
 
-    const auto& s_wb = state_.stages[4];
-    QString     wb_text;
+    QString wb_text;
     if (decoded[4] && wb_ctl.reg_write) {
         const auto& d    = *decoded[4];
         uint8_t     dest = 0;

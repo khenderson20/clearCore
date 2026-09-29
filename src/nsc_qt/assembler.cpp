@@ -1,6 +1,7 @@
 #include "nsc_qt/assembler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <sstream>
 #include <string>
@@ -55,7 +56,8 @@ static std::optional<int32_t> parse_imm(std::string_view tok) {
         auto [ptr, ec] = std::from_chars(tok.data(), tok.data() + tok.size(), val);
         if (ec != std::errc{} || ptr != tok.data() + tok.size()) return std::nullopt;
     }
-    return neg ? -val : val;
+    // Negate in unsigned arithmetic: -0x80000000 would overflow int32_t (UB).
+    return neg ? static_cast<int32_t>(0u - static_cast<uint32_t>(val)) : val;
 }
 
 // Parses "imm($rs)" form; returns {imm, rs} or nullopt.
@@ -205,11 +207,20 @@ AssemblerResult assemble(const std::string& source) {
         ln.lineno   = lineno;
         ln.mnemonic = toks[0];
         // Convert mnemonic to lower-case
-        std::transform(ln.mnemonic.begin(), ln.mnemonic.end(), ln.mnemonic.begin(), ::tolower);
+        std::transform(ln.mnemonic.begin(), ln.mnemonic.end(), ln.mnemonic.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         for (std::size_t i = 1; i < toks.size(); ++i)
             ln.operands.push_back(toks[i]);
 
         lines.push_back(std::move(ln));
+    }
+
+    // A source that is all comments/blank lines encodes no program; report it so
+    // Assemble and Load agree.
+    if (lines.empty()) {
+        AssemblerResult e;
+        e.error = "no instructions found";
+        return e;
     }
 
     // ── Pass 2: encode ─────────────────────────────────────────────────────────

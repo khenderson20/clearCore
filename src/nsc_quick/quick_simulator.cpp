@@ -150,6 +150,12 @@ void QuickSimulator::connectController() {
         emit runningChanged();
     });
 
+    connect(ctl_.get(), &nsc::qt::SimulatorController::exceptionRaised, this,
+            [this](uint32_t epc, const QString& name) {
+                setStatus(QStringLiteral("Exception %1 @ %2").arg(name, hex32(epc)));
+                emit runningChanged();
+            });
+
     connect(ctl_.get(), &nsc::qt::SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         setStatus(QStringLiteral("Breakpoint @ %1").arg(hex32(pc)));
         emit runningChanged();

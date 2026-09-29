@@ -33,7 +33,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 project(clearCore
-        VERSION 0.1.0
+        VERSION 0.3.6
         LANGUAGES CXX C  # C may be needed by some dependencies
         DESCRIPTION "Educational MIPS CPU emulator with pipeline visualization"
 )
@@ -54,17 +54,40 @@ enable_testing()
 add_library(clearcore_warnings INTERFACE)
 target_compile_options(clearcore_warnings INTERFACE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -pedantic>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        # /permissive- is what actually enables two-phase name lookup and the
+        # rest of MSVC's conformance checking; without it the Windows CI leg
+        # accepts non-conformant template code that GCC/Clang reject.
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
 )
+
+# Default OFF on purpose: a local build must not become unbuildable because a
+# newer compiler added a diagnostic. CI turns it on so warnings cannot quietly
+# accumulate again (see the WERROR env var in ci.yml / cross-platform.yml).
+option(CLEARCORE_WERROR "Treat compiler warnings as errors (intended for CI)" OFF)
+if (CLEARCORE_WERROR)
+    target_compile_options(clearcore_warnings INTERFACE
+            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
+            $<$<CXX_COMPILER_ID:MSVC>:/WX>
+    )
+endif ()
 
 # Sanitizers are applied globally (before FetchContent) so dependencies are
 # instrumented consistently; mixing sanitized and unsanitized code breaks
 # ASan interceptors.
 option(ENABLE_SANITIZERS "Build with AddressSanitizer + UBSanitizer" OFF)
 if (ENABLE_SANITIZERS)
-    message(STATUS "Sanitizers enabled: address, undefined")
-    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
-    add_link_options(-fsanitize=address,undefined)
+    if (MSVC)
+        # MSVC ships ASan but has no UBSan equivalent, and it spells the flag
+        # /fsanitize=address. The GNU-style flags below are not merely ignored
+        # by cl.exe — reaching the linker they produce a build that looks
+        # successful and is not instrumented.
+        message(STATUS "Sanitizers enabled: address (MSVC; no UBSan equivalent)")
+        add_compile_options(/fsanitize=address)
+    else ()
+        message(STATUS "Sanitizers enabled: address, undefined")
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif ()
 endif ()
 
 find_package(Threads REQUIRED)
@@ -562,15 +585,24 @@ function(clearcore_add_test name source lib)
     target_link_libraries(${name} PRIVATE ${lib} Microsoft.GSL::GSL clearcore_warnings)
     target_compile_features(${name} PUBLIC cxx_std_20)
     add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endfunction()
 
 clearcore_add_test(decoder_test tests/mips/decoder_test.cpp mips_core)  # Instruction decoding
 clearcore_add_test(cpu_test tests/mips/cpu_test.cpp mips_core)  # CPU execution (both models)
 clearcore_add_test(processor_test tests/mips/processor_test.cpp mips_core)  # IProcessor contract
-clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler + hex loader
+clearcore_add_test(disasm_test tests/mips/disasm_test.cpp mips_core)  # Disassembler
+clearcore_add_test(program_loader_test tests/mips/program_loader_test.cpp mips_core)  # Hex program loader
 clearcore_add_test(cp0_test tests/mips/cp0_test.cpp mips_core)  # CP0 exception model
+clearcore_add_test(hazard_telemetry_test tests/mips/hazard_telemetry_test.cpp mips_core)  # Stall/forward/flush/retire indicators
+clearcore_add_test(pipeline_precise_exceptions_test tests/mips/pipeline_precise_exceptions_test.cpp mips_core)  # Wrong-path / older-wins exception precision
 clearcore_add_test(elf_loader_test tests/mips/elf_loader_test.cpp mips_core)  # ELF32 loader
 clearcore_add_test(nsc_tests tests/nsc/convert_test.cpp nsc_core)   # Number conversion
+
+# ---- gdb_stub_test: RSP hex-parser robustness (only when the stub is built) ----
+if (BUILD_GDB_STUB)
+    clearcore_add_test(gdb_stub_test tests/mips/gdb_stub_test.cpp mips_core)
+endif ()
 
 # ---- nyxstone_test: differential Decoder/Disassembler vs LLVM (if enabled) ----
 # Only meaningful when Nyxstone was actually built; mips_core carries the
@@ -685,6 +717,11 @@ if (FUZZING_ENGINE)
     add_executable(fuzz_hex_loader tests/fuzz/fuzz_hex_loader.cpp)
     target_link_libraries(fuzz_hex_loader PRIVATE mips_core clearcore_warnings ${FUZZING_ENGINE})
     target_compile_features(fuzz_hex_loader PUBLIC cxx_std_20)
+
+    add_executable(fuzz_elf_loader tests/fuzz/fuzz_elf_loader.cpp)
+    target_link_libraries(fuzz_elf_loader PRIVATE mips_core clearcore_warnings ${FUZZING_ENGINE})
+    target_compile_features(fuzz_elf_loader PUBLIC cxx_std_20)
+
     message(STATUS "Fuzz targets enabled (engine: ${FUZZING_ENGINE})")
 endif ()
 

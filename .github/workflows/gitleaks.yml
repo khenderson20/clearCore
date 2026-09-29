@@ -1,0 +1,83 @@
+# CI-side secret-scanning backstop.
+#
+# The gitleaks pre-commit hook (.pre-commit-config.yaml) only protects a
+# developer who ran `pre-commit install`, didn't pass --no-verify, and only
+# scans the staged diff. It gives zero coverage to outside contributors, CI
+# pushes, or full-history leaks. This workflow runs the same tool server-side
+# against full git history and uploads findings to Code scanning so nothing
+# depends on a local hook actually running.
+#
+# The gitleaks CLI is fetched directly (not via gitleaks/gitleaks-action) and
+# checksum-verified against the release's published checksums.txt, keeping
+# this workflow auditable end-to-end instead of depending on a bundled,
+# closed-source Node action.
+name: Gitleaks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  # release-pr.yml pushes chore/release-promotion with GITHUB_TOKEN, which starts no
+  # push or pull_request runs, so it dispatches this workflow there for the required check.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels that PR's previous run. Push and scheduled runs
+# get a group of their own (run_id), so none is ever queued behind or
+# cancelled by another: every commit on main/develop keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write  # SARIF upload to code scanning
+    env:
+      # Keep in sync with the `rev:` pinned for the gitleaks pre-commit hook
+      # in .pre-commit-config.yaml.
+      GITLEAKS_VERSION: '8.30.1'
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # full history, not just the diff — see rationale above
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSLO "${base}/${asset}"
+          curl -sSLO "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          tar -xzf "$asset" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-format sarif \
+            --report-path results.sarif \
+            --no-banner \
+            --exit-code 1
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: results.sarif

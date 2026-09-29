@@ -1,8 +1,10 @@
-// disasm_test.cpp — unit tests for the disassembler and the hex program loader.
+// disasm_test.cpp — unit tests for the disassembler.
 //
-// These two units were previously embedded in the FTXUI layer (src/nsc/ui.cpp)
-// and therefore untestable. They now live in mips_core; this file gives them
-// the /src ↔ /tests parity the rest of the core has.
+// The disassembler was previously embedded in the FTXUI layer (src/nsc/ui.cpp)
+// and therefore untestable. It now lives in mips_core; this file gives it the
+// /src ↔ /tests parity the rest of the core has.
+//
+// The hex program loader's tests live in program_loader_test.cpp (#172).
 //
 // Lightweight harness — no external dependencies. Build via CMake target
 // disasm_test, or directly:
@@ -10,11 +12,9 @@
 
 #include "mips/decoder.h"
 #include "mips/disassembler.h"
-#include "mips/program_loader.h"
 
 #include <cstdint>
 #include <cstdio>
-#include <sstream>
 #include <string>
 
 using namespace mips;
@@ -104,65 +104,11 @@ static void test_disasm_undecodable() {
     CHECK_EQ(dis(0xFC00'0000u), std::string("<undecodable>"));
 }
 
-// ── Program-loader tests ──────────────────────────────────────────────────────
-static void test_loader_basic() {
-    std::istringstream in("0x00000020\n0xDEADBEEF\n08\n");
-    const HexProgram   p = parse_hex_program(in);
-    CHECK(p.ok());
-    CHECK_EQ(p.words.size(), std::size_t{3});
-    CHECK_EQ(p.words[0], 0x0000'0020u);
-    CHECK_EQ(p.words[1], 0xDEAD'BEEFu);
-    CHECK_EQ(p.words[2], 0x0000'0008u);
-}
-
-static void test_loader_comments_and_blanks() {
-    std::istringstream in("# header comment\n"
-                          "\n"
-                          "  0x10   # inline comment\n"
-                          "   \n"
-                          "20\n");
-    const HexProgram   p = parse_hex_program(in);
-    CHECK(p.ok());
-    CHECK_EQ(p.words.size(), std::size_t{2});
-    CHECK_EQ(p.words[0], 0x10u);
-    CHECK_EQ(p.words[1], 0x20u);
-}
-
-static void test_loader_bad_hex_reports_line() {
-    std::istringstream in("0x01\n"
-                          "not_hex\n"
-                          "0x03\n");
-    const HexProgram   p = parse_hex_program(in);
-    CHECK(!p.ok());
-    CHECK(p.words.empty());
-    CHECK(p.error.has_value());
-    CHECK(p.error->find("line 2") != std::string::npos);
-}
-
-static void test_loader_trailing_garbage_rejected() {
-    // "12xy" must not silently parse as 0x12 — the whole token must be hex.
-    std::istringstream in("12xy\n");
-    const HexProgram   p = parse_hex_program(in);
-    CHECK(!p.ok());
-}
-
-static void test_loader_empty_is_valid() {
-    std::istringstream in("# only comments\n\n");
-    const HexProgram   p = parse_hex_program(in);
-    CHECK(p.ok());
-    CHECK(p.words.empty());
-}
-
 int main() {
     test_disasm_rtype();
     test_disasm_itype();
     test_disasm_jtype();
     test_disasm_undecodable();
-    test_loader_basic();
-    test_loader_comments_and_blanks();
-    test_loader_bad_hex_reports_line();
-    test_loader_trailing_garbage_rejected();
-    test_loader_empty_is_valid();
 
     std::printf("\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

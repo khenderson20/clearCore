@@ -1,5 +1,7 @@
 #include "nsc_qt/simulator_controller.h"
+#include "mips/cp0.h"
 #include <QMutexLocker>
+#include <algorithm>
 
 namespace nsc::qt {
 
@@ -51,7 +53,9 @@ void SimulatorController::doStep() {
     uint64_t            cycle;
     uint32_t            next_pc;
     SimulatorStatistics stats_copy;
-    bool                bp_hit = false;
+    bool                bp_hit   = false;
+    uint32_t            exc_epc  = 0;
+    QString             exc_name = QStringLiteral("exception");
 
     {
         QMutexLocker lock(&mutex_);
@@ -67,6 +71,18 @@ void SimulatorController::doStep() {
         } else if (breakpoints_.count(next_pc)) {
             run_timer_->stop();
             bp_hit = true;
+        }
+
+        if (result == mips::StepResult::Exception) {
+            // The controller is written against the ISA-agnostic interface;
+            // only a MIPS backend can name the trap and report EPC.
+            if (const auto* m = dynamic_cast<const mips::IMipsProcessor*>(processor_.get())) {
+                exc_epc              = m->cp0().epc();
+                const auto name_view = mips::exception_name(m->cp0().last_exception());
+                exc_name = QString::fromUtf8(name_view.data(), static_cast<int>(name_view.size()));
+            } else {
+                exc_epc = next_pc;
+            }
         }
     }
 
@@ -88,6 +104,8 @@ void SimulatorController::doStep() {
         emit halted();
     else if (result == mips::StepResult::Fault)
         emit faulted();
+    else if (result == mips::StepResult::Exception)
+        emit exceptionRaised(exc_epc, exc_name);
     else if (bp_hit)
         emit breakpointHit(next_pc);
 }
@@ -172,8 +190,10 @@ void SimulatorController::setExecutionSpeed(int speed) {
 void SimulatorController::accumulateStats(const mips::PipelineState& ps) {
     ++stats_.cycles_executed;
 
-    const auto& wb = ps.stages[4];
-    if (wb.valid && !wb.stalled && !wb.flushed) ++stats_.instructions_retired;
+    // Backend-defined: WB completed for the pipeline, a non-trapping step for
+    // single-cycle. Reading the WB slot here would report zero instructions
+    // (and CPI 0.0) for the single-cycle model, which never fills that slot.
+    if (ps.retired) ++stats_.instructions_retired;
 
     if (ps.load_stall) {
         ++stats_.data_hazards;

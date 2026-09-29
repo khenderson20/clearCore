@@ -27,8 +27,13 @@ std::string_view exception_name(ExceptionCode code) noexcept {
 
 uint32_t Cp0::raise(ExceptionCode code, uint32_t faulting_pc, uint32_t bad_addr) noexcept {
     last_exc_ = code;
-    epc_      = faulting_pc;
-    cause_    = (cause_ & ~0x7Cu) | (static_cast<uint32_t>(code) << 2);
+    // MIPS32 PRA general exception processing: EPC is written only when
+    // Status.EXL is clear. A nested exception — most commonly the vector
+    // itself being unmapped in a small address space — must not clobber the
+    // EPC of the original fault, or debuggers and the GUI would report the
+    // handler address instead of the instruction that actually trapped.
+    if (!in_exception()) epc_ = faulting_pc;
+    cause_ = (cause_ & ~0x7Cu) | (static_cast<uint32_t>(code) << 2);
     status_ |= kStatusEXL;
     bad_vaddr_ = bad_addr;
     trace_log().debug("exception {} raised: epc={:#010x} bad_vaddr={:#010x} -> vector {:#010x}",
