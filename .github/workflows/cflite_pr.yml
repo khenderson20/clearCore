@@ -1,31 +1,65 @@
 name: ClusterFuzzLite PR fuzzing
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'src/**'
       - 'include/**'
-      - 'fuzz/**'
-permissions:
-  contents: read
-  actions: read
-  pull-requests: read
-  security-events: write
+      - 'tests/fuzz/**'
+permissions: read-all
+# A new push to the PR makes the previous fuzzing run moot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   PR:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write # SARIF upload to code scanning
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Read-only clone of the corpus cflite_batch.yml builds up on the
+      # cifuzz-corpus branch (this is a public repo, so no token is needed to
+      # read it). Lets PR fuzzing start from a seeded corpus instead of empty,
+      # and fuzz only the targets a PR actually touches, using the coverage
+      # report cflite_cov.yml publishes to the cifuzz-coverage branch.
       - name: Build Fuzzers
         id: build
-        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           language: c++
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+          storage-repo-branch-coverage: cifuzz-coverage
       - name: Run Fuzzers
-        uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 120
           mode: 'code-change'
           output-sarif: true
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+          storage-repo-branch-coverage: cifuzz-coverage
+
+      # run_fuzzers only writes the SARIF file; it doesn't upload it. Without
+      # this step security-events:write above is requested but never used.
+      - name: Upload crash SARIF
+        if: always() && steps.build.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif

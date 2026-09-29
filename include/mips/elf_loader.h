@@ -9,6 +9,14 @@
 //   • Static executables and relocatable objects (ET_EXEC, ET_REL)
 //   • PT_LOAD program-header segments — the same mapping used by the OS loader
 //
+// No relocation is performed.  ET_REL objects are accepted, but their segments
+// are mapped at their raw p_vaddr (typically 0) and any relocation entries are
+// ignored — link with -Ttext or a MEMORY script if the addresses matter.
+//
+// Offsets and sizes are validated against the real length of the input before
+// being used, so a truncated or crafted file is rejected with a descriptive
+// error rather than driving an oversized allocation or a misparse.
+//
 // How to build a compatible binary:
 //   mipsel-linux-gnu-gcc -static -nostdlib -o hello hello.s
 //   # or with the musl toolchain for full libc support:
@@ -54,7 +62,8 @@ struct ElfImage {
 
 // Map all PT_LOAD segments of `image` into `cpu`'s memory and set the PC.
 // Returns false and sets `error_out` if any segment falls outside the
-// processor's address space.
+// processor's address space — including the zero-filled BSS tail, which is
+// bounds-checked exactly like the file-content bytes.
 bool load_elf_into_processor(IProcessor& cpu, const ElfImage& image, std::string& error_out);
 
 // Convenience: open, parse, and load in one call.

@@ -162,18 +162,23 @@ void MainWindow::setupToolBar() {
     auto* speed_lbl = new QLabel(tr(" Speed: "), tb);
     tb->addWidget(speed_lbl);
     speed_slider_ = new QSlider(Qt::Horizontal, tb);
-    speed_slider_->setRange(10, 1000);  // cycle interval in ms
-    speed_slider_->setInvertedAppearance(true);
+    // Same 0–100 scale as Preferences and SimulatorController::setExecutionSpeed.
+    speed_slider_->setRange(0, 100);
     speed_slider_->setFixedWidth(140);
     const QSettings s("nsc-qt", "clearCore-gui");
     speed_slider_->setValue(s.value("executionSpeed", 100).toInt());
-    speed_slider_->setToolTip(
-        tr("Run speed — one pipeline cycle every %1 ms").arg(speed_slider_->value()));
-    connect(speed_slider_, &QSlider::valueChanged, this, [this](int ms) {
-        controller_->setExecutionSpeed(ms);
-        speed_slider_->setToolTip(tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+    auto update_tooltip = [this](int speed) {
+        const int ms = (100 - speed) * 5;  // mirrors SimulatorController::setExecutionSpeed
+        speed_slider_->setToolTip(ms == 0
+                                      ? tr("Run speed — as fast as possible")
+                                      : tr("Run speed — one pipeline cycle every %1 ms").arg(ms));
+    };
+    update_tooltip(speed_slider_->value());
+    connect(speed_slider_, &QSlider::valueChanged, this, [this, update_tooltip](int speed) {
+        controller_->setExecutionSpeed(speed);
+        update_tooltip(speed);
         QSettings settings("nsc-qt", "clearCore-gui");
-        settings.setValue("executionSpeed", ms);
+        settings.setValue("executionSpeed", speed);
     });
     tb->addWidget(speed_slider_);
 }
@@ -474,6 +479,8 @@ void MainWindow::setupConnections() {
             &MainWindow::onStatisticsUpdated);
     connect(controller_.get(), &SimulatorController::halted, this, &MainWindow::onHalted);
     connect(controller_.get(), &SimulatorController::faulted, this, &MainWindow::onFaulted);
+    connect(controller_.get(), &SimulatorController::exceptionRaised, this,
+            &MainWindow::onExceptionRaised);
     connect(controller_.get(), &SimulatorController::breakpointHit, this, [this](uint32_t pc) {
         statusBar()->showMessage(tr("Breakpoint hit at 0x%1").arg(pc, 8, 16, QChar('0')), 5000);
         events_widget_->logEvent(PipelineEventsWidget::Kind::Info, controller_->cycleCount(),
@@ -710,6 +717,18 @@ void MainWindow::onFaulted() {
     events_widget_->logEvent(PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
                              tr("processor fault"));
     flashStatusBanner(false, tr("✗ Processor fault — check your program."));
+}
+
+void MainWindow::onExceptionRaised(uint32_t epc, const QString& name) {
+    controller_->stop();
+    setRunState(false);
+    const QString where = QStringLiteral("0x%1").arg(epc, 8, 16, QChar('0'));
+    events_widget_->logEvent(
+        PipelineEventsWidget::Kind::Error, controller_->cycleCount(),
+        tr("exception %1 at %2 — PC now at the exception vector").arg(name, where));
+    flashStatusBanner(
+        false,
+        tr("⚠ Exception %1 raised by the instruction at %2 (see CP0 EPC).").arg(name, where));
 }
 
 void MainWindow::flashStatusBanner(bool success, const QString& text) {

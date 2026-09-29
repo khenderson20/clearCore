@@ -12,6 +12,12 @@ cmake -S "$SRC/clearCore" -B build -G Ninja \
     -DSPDLOG_USE_STD_FORMAT=ON \
     -DFUZZING_ENGINE="$LIB_FUZZING_ENGINE"
 
-cmake --build build --target fuzz_hex_loader -j"$(nproc)"
+cmake --build build --target fuzz_hex_loader fuzz_elf_loader -j"$(nproc)"
 
-cp build/fuzz_hex_loader "$OUT/"
+cp build/fuzz_hex_loader build/fuzz_elf_loader "$OUT/"
+
+# Seed corpus for the ELF target. Fuzzing a binary format from an empty corpus
+# burns most of the budget rediscovering the magic bytes and header layout;
+# ClusterFuzzLite unpacks <target>_seed_corpus.zip automatically. The cd is
+# absolute because this script's working directory is not the source tree.
+(cd "$SRC/clearCore/tests/fuzz/corpus/elf" && zip -qr "$OUT/fuzz_elf_loader_seed_corpus.zip" .)

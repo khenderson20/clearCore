@@ -1,0 +1,76 @@
+# ClusterFuzzLite batch fuzzing.
+#
+# cflite_pr.yml only fuzzes code touched by a PR for 120s — bugs only surface
+# if a PR happens to touch the exact vulnerable path. This runs the existing
+# fuzz targets (tests/fuzz/) for much longer on a schedule, against the
+# current develop HEAD, so bugs pre-existing in the MIPS decoder/parser get
+# found even when no PR exercises them, and builds up a corpus for
+# cflite_pr.yml / cflite_cov.yml to reuse.
+#
+# Corpus storage: pushed to the `cifuzz-corpus` branch of this same repo
+# (rather than a separate storage repo) using the job's own GITHUB_TOKEN, so
+# no extra PAT/secret is needed. That branch carries no source code and isn't
+# covered by the main/develop branch rulesets, so direct pushes are fine.
+name: ClusterFuzzLite batch fuzzing
+
+on:
+  schedule:
+    # Off the top of the hour: GitHub delays (and under load drops) scheduled
+    # runs queued at :00.
+    - cron: '17 3 * * *'  # nightly, 03:17 UTC
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+# One group shared by cflite_batch.yml and cflite_prune.yml (deliberately not
+# keyed on github.workflow): both rewrite the cifuzz-corpus branch, and prune
+# replaces it wholesale, so they must never overlap. GitHub keeps one pending
+# run per group, so a manual batch dispatch while batch is running replaces a
+# waiting prune; that night's prune then shows as cancelled.
+concurrency:
+  group: cflite-corpus
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write        # push the updated corpus to cifuzz-corpus
+      security-events: write # SARIF upload to code scanning
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: c++
+
+      - name: Run Fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 3600
+          mode: 'batch'
+          output-sarif: true
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          storage-repo-branch: cifuzz-corpus
+
+      # run_fuzzers only writes the SARIF file; it doesn't upload it. Without
+      # this step security-events:write above is requested but never used.
+      - name: Upload crash SARIF
+        if: always() && steps.build.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif

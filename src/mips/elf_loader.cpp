@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <ios>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -21,6 +22,12 @@ static constexpr uint16_t kEmMips      = 8;  // EM_MIPS
 static constexpr uint16_t kEtExec      = 2;  // ET_EXEC
 static constexpr uint16_t kEtRel       = 1;  // ET_REL
 static constexpr uint32_t kPtLoad      = 1;  // PT_LOAD
+
+// One past the highest MIPS32 byte address.  Segment placement is checked
+// against this because the loader walks `vaddr + off` in uint32_t arithmetic:
+// a segment that wraps would silently overwrite low memory instead of being
+// rejected by Memory's bounds check.
+static constexpr uint64_t kAddressSpaceEnd = 0x1'0000'0000ULL;
 
 #pragma pack(push, 1)
 struct Elf32Ehdr {
@@ -57,6 +64,28 @@ static_assert(sizeof(Elf32Phdr) == 32);
 // ─── Helper: read a fixed-size struct from stream ────────────────────────────
 template <typename T> static bool stream_read(std::istream& in, T& out) {
     return static_cast<bool>(in.read(reinterpret_cast<char*>(&out), sizeof(T)));
+}
+
+// ─── Helper: total length of a seekable stream ───────────────────────────────
+// Every offset and size taken from the file is validated against this, which
+// is what keeps a crafted header from driving an allocation or a read past the
+// real input.  Bounding on the true length also avoids depending on seekg()
+// setting failbit past EOF — libstdc++ and MSVC disagree about that.
+static bool stream_size(std::istream& in, uint64_t& out) {
+    in.clear();
+    in.seekg(0, std::ios::end);
+    if (!in) return false;
+    const std::streamoff end = in.tellg();
+    if (end < 0) return false;
+    out = static_cast<uint64_t>(end);
+    return true;
+}
+
+// ─── Helper: format a value as bare hex for error messages ───────────────────
+static std::string hex(uint32_t value) {
+    std::ostringstream s;
+    s << std::hex << value;
+    return s.str();
 }
 
 // ─── parse_elf ────────────────────────────────────────────────────────────────
@@ -109,6 +138,36 @@ ElfImage parse_elf(std::istream& in) {
         return img;
     }
 
+    // Everything below indexes the file with values the file itself supplies,
+    // so bound them against its real length first.
+    uint64_t file_size = 0;
+    if (!stream_size(in, file_size)) {
+        img.error = "cannot determine the size of the ELF input (stream is not seekable)";
+        return img;
+    }
+
+    // Each entry is read as sizeof(Elf32Phdr) bytes but the table is walked at
+    // a stride of e_phentsize.  If the two disagree every entry after the first
+    // is read from the wrong place, and the file misparses without any error.
+    if (ehdr.e_phentsize != sizeof(Elf32Phdr)) {
+        img.error = "unsupported program-header entry size (e_phentsize=" +
+                    std::to_string(ehdr.e_phentsize) + ", expected " +
+                    std::to_string(sizeof(Elf32Phdr)) + ")";
+        return img;
+    }
+
+    // Bounding the whole table at once also caps e_phnum: a header claiming
+    // 65535 entries cannot survive this unless the file really is that long.
+    const uint64_t phdr_table_end =
+        static_cast<uint64_t>(ehdr.e_phoff) +
+        static_cast<uint64_t>(ehdr.e_phnum) * static_cast<uint64_t>(ehdr.e_phentsize);
+    if (phdr_table_end > file_size) {
+        img.error = "program-header table (" + std::to_string(ehdr.e_phnum) +
+                    " entries at file offset 0x" + hex(ehdr.e_phoff) +
+                    ") extends past the end of the file";
+        return img;
+    }
+
     img.entry = ehdr.e_entry;
 
     // Read PT_LOAD segments.
@@ -129,18 +188,26 @@ ElfImage parse_elf(std::istream& in) {
         }
 
         if (phdr.p_type != kPtLoad) continue;
-        if (phdr.p_filesz == 0) continue;
 
-        // Read the raw segment data from the file.
-        in.seekg(static_cast<std::streamoff>(phdr.p_offset));
-        if (!in) {
-            img.error = "failed to seek to segment " + std::to_string(i) + " data (offset 0x" +
-                        [&] {
-                            std::ostringstream s;
-                            s << std::hex << phdr.p_offset;
-                            return s.str();
-                        }() +
-                        ")";
+        // A segment with no file content and no memory image contributes
+        // nothing.  One with memsz > filesz == 0 is a pure .bss and must still
+        // be mapped so load_elf_into_processor zero-fills it.
+        if (phdr.p_filesz == 0 && phdr.p_memsz == 0) continue;
+
+        // ElfSegment documents memsz >= filesz, and the zero-fill loop in the
+        // loader relies on it.
+        if (phdr.p_memsz < phdr.p_filesz) {
+            img.error = "segment " + std::to_string(i) + " has p_memsz (0x" + hex(phdr.p_memsz) +
+                        ") smaller than p_filesz (0x" + hex(phdr.p_filesz) + ")";
+            return img;
+        }
+
+        if (static_cast<uint64_t>(phdr.p_vaddr) + static_cast<uint64_t>(phdr.p_memsz) >
+            kAddressSpaceEnd) {
+            img.error = "segment " + std::to_string(i) + " at 0x" + hex(phdr.p_vaddr) + " (0x" +
+                        hex(phdr.p_memsz) +
+                        " bytes) wraps past the end of the 32-bit "
+                        "address space";
             return img;
         }
 
@@ -148,11 +215,32 @@ ElfImage parse_elf(std::istream& in) {
         seg.vaddr  = phdr.p_vaddr;
         seg.filesz = phdr.p_filesz;
         seg.memsz  = phdr.p_memsz;
-        seg.data.resize(phdr.p_filesz);
-        if (!in.read(reinterpret_cast<char*>(seg.data.data()),
-                     static_cast<std::streamsize>(phdr.p_filesz))) {
-            img.error = "failed to read segment " + std::to_string(i) + " data";
-            return img;
+
+        if (phdr.p_filesz > 0) {
+            // Checked before the resize: p_filesz is a uint32_t straight from
+            // the file, so an unbounded resize would let a 64-byte input ask
+            // for 4 GiB.
+            if (static_cast<uint64_t>(phdr.p_offset) + static_cast<uint64_t>(phdr.p_filesz) >
+                file_size) {
+                img.error = "segment " + std::to_string(i) + " data (0x" + hex(phdr.p_filesz) +
+                            " bytes at file offset 0x" + hex(phdr.p_offset) +
+                            ") extends past the end of the file";
+                return img;
+            }
+
+            in.seekg(static_cast<std::streamoff>(phdr.p_offset));
+            if (!in) {
+                img.error = "failed to seek to segment " + std::to_string(i) + " data (offset 0x" +
+                            hex(phdr.p_offset) + ")";
+                return img;
+            }
+
+            seg.data.resize(phdr.p_filesz);
+            if (!in.read(reinterpret_cast<char*>(seg.data.data()),
+                         static_cast<std::streamsize>(phdr.p_filesz))) {
+                img.error = "failed to read segment " + std::to_string(i) + " data";
+                return img;
+            }
         }
 
         img.segments.push_back(std::move(seg));
@@ -183,22 +271,31 @@ bool load_elf_into_processor(IProcessor& cpu, const ElfImage& image, std::string
         return false;
     }
 
+    const auto out_of_range = [&cpu](const ElfSegment& seg) {
+        std::ostringstream s;
+        s << std::hex;
+        s << "segment at 0x" << seg.vaddr << " extends outside the "
+          << "processor's address space (0x" << cpu.mem().size()
+          << " bytes); increase mem_bytes in the IProcessor constructor";
+        return s.str();
+    };
+
     for (const ElfSegment& seg : image.segments) {
         // Write the file-content bytes directly into memory.
         for (uint32_t off = 0; off < seg.filesz; ++off) {
             if (!cpu.mem().write_byte(seg.vaddr + off, seg.data[off])) {
-                std::ostringstream s;
-                s << std::hex;
-                s << "segment at 0x" << seg.vaddr << " extends outside the "
-                  << "processor's address space (0x" << cpu.mem().size()
-                  << " bytes); increase mem_bytes in the IProcessor constructor";
-                error_out = s.str();
+                error_out = out_of_range(seg);
                 return false;
             }
         }
-        // Zero-fill the BSS portion (memsz > filesz).
+        // Zero-fill the BSS portion (memsz > filesz).  Checked like the loop
+        // above: a .bss running past the end of memory is the same error, and
+        // ignoring the result would truncate it silently instead.
         for (uint32_t off = seg.filesz; off < seg.memsz; ++off) {
-            cpu.mem().write_byte(seg.vaddr + off, 0);
+            if (!cpu.mem().write_byte(seg.vaddr + off, 0)) {
+                error_out = out_of_range(seg);
+                return false;
+            }
         }
     }
 
