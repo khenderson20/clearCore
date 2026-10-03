@@ -13,7 +13,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    21|       |        // Strip trailing comment.
    22|  4.94k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
   ------------------
-  |  Branch (22:45): [True: 408, False: 4.54k]
+  |  Branch (22:45): [True: 408, False: 4.53k]
   ------------------
    23|       |
    24|       |        // Strip all whitespace.
