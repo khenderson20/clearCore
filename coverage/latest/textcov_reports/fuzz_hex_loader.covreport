@@ -4,7 +4,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    15|    176|    std::string line;
    16|    176|    int         n = 0;
    17|       |
-   18|  5.06k|    while (std::getline(in, line)) {
+   18|  5.05k|    while (std::getline(in, line)) {
   ------------------
   |  Branch (18:12): [True: 4.94k, False: 117]
   ------------------
@@ -13,7 +13,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    21|       |        // Strip trailing comment.
    22|  4.94k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
   ------------------
-  |  Branch (22:45): [True: 408, False: 4.53k]
+  |  Branch (22:45): [True: 407, False: 4.53k]
   ------------------
    23|       |
    24|       |        // Strip all whitespace.
@@ -38,7 +38,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    34|  2.82k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
   ------------------
   |  Branch (34:13): [True: 1.18k, False: 1.64k]
-  |  Branch (34:31): [True: 593, False: 589]
+  |  Branch (34:31): [True: 593, False: 588]
   |  Branch (34:49): [True: 194, False: 399]
   |  Branch (34:66): [True: 194, False: 205]
   ------------------
@@ -59,14 +59,14 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    49|  2.82k|            ec != std::errc{} || ptr != last) {
   ------------------
   |  Branch (49:13): [True: 37, False: 2.79k]
-  |  Branch (49:34): [True: 22, False: 2.77k]
+  |  Branch (49:34): [True: 22, False: 2.76k]
   ------------------
    50|     59|            out.words.clear();
    51|     59|            out.error = std::format("Bad hex on line {}", n);
    52|     59|            return out;
    53|     59|        }
-   54|  2.77k|        out.words.push_back(v);
-   55|  2.77k|    }
+   54|  2.76k|        out.words.push_back(v);
+   55|  2.76k|    }
    56|    117|    return out;  // error == nullopt ⇒ success (an empty program is valid)
    57|    176|}
 
