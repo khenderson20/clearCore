@@ -48,4 +48,4 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: step-security/zizmor-action@6dc1b15aa3aca5de1faf70db0f8214e26c5ebbe9 # v0.6.2
+        uses: step-security/zizmor-action@0d7097f162a7f6dd65730d10bbcd17f070cf87e2 # v0.6.4
