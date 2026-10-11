@@ -6,29 +6,29 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    17|       |
    18|  5.05k|    while (std::getline(in, line)) {
   ------------------
-  |  Branch (18:12): [True: 4.94k, False: 117]
+  |  Branch (18:12): [True: 4.93k, False: 117]
   ------------------
-   19|  4.94k|        ++n;
+   19|  4.93k|        ++n;
    20|       |
    21|       |        // Strip trailing comment.
-   22|  4.94k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
+   22|  4.93k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
   ------------------
   |  Branch (22:45): [True: 407, False: 4.53k]
   ------------------
    23|       |
    24|       |        // Strip all whitespace.
-   25|  4.94k|        std::string clean;
-   26|  4.94k|        clean.reserve(line.size());
-   27|  4.94k|        for (const char c : line)
+   25|  4.93k|        std::string clean;
+   26|  4.93k|        clean.reserve(line.size());
+   27|  4.93k|        for (const char c : line)
   ------------------
-  |  Branch (27:27): [True: 21.1k, False: 4.94k]
+  |  Branch (27:27): [True: 21.1k, False: 4.93k]
   ------------------
    28|  21.1k|            if (!std::isspace(static_cast<unsigned char>(c))) clean += c;
   ------------------
   |  Branch (28:17): [True: 7.82k, False: 13.3k]
   ------------------
    29|       |
-   30|  4.94k|        if (clean.empty()) continue;
+   30|  4.93k|        if (clean.empty()) continue;
   ------------------
   |  Branch (30:13): [True: 2.11k, False: 2.82k]
   ------------------
