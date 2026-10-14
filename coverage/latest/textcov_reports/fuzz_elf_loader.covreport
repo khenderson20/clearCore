@@ -153,32 +153,32 @@ _ZN4mips9parse_elfERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
   198|       |        // be mapped so load_elf_into_processor zero-fills it.
   199|    305|        if (phdr.p_filesz == 0 && phdr.p_memsz == 0) continue;
   ------------------
-  |  Branch (199:13): [True: 192, False: 113]
-  |  Branch (199:35): [True: 18, False: 174]
+  |  Branch (199:13): [True: 193, False: 112]
+  |  Branch (199:35): [True: 18, False: 175]
   ------------------
   200|       |
   201|       |        // ElfSegment documents memsz >= filesz, and the zero-fill loop in the
   202|       |        // loader relies on it.
   203|    287|        if (phdr.p_memsz < phdr.p_filesz) {
   ------------------
-  |  Branch (203:13): [True: 2, False: 285]
+  |  Branch (203:13): [True: 1, False: 286]
   ------------------
-  204|      2|            img.error = "segment " + std::to_string(i) + " has p_memsz (0x" + hex(phdr.p_memsz) +
-  205|      2|                        ") smaller than p_filesz (0x" + hex(phdr.p_filesz) + ")";
-  206|      2|            return img;
-  207|      2|        }
+  204|      1|            img.error = "segment " + std::to_string(i) + " has p_memsz (0x" + hex(phdr.p_memsz) +
+  205|      1|                        ") smaller than p_filesz (0x" + hex(phdr.p_filesz) + ")";
+  206|      1|            return img;
+  207|      1|        }
   208|       |
-  209|    285|        if (static_cast<uint64_t>(phdr.p_vaddr) + static_cast<uint64_t>(phdr.p_memsz) >
+  209|    286|        if (static_cast<uint64_t>(phdr.p_vaddr) + static_cast<uint64_t>(phdr.p_memsz) >
   ------------------
-  |  Branch (209:13): [True: 1, False: 284]
+  |  Branch (209:13): [True: 2, False: 284]
   ------------------
-  210|    285|            kAddressSpaceEnd) {
-  211|      1|            img.error = "segment " + std::to_string(i) + " at 0x" + hex(phdr.p_vaddr) + " (0x" +
-  212|      1|                        hex(phdr.p_memsz) +
-  213|      1|                        " bytes) wraps past the end of the 32-bit "
-  214|      1|                        "address space";
-  215|      1|            return img;
-  216|      1|        }
+  210|    286|            kAddressSpaceEnd) {
+  211|      2|            img.error = "segment " + std::to_string(i) + " at 0x" + hex(phdr.p_vaddr) + " (0x" +
+  212|      2|                        hex(phdr.p_memsz) +
+  213|      2|                        " bytes) wraps past the end of the 32-bit "
+  214|      2|                        "address space";
+  215|      2|            return img;
+  216|      2|        }
   217|       |
   218|    284|        ElfSegment seg;
   219|    284|        seg.vaddr  = phdr.p_vaddr;
