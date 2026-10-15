@@ -30,7 +30,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    29|       |
    30|  4.93k|        if (clean.empty()) continue;
   ------------------
-  |  Branch (30:13): [True: 2.11k, False: 2.82k]
+  |  Branch (30:13): [True: 2.10k, False: 2.82k]
   ------------------
    31|       |
    32|       |        // Optional "0x"/"0X" prefix — std::from_chars does not accept one.
