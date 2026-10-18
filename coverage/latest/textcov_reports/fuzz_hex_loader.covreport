@@ -38,7 +38,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    34|  2.82k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
   ------------------
   |  Branch (34:13): [True: 1.18k, False: 1.64k]
-  |  Branch (34:31): [True: 593, False: 588]
+  |  Branch (34:31): [True: 593, False: 587]
   |  Branch (34:49): [True: 194, False: 399]
   |  Branch (34:66): [True: 194, False: 205]
   ------------------
