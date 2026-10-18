@@ -35,7 +35,7 @@ jobs:
       contents: write  # upload assets to the release
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -92,7 +92,7 @@ jobs:
       # cataloger. A source-only scan would find little — this is a C++/CMake
       # project with no package-manifest lockfile for syft to read.
       - name: Generate SBOM
-        uses: step-security/sbom-action@441a6c842e49122eed5d694f983ce4acae259c99 # v0.24.0
+        uses: step-security/sbom-action@28bb7d0d2869c9ab0e5571c93591747945819d39 # v0.24.2
         with:
           path: build/release
           format: spdx-json
@@ -100,7 +100,7 @@ jobs:
           upload-release-assets: ${{ github.event_name == 'release' }}
 
       - name: Upload workflow artifact (always)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: clearCore-linux-${{ steps.package.outputs.version }}
           path: dist/*.tar.gz
