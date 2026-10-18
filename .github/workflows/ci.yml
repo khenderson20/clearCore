@@ -45,7 +45,7 @@ jobs:
       contents: read
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -97,7 +97,7 @@ jobs:
       pull-requests: write  # allow codecov-action to post PR diff comments
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -129,7 +129,7 @@ jobs:
           --cobertura coverage.xml --print-summary
 
       - name: Upload to Codecov
-        uses: step-security/codecov-action@db5c3605ff3c9dc7f0b2791e6bea84a561bacab8 # v7.0.0
+        uses: step-security/codecov-action@367bf7e789f1b8e452a759be81c791de8d69b2f6 # v7.1.1
         with:
           files: coverage.xml
           # `files` ADDS to whatever the action discovers by searching the
@@ -151,7 +151,7 @@ jobs:
         preset: [core-only, asan]
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -164,7 +164,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Set up ccache
-        uses: step-security/ccache-action@5ec6a5031618b071d906c8eaa9fef59e315b0b8f # v1.2.23
+        uses: step-security/ccache-action@0638857e006955564245da8ef3fadb05f29851a7 # v1.2.24
         with:
           key: ${{ matrix.preset }}
 
@@ -189,7 +189,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -210,7 +210,7 @@ jobs:
         run: sudo apt-get install -y libkf6syntaxhighlighting-dev || true
 
       - name: Set up ccache
-        uses: step-security/ccache-action@5ec6a5031618b071d906c8eaa9fef59e315b0b8f # v1.2.23
+        uses: step-security/ccache-action@0638857e006955564245da8ef3fadb05f29851a7 # v1.2.24
         with:
           key: full-build
 

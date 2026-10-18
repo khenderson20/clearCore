@@ -37,7 +37,7 @@ jobs:
       actions: read
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
@@ -48,4 +48,4 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: step-security/zizmor-action@6dc1b15aa3aca5de1faf70db0f8214e26c5ebbe9 # v0.6.2
+        uses: step-security/zizmor-action@0d7097f162a7f6dd65730d10bbcd17f070cf87e2 # v0.6.4
