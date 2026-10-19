@@ -118,34 +118,34 @@ _ZN4mips9parse_elfERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
   175|     38|    img.entry = ehdr.e_entry;
   176|       |
   177|       |    // Read PT_LOAD segments.
-  178|    527|    for (uint16_t i = 0; i < ehdr.e_phnum; ++i) {
+  178|    526|    for (uint16_t i = 0; i < ehdr.e_phnum; ++i) {
   ------------------
-  |  Branch (178:26): [True: 495, False: 32]
+  |  Branch (178:26): [True: 494, False: 32]
   ------------------
-  179|    495|        const auto phoff =
-  180|    495|            static_cast<std::streamoff>(ehdr.e_phoff) +
-  181|    495|            static_cast<std::streamoff>(i) * static_cast<std::streamoff>(ehdr.e_phentsize);
-  182|    495|        in.seekg(phoff);
-  183|    495|        if (!in) {
+  179|    494|        const auto phoff =
+  180|    494|            static_cast<std::streamoff>(ehdr.e_phoff) +
+  181|    494|            static_cast<std::streamoff>(i) * static_cast<std::streamoff>(ehdr.e_phentsize);
+  182|    494|        in.seekg(phoff);
+  183|    494|        if (!in) {
   ------------------
-  |  Branch (183:13): [True: 0, False: 495]
+  |  Branch (183:13): [True: 0, False: 494]
   ------------------
   184|      0|            img.error = "failed to seek to program header " + std::to_string(i);
   185|      0|            return img;
   186|      0|        }
   187|       |
-  188|    495|        Elf32Phdr phdr{};
-  189|    495|        if (!stream_read(in, phdr)) {
+  188|    494|        Elf32Phdr phdr{};
+  189|    494|        if (!stream_read(in, phdr)) {
   ------------------
-  |  Branch (189:13): [True: 0, False: 495]
+  |  Branch (189:13): [True: 0, False: 494]
   ------------------
   190|      0|            img.error = "failed to read program header " + std::to_string(i);
   191|      0|            return img;
   192|      0|        }
   193|       |
-  194|    495|        if (phdr.p_type != kPtLoad) continue;
+  194|    494|        if (phdr.p_type != kPtLoad) continue;
   ------------------
-  |  Branch (194:13): [True: 190, False: 305]
+  |  Branch (194:13): [True: 189, False: 305]
   ------------------
   195|       |
   196|       |        // A segment with no file content and no memory image contributes
@@ -263,9 +263,9 @@ elf_loader.cpp:_ZN4mipsL11stream_readINS_12_GLOBAL__N_19Elf32EhdrEEEbRNSt3__113b
    70|     52|    return static_cast<bool>(in.read(reinterpret_cast<char*>(&out), sizeof(T)));
    71|     52|}
 elf_loader.cpp:_ZN4mipsL11stream_readINS_12_GLOBAL__N_19Elf32PhdrEEEbRNSt3__113basic_istreamIcNS3_11char_traitsIcEEEERT_:
-   69|    495|template <typename T> static bool stream_read(std::istream& in, T& out) {
-   70|    495|    return static_cast<bool>(in.read(reinterpret_cast<char*>(&out), sizeof(T)));
-   71|    495|}
+   69|    494|template <typename T> static bool stream_read(std::istream& in, T& out) {
+   70|    494|    return static_cast<bool>(in.read(reinterpret_cast<char*>(&out), sizeof(T)));
+   71|    494|}
 
 LLVMFuzzerTestOneInput:
    15|     52|extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
