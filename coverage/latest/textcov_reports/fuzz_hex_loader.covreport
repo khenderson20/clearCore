@@ -58,7 +58,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    48|  2.82k|        if (const auto [ptr, ec] = std::from_chars(first, last, v, 16);
    49|  2.82k|            ec != std::errc{} || ptr != last) {
   ------------------
-  |  Branch (49:13): [True: 37, False: 2.79k]
+  |  Branch (49:13): [True: 37, False: 2.78k]
   |  Branch (49:34): [True: 22, False: 2.76k]
   ------------------
    50|     59|            out.words.clear();
