@@ -19,12 +19,12 @@ jobs:
       pull-requests: write
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           use-policy-store: true
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
-      - uses: step-security/release-drafter@a51d1a7992b1288f25572b6d6a24ec5df724cf01 # v7.7.0
+      - uses: step-security/release-drafter@641fda6024a7b071f83dbe2f854eec5d862336b9 # v7.10.0
         with:
           config-name: release-drafter.yml
         env:
