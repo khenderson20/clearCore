@@ -4,7 +4,7 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    15|    176|    std::string line;
    16|    176|    int         n = 0;
    17|       |
-   18|  5.05k|    while (std::getline(in, line)) {
+   18|  5.04k|    while (std::getline(in, line)) {
   ------------------
   |  Branch (18:12): [True: 4.93k, False: 117]
   ------------------
