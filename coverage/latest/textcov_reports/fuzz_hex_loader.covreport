@@ -6,29 +6,29 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    17|       |
    18|  5.04k|    while (std::getline(in, line)) {
   ------------------
-  |  Branch (18:12): [True: 4.93k, False: 117]
+  |  Branch (18:12): [True: 4.92k, False: 117]
   ------------------
-   19|  4.93k|        ++n;
+   19|  4.92k|        ++n;
    20|       |
    21|       |        // Strip trailing comment.
-   22|  4.93k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
+   22|  4.92k|        if (const auto cp = line.find('#'); cp != std::string::npos) line.erase(cp);
   ------------------
   |  Branch (22:45): [True: 406, False: 4.52k]
   ------------------
    23|       |
    24|       |        // Strip all whitespace.
-   25|  4.93k|        std::string clean;
-   26|  4.93k|        clean.reserve(line.size());
-   27|  4.93k|        for (const char c : line)
+   25|  4.92k|        std::string clean;
+   26|  4.92k|        clean.reserve(line.size());
+   27|  4.92k|        for (const char c : line)
   ------------------
-  |  Branch (27:27): [True: 21.1k, False: 4.93k]
+  |  Branch (27:27): [True: 21.1k, False: 4.92k]
   ------------------
    28|  21.1k|            if (!std::isspace(static_cast<unsigned char>(c))) clean += c;
   ------------------
   |  Branch (28:17): [True: 7.82k, False: 13.3k]
   ------------------
    29|       |
-   30|  4.93k|        if (clean.empty()) continue;
+   30|  4.92k|        if (clean.empty()) continue;
   ------------------
   |  Branch (30:13): [True: 2.10k, False: 2.82k]
   ------------------
@@ -37,8 +37,8 @@ _ZN4mips17parse_hex_programERNSt3__113basic_istreamIcNS0_11char_traitsIcEEEE:
    33|  2.82k|        std::string_view tok{clean};
    34|  2.82k|        if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X'))
   ------------------
-  |  Branch (34:13): [True: 1.18k, False: 1.64k]
-  |  Branch (34:31): [True: 593, False: 587]
+  |  Branch (34:13): [True: 1.17k, False: 1.64k]
+  |  Branch (34:31): [True: 593, False: 586]
   |  Branch (34:49): [True: 194, False: 399]
   |  Branch (34:66): [True: 194, False: 205]
   ------------------
